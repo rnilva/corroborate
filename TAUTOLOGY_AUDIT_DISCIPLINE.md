@@ -62,12 +62,25 @@ independent-input contribution.
   | `{mediator, sibling}` | 2 | joint conditioning |
 
 The depths differ. The depth-0 marg test is mediator-independent
-over the SAME cell set, so the per-burst d-sep booleans are
-PAIRED. v5 enforces the cell-set match per-burst via
-`n_per_burst >= min_n_per_burst` intersection on both runs
-(handles cases where mediator and sibling have different NaN
-patterns at some bursts; only bursts with adequate sample size
-in BOTH runs contribute to McNemar).
+in the population, so the per-burst d-sep booleans are
+**approximately paired** across runs. v5 enforces the cell-set
+match per-burst via `n_per_burst >= min_n_per_burst` intersection
+on both runs (handles cases where mediator and sibling have
+different NaN patterns at some bursts; only bursts with adequate
+sample size in BOTH runs contribute to McNemar).
+
+*Note on residual asymmetry*: under per-burst NaN-coupling, the
+joint run's cell set at burst b is a subset of the sibling run's
+cell set (joint drops cells with NaN in EITHER column; sibling
+drops only on `sibling`). The intersection-on-n_per_burst gate
+mitigates but does not eliminate this — the two booleans at burst
+b can be estimated from slightly different cell subsets. For
+dense, NaN-rare per-burst columns (the canonical bias and MC
+mediators) this asymmetry is negligible; for sparse columns it
+may bias the McNemar comparison slightly. A primitive-architecture
+fix would prune to the burst-wise NaN intersection before BOTH
+runs see the cells; v5 is rigorous enough for the canonical
+mediator pairs but the architectural fix is on the roadmap.
 
 **Step 3 — McNemar paired test on discordant pairs.**
 Among marg-edge bursts, count discordant pairs:
@@ -83,14 +96,23 @@ Among marg-edge bursts, count discordant pairs:
   z = (n_01 − n_10 − sign(n_01 − n_10)) / sqrt(n_01 + n_10)
   ```
 
-  Disposition:
-  - `z ≥ z_genuine` (default 1.65, 95% one-sided) → **GENUINE**
+  Disposition logic (uses EXACT one-sided binomial for the decision;
+  reported `z_mcnemar` is the Edwards continuity-corrected normal):
+
+  - exact-binomial `p ≤ 1 − Φ(z_genuine)` → **GENUINE**
   - `n_01 + n_10 < min_discordant` (default 5) → **UNDERPOWERED_FOR_GENUINE**
     (cannot distinguish small effect from null; v2 collapsed this
     into LEAK — wrong)
-  - `|z| < z_genuine` AND `n_01 + n_10 ≥ min_discordant` → **LEAK**
-    (adequately powered, no effect)
+  - exact-binomial `p > 1 − Φ(z_genuine)` AND `n_01 + n_10 ≥ min_discordant`
+    → **LEAK** (adequately powered, no effect)
   - `n_marg_edge < min_marginal_edges` → **UNDERPOWERED**
+
+  **Doc note**: the reported `z_mcnemar` (Edwards normal) and the
+  disposition (exact binomial) may disagree in direction at small
+  `n_disc` (< ~15). When `n_disc` is small, prefer comparing
+  `disposition` to the threshold rather than `z_mcnemar` directly —
+  the exact-binomial p is the rigorous gate; the reported z is the
+  well-behaved summary statistic.
 
   Note: there is NO "HURTS" disposition — population monotonicity
   ensures conditioning on more variables cannot reduce conditional

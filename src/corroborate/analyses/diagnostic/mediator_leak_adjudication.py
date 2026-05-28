@@ -131,6 +131,14 @@ class MediatorLeakAdjudicationResult:
     outcome_name: str
     z_genuine_threshold: float
     n_strata_for_multiplicity: int | None
+    # Underlying per-stratum PC results. Exposed so callers can
+    # access cluster-bootstrap CIs (`bootstrap_marginal`,
+    # `bootstrap_partial`, `bootstrap_edge_counts`) when this
+    # primitive is called with `n_bootstrap > 0`. McNemar's z
+    # itself is NOT bootstrapped here; consumers needing a
+    # cluster-robust CI on the d-sep rate read these directly.
+    sibling_pc_per_stratum: Mapping[tuple[object, ...], DynamicPCResult]
+    joint_pc_per_stratum: Mapping[tuple[object, ...], DynamicPCResult]
 
     def by_disposition(
         self, disposition: LeakAdjudication,
@@ -249,6 +257,8 @@ def mediator_leak_adjudication(
             outcome_name=str(outcome_per_burst),
             z_genuine_threshold=z_genuine_eff,
             n_strata_for_multiplicity=n_strata_for_multiplicity,
+            sibling_pc_per_stratum={},
+            joint_pc_per_stratum={},
         )
 
     common_kwargs = dict(
@@ -371,6 +381,8 @@ def mediator_leak_adjudication(
         outcome_name=str(outcome_per_burst),
         z_genuine_threshold=z_genuine_eff,
         n_strata_for_multiplicity=n_strata_for_multiplicity,
+        sibling_pc_per_stratum=dict(sibling_res),
+        joint_pc_per_stratum=dict(joint_res),
     )
 
 
