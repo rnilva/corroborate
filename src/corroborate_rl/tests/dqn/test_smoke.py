@@ -102,11 +102,6 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     scalar_keys = {
         'reward', 'done', 'truncated', 'max_q',
         'ep_return', 'action', 'state_hash_per_step', 'buf_size',
-        # `cross_flag_violation`: `truncated * (1 - done)` per step
-        # — zero IFF the `truncated=1 ⇒ done=1` invariant holds.
-        # Asserted == 0 below; non-zero would mean a wrapper
-        # mis-published `info['truncated']` without `done`.
-        'cross_flag_violation',
         'loss', 'td_error', 'td_error_within_batch_std',
         # Gradient-overlap probes + cross-action bootstrap-mismatch
         # rate (emitted unconditionally by train_phase; NaN when
@@ -130,13 +125,6 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     assert record['online_q_per_action'].shape == (50, 2)
     assert record['target_q_per_action'].shape == (50, 2)
     assert record['pearson_stats'].shape == (50, 5)
-    # Cross-flag invariant: zero across all rollout steps. CartPole
-    # native doesn't publish truncated, so `truncated=0` everywhere
-    # and the invariant is vacuously true.
-    assert float(jnp.max(record['cross_flag_violation'])) == 0.0, (
-        'truncated=1 with done=0 detected in rollout — wrapper '
-        'mis-published info["truncated"] without setting done.'
-    )
 
 
 @pytest.mark.slow

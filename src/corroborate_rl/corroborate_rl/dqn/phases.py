@@ -31,6 +31,7 @@ import optax
 from gymnax import EnvParams
 
 from corroborate import claim
+from corroborate_rl.dqn._step_boundary import env_step_typed
 from corroborate_rl.dqn.claims.replay import (
     Replay, Transition, n_step_return,
 )
@@ -109,20 +110,21 @@ def rollout_phase(
     are no-op when the window hasn't yet filled.
 
     **Pardo 2018 / Sutton-Barto §6.6 truncation-aware path.** This
-    phase calls `env.step_env` (no-auto-reset primitive) instead of
-    `env.step` so the `next_obs` / `next_env_state` stored in the
-    replay are the PHYSICAL continuation of the trajectory — not
-    the fresh-episode initial state gymnax's auto-resetting `step`
-    would `lax.select` in on `done`. At a truncated transition
-    (artificial time-limit cutoff), the Bellman target then
-    bootstraps against `v(s_pre_reset)` rather than
-    `v(s_reset_initial)`, which is the load-bearing correctness
-    property — without it, the half-fixed refactor still teaches
-    the agent that "the world resets to obs[0]" at the cap.
-    After storing the transition, the rollout calls `env.reset_env`
-    when `done` to obtain a fresh `(obs, state)` for the next
-    iteration's `state.obs` / `state.env_state` — `jax.tree.map`
-    + `lax.select` interleaves the reset, JIT-compatible.
+    phase calls `env.step_env` (via `env_step_typed`, the no-auto-
+    reset primitive) instead of `env.step` so the `next_obs` /
+    `next_env_state` stored in the replay are the PHYSICAL
+    continuation of the trajectory — not the fresh-episode initial
+    state gymnax's auto-resetting `step` would `lax.select` in on
+    `done`. At a truncated transition (artificial time-limit
+    cutoff), the Bellman target then bootstraps against
+    `v(s_pre_reset)` rather than `v(s_reset_initial)`, which is
+    the load-bearing correctness property — without it, the
+    half-fixed refactor still teaches the agent that "the world
+    resets to obs[0]" at the cap. After storing the transition,
+    the rollout calls `env.reset_env` when `done` to obtain a
+    fresh `(obs, state)` for the next iteration's `state.obs` /
+    `state.env_state` — `jax.tree.map` + `lax.select` interleaves
+    the reset, JIT-compatible.
 
     Returns `(new_state, diagnostic_dict)` — the dict's keys
     (`reward, done, max_q, ep_return, action, state_hash_per_step,
@@ -138,44 +140,21 @@ def rollout_phase(
     )
     action = action_select(q_values, select_key, state.step, n_actions)
 
-    # `step_env` returns the PRE-reset transition: `(next_obs,
-    # next_state)` are the physical continuation, never swapped
-    # to the reset initial. Substrate adapters / wrappers all
-    # expose this surface (see env_catalogue.py / pgx_adapter.py /
-    # jumanji_adapter.py / lunar_lander_jax.py); gymnax's runtime
-    # `Environment` ships it natively. The auto-reset that
-    # `env.step` performs is reproduced HERE, after we've captured
-    # the pre-reset obs for the replay.
-    next_obs_pre, next_env_state_pre, reward, done, info = env.step_env(
-        env_key, state.env_state, action.astype(jnp.int32), env_params,
+    # `env_step_typed` wraps `env.step_env` and surfaces
+    # `truncated` as a typed sibling of `done` — extracting the
+    # heterogeneous-info key narrowing into the env-boundary
+    # helper so this body reads paper-shaped. The invariant
+    # `truncated=1 ⇒ done=1` is enforced at each wrapper boundary
+    # (see `_step_boundary.py` for the contract).
+    (
+        next_obs_pre, next_env_state_pre, reward, done, truncated,
+    ) = env_step_typed(
+        env, env_key, state.env_state, action.astype(jnp.int32),
+        env_params,
     )
     # state.obs is at native shape from init_state; reshape is a
     # no-op for well-shaped envs and a defensive guard.
     next_obs_pre = next_obs_pre.reshape(state.obs.shape)
-
-    # Truncation (Sutton-Barto §6.6 / Gymnasium-API): artificial
-    # time-limit cutoffs distinct from genuine termination. The
-    # `EpisodeLengthCappedEnv` wrapper / pgx adapter / jumanji
-    # adapter publish `info['truncated']`; envs without truncation
-    # default to 0.0. JAX-compatible: `info.get(...)` is evaluated
-    # at trace time, not under scan.
-    truncated_obj = info.get('truncated')
-    if isinstance(truncated_obj, jax.Array):
-        truncated = truncated_obj.astype(jnp.float32)
-    else:
-        truncated = jnp.zeros_like(done, dtype=jnp.float32)
-
-    # Invariant: `truncated=1 ⇒ done=1`. If an env emits
-    # `info['truncated']=1` without `done=1` the bootstrap target
-    # silently mis-masks — `terminated = done * (1 - truncated)`
-    # evaluates to 0 either way, but the SEMANTIC contract
-    # (truncated FLAGS A SUBSET of dones) is broken. The cheap
-    # JIT-friendly guard is `truncated * (1 - done)` — zero IFF
-    # the implication holds. We surface it as a diagnostic key
-    # the smoke test asserts on (runtime propagation; pytest's
-    # `-x` flag stops the run rather than a noisy in-scan
-    # `Exception` raise).
-    cross_flag_violation = truncated * (1.0 - done.astype(jnp.float32))
 
     raw_transition = Transition(
         obs=state.obs, action=action,
@@ -243,17 +222,11 @@ def rollout_phase(
         # continued physically; only the experiment chose to stop"
         # consume this column; the corrected `bootstrap_fraction`
         # measurable reads `terminated = done * (1 - truncated)`.
+        # The `truncated=1 ⇒ done=1` invariant is structurally
+        # guaranteed at the wrapper boundary (each wrapper that
+        # publishes `info['truncated']` masks with done at the
+        # point of emission) — no in-rollout assertion needed.
         'truncated': truncated,
-        # Cross-flag invariant: `truncated=1 ⇒ done=1`. Value is
-        # `truncated * (1 - done)` — zero IFF the implication
-        # holds. Any nonzero per-step value flags a wrapper that
-        # published `info['truncated']` without `done` — the
-        # bootstrap target's `(1 − terminated)` mask still
-        # evaluates correctly (since 0 * anything = 0), but the
-        # semantic contract is broken and downstream measurables
-        # may silently misread. Smoke tests assert
-        # `cross_flag_violation == 0` across the rollout trace.
-        'cross_flag_violation': cross_flag_violation,
         'max_q': jnp.max(q_values),
         'ep_return': cumulative,
         'action': action.astype(jnp.int32),

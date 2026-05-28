@@ -73,6 +73,22 @@ class PgxEnv(Generic[StateT]):
         # `reset_env` Protocol method matches `reset` here.
         return self.reset(rng, params)
 
+    def _classify_truncated(
+        self, done: jax.Array, raw_truncated: jax.Array,
+    ) -> jax.Array:
+        """Enforce the `truncated=1 ⇒ done=1` invariant at the
+        wrapper boundary. Pgx's `terminated | truncated → done`
+        already implies the invariant, but the explicit
+        `jnp.where(done, raw, 0)` form makes the contract
+        self-evident and immune to downstream pgx semantic drift.
+        Rollout-phase consumers read `truncated` as a sibling of
+        `done` without re-narrowing."""
+        return jnp.where(
+            done.astype(jnp.bool_),
+            raw_truncated.astype(jnp.float32),
+            jnp.zeros_like(raw_truncated, dtype=jnp.float32),
+        )
+
     def step(
         self,
         rng: jax.Array,
@@ -93,7 +109,7 @@ class PgxEnv(Generic[StateT]):
         # `bootstrap` claim continues bootstrap on truncations.
         # See `pgx/core.py:105` for the upstream split.
         info: dict[str, object] = {
-            'truncated': next_state.truncated.astype(jnp.float32),
+            'truncated': self._classify_truncated(done, next_state.truncated),
         }
         # Auto-reset on done — pgx itself doesn't auto-reset; without
         # this, `done` stays high forever after the first episode ends.
@@ -134,7 +150,7 @@ class PgxEnv(Generic[StateT]):
         next_state = self.inner.step(state, action.astype(jnp.int32), rng)
         done = next_state.terminated | next_state.truncated
         info: dict[str, object] = {
-            'truncated': next_state.truncated.astype(jnp.float32),
+            'truncated': self._classify_truncated(done, next_state.truncated),
         }
         next_obs = self._cast_obs(next_state.observation)
         reward = next_state.rewards.squeeze()
