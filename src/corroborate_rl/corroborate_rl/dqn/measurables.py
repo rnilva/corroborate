@@ -3084,13 +3084,13 @@ def mean_per_state_cumulative_bias_late(
 @measurable(reads=(
     'predicted_q_per_step', 'mc_return_from_step', 'active_per_step',
 ))
-def relative_bias_redq_per_burst(
+def normalized_bias_redq_per_burst(
     record: Mapping[str, object],
 ) -> npt.NDArray[np.float64]:
     """REDQ-style normalized bias (Chen et al. 2021, "Randomized
     Ensembled Double Q-Learning") per burst:
 
-      rel_bias[b] = E_{s,a}[Q(s,a) − V^π(s,a)] / |E_{s,a}[V^π(s,a)]|
+      rel_bias[b] = E_{s,a}[Q(s,a) − Q^π(s,a)] / |E_{s,a}[Q^π(s,a)]|
 
     where the expectation is over all active eval (s,a) pairs in
     burst b. Numerator is the active-weighted mean of
@@ -3099,8 +3099,8 @@ def relative_bias_redq_per_burst(
     (the on-policy value-function estimate from the trajectory
     that follows).
 
-    REDQ uses |E[V^π]| (not |E[Q]|) so the metric is positive when
-    Q over-estimates V^π, negative when under. The absolute-value
+    REDQ uses |E[Q^π]| (not |E[Q]|) so the metric is positive when
+    Q over-estimates Q^π, negative when under. The absolute-value
     in the denominator preserves the sign of the numerator (the
     bias direction). On envs where MC ≈ 0 (Snake / FR success-rate
     sparse-reward), the denominator is near-zero and the ratio
@@ -3146,7 +3146,7 @@ def relative_bias_redq_per_burst(
 @measurable(reads=(
     'predicted_q_per_step', 'mc_return_from_step', 'active_per_step',
 ))
-def relative_bias_redq_late(record: Mapping[str, object]) -> float:
+def normalized_bias_redq_late(record: Mapping[str, object]) -> float:
     """Late-half-of-bursts scalar version of REDQ-style normalized
     bias. Sibling of `mean_per_state_cumulative_bias_late` — RAW
     bias / |E[mc]| over the late half of training bursts.
@@ -5557,14 +5557,14 @@ def dqn_default_measurables() -> tuple[
         # (chain-deepest endpoint).
         mean_per_state_cumulative_bias_late,
         # REDQ-style normalized bias (Chen et al. 2021): bias divided
-        # by |E[V^π]| over the late half of training. Scale-invariant
+        # by |E[Q^π]| over the late half of training. Scale-invariant
         # form for cross-env aggregation (Acrobot's −80-scale vs
         # Asterix's 20-scale) — pair with the RAW
         # `mean_per_state_cumulative_bias_late` to disentangle
         # "bigger absolute bias" from "bigger relative bias".
         # Reads `mc_return_from_step` directly → tautology-audit
         # caveat applies; diagnostic-only mediator.
-        relative_bias_redq_late,
+        normalized_bias_redq_late,
         # Algorithmic activation rate: 1 − greedy_match_late = rate at
         # which DDQN's argmax/max correction fires per step on this
         # cell's trajectory. Per-cell scalar that's *not*

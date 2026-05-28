@@ -105,14 +105,14 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'state_hash_n_unique_per_burst',
     'state_hash_entropy_per_burst',
     'state_repeat_rate_window64_per_burst',
-    # REDQ-style normalized bias (Chen et al. 2021): bias / |E[V^π]|.
+    # REDQ-style normalized bias (Chen et al. 2021): bias / |E[Q^π]|.
     # Scale-invariant form of the cumulative bias mediator — pair
     # with `mean_per_state_cumulative_bias_*` to disentangle absolute
     # bias from relative bias in cross-env aggregation. Both versions
     # read `mc_return_from_step` directly → tautological with
     # mc_return-based outcomes, diagnostic-only.
-    'relative_bias_redq_late',
-    'relative_bias_redq_per_burst',
+    'normalized_bias_redq_late',
+    'normalized_bias_redq_per_burst',
     # Additional non-tautological per-burst candidates surfaced by the
     # registered-measurables audit. Q-side (Bellman-tautological wrt
     # the bias premise but axis-distinct): q_argmax_margin, q_action_std,
