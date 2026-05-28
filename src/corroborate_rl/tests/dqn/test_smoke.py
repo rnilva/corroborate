@@ -100,9 +100,16 @@ def test_vanilla_dqn_runs_on_cartpole_via_python_loop() -> None:
     # - per-step scalars: (T,)
     # - per-step Q-summaries: (T, n_actions) or (T, 5)
     scalar_keys = {
-        'reward', 'done', 'max_q',
+        'reward', 'done', 'truncated', 'max_q',
         'ep_return', 'action', 'state_hash_per_step', 'buf_size',
         'loss', 'td_error', 'td_error_within_batch_std',
+        # Gradient-overlap probes + cross-action bootstrap-mismatch
+        # rate (emitted unconditionally by train_phase; NaN when
+        # `_GRADIENT_PROBES_ENABLED` is False, schema-stable).
+        'q_action_grad_overlap_per_step',
+        'q_inter_state_grad_overlap_per_step',
+        'q_inter_state_grad_overlap_random_per_step',
+        'bootstrap_action_mismatch_per_step',
     }
     # Per-step Q reductions: per-action vectors (n_actions,) and
     # 5-tuple Pearson sum-stats. Replaces the full
