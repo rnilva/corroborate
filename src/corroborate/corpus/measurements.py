@@ -300,30 +300,30 @@ def build_measurements(
         # restored) is. Drop only when the substrate had all
         # inputs — preserve existing for trace-dependent stamps
         # the substrate couldn't have computed.
-        from corroborate.measurables.measurable import transitive_reads
+        #
+        # `unregistered_policy='runs_wins'`: post-CI6 orphan
+        # eviction guarantees existing.columns are registered;
+        # this branch is the defensive fallback for the rare
+        # not-yet-evicted-orphan case. The runner has the
+        # registry import.
         runs_cols = set(runs_df.columns)
-        overlap_dropped = []
-        for c in existing.columns:
-            if c == 'id' or c not in runs_cols:
-                continue
-            m = get_registered(c)
-            if m is None:
-                # Non-registered overlap (shouldn't happen post-CI6
-                # orphan eviction); fall back to old "runs_df wins"
-                # so the join doesn't produce `_right`-suffixed
-                # garbage.
-                overlap_dropped.append(c)
-                continue
-            # Substrate "could compute" iff its transitive leaf
-            # reads are all in runs_df (pre-trace-join). Direct
-            # reads alone miss param-injected dependencies (e.g.
-            # `effective_horizon` directly reads `gamma`, but
-            # transitively also needs `done` via injected
-            # `bootstrap_fraction`).
-            leaf_reads = transitive_reads(c)
-            substrate_could_compute = all(r in runs_cols for r in leaf_reads)
-            if substrate_could_compute:
-                overlap_dropped.append(c)
+        existing_meas_cols = set(existing.columns)
+        # `_drop_from_runs` is calculated for completeness but
+        # unused on this code path: build_measurements operates
+        # by dropping the EXISTING-side cols + then the
+        # complement is dropped from runs_df further down (the
+        # `runs_dropped = [c for c in existing.columns if ...]`
+        # construction post-overlap). Helper still returns both
+        # for the Panel.from_corpus path.
+        _drop_from_runs_unused, overlap_dropped_set = (
+            resolve_runs_meas_collision(
+                runs_cols=runs_cols,
+                meas_cols=existing_meas_cols,
+                unregistered_policy='runs_wins',
+            )
+        )
+        del _drop_from_runs_unused
+        overlap_dropped = list(overlap_dropped_set)
         if overlap_dropped:
             existing = existing.drop(overlap_dropped)
         # Where existing wins (kept above), runs_df's NaN-stamped
@@ -360,9 +360,21 @@ def build_measurements(
     # `_load_one_corpus`) always pass the corpus's own runs_df, so
     # this didn't fire — but the contract should explicitly reject
     # the disjoint-ID case rather than silently corrupt the store.
+    def _has_missing_values(col: pl.Series) -> bool:
+        """True iff `col` has null OR NaN entries. Mirrors the
+        float-dtype-aware missing-mask used by `compute_missing_
+        columns` itself; pre-fix the gate used only `is_null()`
+        which silently passed all-NaN float columns through the
+        idempotent-skip path, leaving stale-NaN measurables
+        un-recomputed even when local inputs satisfy their reads
+        (today's F3+F4 gotcha)."""
+        if col.is_null().any():
+            return True
+        return col.dtype.is_float() and bool(col.is_nan().any())
+
     no_partial_nulls = all(
         n not in joined.columns
-        or not joined[n].is_null().any()
+        or not _has_missing_values(joined[n])
         for n in to_compute_full
     )
     all_required_present = all(
@@ -412,10 +424,55 @@ def build_measurements(
 
     # Project to id + measurable columns only (drop any joined
     # trace cols / raw record fields the caller passed in).
-    measurable_cols = [
-        c for c in enriched.columns
-        if c == 'id' or c in registered_names()
-    ]
+    #
+    # **Stale-NaN sentinel guard**: drop registered measurables
+    # that (a) we did NOT recompute this round (not in
+    # `to_compute_satisfied`) AND (b) carry only null/NaN values.
+    # These typically arrive on `runs_df` as sweep-time NaN
+    # stamps (the substrate stamped them but couldn't compute —
+    # injected dep missing at sweep time). Preserving them here
+    # would persist a registered column + closure-hash for a
+    # value the framework never actually computed, locking the
+    # corpus into a permanent stuck-NaN that even
+    # `--force-recompute` won't fix (the sidecar hash makes it
+    # look "current"). Drop them so a future ingest with
+    # restored traces can re-stamp them honestly via
+    # `compute_missing_columns`' partial-nullity branch.
+    to_compute_satisfied_set = set(to_compute_satisfied)
+    registered = registered_names()
+    measurable_cols: list[str] = []
+    dropped_stale_nan: list[str] = []
+    for c in enriched.columns:
+        if c == 'id':
+            measurable_cols.append(c)
+            continue
+        if c not in registered:
+            continue
+        if c in to_compute_satisfied_set:
+            measurable_cols.append(c)
+            continue
+        # Registered + present + not recomputed this round.
+        # Keep only if it carries any non-missing value (a
+        # legitimate sweep-time stamp). Drop if all-missing —
+        # that's the unsatisfiable-stamped-NaN case.
+        if _has_missing_values(enriched[c]):
+            col_data = enriched[c]
+            n_null = int(col_data.is_null().sum() or 0)
+            n_nan = (
+                int(col_data.is_nan().sum() or 0)
+                if col_data.dtype.is_float() else 0
+            )
+            if (n_null + n_nan) == enriched.height:
+                dropped_stale_nan.append(c)
+                continue
+        measurable_cols.append(c)
+    if dropped_stale_nan:
+        sys.stderr.write(
+            f'measurements: dropped {len(dropped_stale_nan)} stale-NaN '
+            f'registered column(s) from {out_path} '
+            f'(sweep-time stamps with no live recompute path): '
+            f'{", ".join(sorted(dropped_stale_nan))}\n',
+        )
     out_df = enriched.select(measurable_cols)
 
     # Skip pointless writes (post-roast-#3 fix): when no measurable
@@ -684,15 +741,16 @@ class RecomputeResult:
     """Outcome of a `recompute_corpus_measurables` call on one
     corpus.
 
-    Four disjoint name sets discriminate what happened per
+    Five disjoint name sets discriminate what happened per
     measurable:
 
     - `recomputed`: measurables whose values were freshly written
       to `measurements.parquet` on this call. Either missing from
       the sidecar before, or sidecar hash drifted from the current
-      registry.
+      registry, OR present via `force=` / `recover_nan=` opt-in.
     - `already_current`: measurables whose sidecar hash already
-      matched the current registry — no recompute needed.
+      matched the current registry AND were not forced — no
+      recompute needed.
     - `unsatisfiable`: measurables in the gap whose transitive
       record-key reads aren't available in `runs.parquet` or the
       local `traces.parquet`. Skipped to avoid silently overwriting
@@ -701,22 +759,240 @@ class RecomputeResult:
     - `unregistered`: names passed in `required` that aren't in
       the framework's `@measurable` registry. Caller-side bug
       surface — these can never be computed regardless.
+    - `recovered_nan`: measurables that were sidecar-current
+      (hash matched) but had NaN values in
+      `measurements.parquet` AND whose transitive reads are now
+      satisfied locally — auto-recomputed when `recover_nan=True`
+      was passed. Distinct from `recomputed` so callers can audit
+      "what stale-NaN got fixed on this pass" separately from
+      "what changed because the substrate updated."
+    - `forced_recompute`: measurables that were sidecar-current
+      but bypassed via the `force=` parameter (operator
+      explicitly asked to recompute). Distinct from
+      `recovered_nan` (which is auto-detection-driven, the
+      `recover_nan=True` path) so the audit log can tell
+      "operator-forced" from "framework-auto-recovered."
 
     `is_clean` mirrors `CorpusDriftReport.is_clean`: True iff
     nothing was recomputed AND nothing was unsatisfiable AND
-    nothing was unregistered (i.e. the corpus was fully current
-    on entry)."""
+    nothing was unregistered AND nothing was recovered from
+    stale-NaN AND nothing was force-recomputed (i.e. the corpus
+    was fully current on entry, with no operator overrides)."""
     corpus_dir: Path
     recomputed: tuple[str, ...]
     already_current: tuple[str, ...]
     unsatisfiable: tuple[str, ...]
     unregistered: tuple[str, ...]
+    recovered_nan: tuple[str, ...] = ()
+    forced_recompute: tuple[str, ...] = ()
 
     @property
     def is_clean(self) -> bool:
         return not (
             self.recomputed or self.unsatisfiable or self.unregistered
+            or self.recovered_nan or self.forced_recompute
         )
+
+
+def resolve_runs_meas_collision(
+    *,
+    runs_cols: set[str],
+    meas_cols: set[str],
+    unregistered_policy: Literal['runs_wins', 'meas_wins'],
+) -> tuple[set[str], set[str]]:
+    """Decide which side wins on (runs ∩ measurements) column
+    collisions. Returns `(cols_to_drop_from_runs,
+    cols_to_drop_from_meas)`.
+
+    For each name in `meas_cols ∩ runs_cols` (excluding `id`):
+
+    - If the measurable IS registered AND its `transitive_reads`
+      are all in `runs_cols` → runs wins (the substrate had all
+      inputs at sweep time + its stamp is authoritative). Drop
+      from meas.
+    - If the measurable IS registered AND its reads aren't all
+      in `runs_cols` → meas wins (trace-dependent measurable;
+      runs.parquet carries only a sweep-time NaN stamp; the
+      measurements file was post-sweep computed when traces
+      were available). Drop from runs.
+    - If the measurable is NOT registered (or transitive_reads
+      raises) → `unregistered_policy` decides:
+        * `'runs_wins'` (build_measurements default):
+          defensive fallback for CI6 post-orphan-eviction case;
+          the runner has the registry import, non-registered
+          overlap shouldn't happen in practice.
+        * `'meas_wins'` (Panel.from_corpus default): for
+          exploration entry points where the substrate may not
+          have been imported. The measurements file exists
+          because SOME prior runner stamped a value; trust it
+          over the runs-side NaN.
+
+    Single source of truth for the substrate-could-compute
+    collision logic. Both `build_measurements` and
+    `data.panel.Panel.from_corpus` delegate here."""
+    from corroborate.measurables.measurable import transitive_reads
+    drop_from_runs: set[str] = set()
+    drop_from_meas: set[str] = set()
+    for c in meas_cols & runs_cols:
+        if c == 'id':
+            continue
+        m = get_registered(c)
+        if m is None:
+            if unregistered_policy == 'runs_wins':
+                drop_from_meas.add(c)
+            else:
+                drop_from_runs.add(c)
+            continue
+        try:
+            leaf_reads = transitive_reads(c)
+        except KeyError:
+            if unregistered_policy == 'runs_wins':
+                drop_from_meas.add(c)
+            else:
+                drop_from_runs.add(c)
+            continue
+        if all(r in runs_cols for r in leaf_reads):
+            # Substrate could compute → runs wins.
+            drop_from_meas.add(c)
+        else:
+            # Trace-dependent → meas wins.
+            drop_from_runs.add(c)
+    return drop_from_runs, drop_from_meas
+
+
+def check_recoverable_nan(
+    corpus_dir: Path,
+    *,
+    required: Sequence[str],
+    measurable_signature_fn: Callable[[str], str | None] | None = None,
+) -> tuple[str, ...]:
+    """Return names in `required` that are sidecar-current but
+    carry NaN/null values in `measurements.parquet` AND whose
+    transitive reads are now available from local
+    `runs.parquet` ∪ `traces.parquet`.
+
+    These are the "silent NaN, recoverable now" measurables — the
+    sidecar hash matched at compute time (so `--recompute-
+    measurables` skips them as `already_current`) but the actual
+    cell values came out NaN because a transitive trace col was
+    cloud-evicted when the measurable was originally computed. The
+    standard recompute path doesn't surface them; this function
+    does.
+
+    Detection criteria, all must hold:
+
+    1. Name is sidecar-current (`current_signatures[name]` matches
+       the registry's live signature).
+    2. The column is fully NaN/null in `measurements.parquet`
+       (partial NaN is fine — those compute via the normal
+       `compute_missing_columns` per-cell missing-mask).
+    3. The transitive reads are a subset of
+       `runs.parquet.columns ∪ traces.parquet.columns` (NOT
+       counting the measurable's own column, which is by
+       definition currently all-NaN).
+
+    Used in tandem with `recompute_corpus_measurables(...,
+    recover_nan=True)` — that path treats the returned names as
+    forced gap and recomputes them on the next build pass.
+
+    **Scope this primitive deliberately does NOT cover:**
+
+    - **Partial-NaN columns.** A column with SOME finite cells
+      and some stale-NaN cells (typical for partial trace
+      eviction across a corpus) is not surfaced — the detection
+      threshold is "all entries are null/NaN." Partial-NaN is
+      handled by the standard `compute_missing_columns` per-cell
+      missing-mask: pass the name via `force=` if the partial
+      state should be rebuilt unconditionally.
+    - **Measurables absent from `measurements.parquet`.** A
+      required name with no column at all (no sidecar entry,
+      never written) falls under the normal sidecar-mismatch gap
+      path in `recompute_corpus_measurables`, not this primitive.
+      "Recoverable-NaN" specifically means "column exists +
+      sidecar says current + values came out NaN at compute
+      time."
+    - **Numerical-noise near-zero values.** Only literal null /
+      NaN counts as missing. A column of finite 1e-20 values
+      from a degenerate computation is NOT flagged.
+
+    No-op when `runs.parquet` is missing or sidecar is empty —
+    returns `()`."""
+    if measurable_signature_fn is None:
+        def _default_sig(name: str) -> str | None:
+            m = get_registered(name)
+            return None if m is None else m.signature()
+        sig_fn: Callable[[str], str | None] = _default_sig
+    else:
+        sig_fn = measurable_signature_fn
+
+    runs_path = corpus_dir / 'runs.parquet'
+    if not runs_path.exists():
+        return ()
+    stored = current_signatures(corpus_dir)
+    if not stored:
+        return ()
+    measurements_path = _measurements_path(corpus_dir)
+    if not measurements_path.exists():
+        return ()
+
+    # Schema-level scan: figure out which `required` names have a
+    # column written, are sidecar-current, and are fully null/NaN.
+    meas_schema = pl.scan_parquet(measurements_path).collect_schema()
+    meas_cols = set(meas_schema.names())
+    candidates: list[str] = []
+    for name in required:
+        if name not in meas_cols:
+            continue
+        live = sig_fn(name)
+        if live is None:
+            continue
+        if stored.get(name) != live:
+            continue  # drift handled by normal gap path
+        candidates.append(name)
+
+    if not candidates:
+        return ()
+
+    # Cell-level NaN check: load just the candidate columns from
+    # measurements.parquet and find names that are all-null or
+    # all-NaN.
+    meas = pl.read_parquet(measurements_path, columns=candidates)
+    all_nan: list[str] = []
+    for name in candidates:
+        col = meas[name]
+        n_null = int(col.is_null().sum())
+        n_nan = int(col.is_nan().sum()) if col.dtype.is_float() else 0
+        if n_null + n_nan == len(col):
+            all_nan.append(name)
+    if not all_nan:
+        return ()
+
+    # Transitive-reads availability: same gate as the recompute
+    # path so we only surface recoverable cases.
+    from corroborate.measurables.measurable import transitive_reads
+    available: set[str] = set(
+        pl.scan_parquet(runs_path).collect_schema().names()
+    )
+    traces_path = corpus_dir / 'traces.parquet'
+    if traces_path.exists():
+        try:
+            available |= set(
+                pl.scan_parquet(traces_path).collect_schema().names()
+            )
+        except pl.exceptions.ComputeError:
+            pass
+
+    recoverable: list[str] = []
+    for name in all_nan:
+        try:
+            reads = transitive_reads(name)
+        except KeyError:
+            continue
+        # `name` itself is NaN, so don't count its own column as
+        # an available read.
+        if (reads - {name}).issubset(available):
+            recoverable.append(name)
+    return tuple(recoverable)
 
 
 def recompute_corpus_measurables(
@@ -724,6 +1000,8 @@ def recompute_corpus_measurables(
     *,
     required: Sequence[str],
     measurable_signature_fn: Callable[[str], str | None] | None = None,
+    force: frozenset[str] | None = None,
+    recover_nan: bool = False,
 ) -> RecomputeResult:
     """Recompute the *gap* between `required` and the corpus's
     persisted `measurements.parquet` — strictly using LOCAL inputs
@@ -749,6 +1027,20 @@ def recompute_corpus_measurables(
     recompute, the existing `--ingest` flow already handles it
     via `_load_one_corpus`'s sidecar-current check.
 
+    `force`: optional frozenset of measurable names to recompute
+    unconditionally, bypassing the sidecar's "current" check.
+    Empty frozenset is treated as "no forcing" (None semantics);
+    pass actual names to force. Forced names that aren't in
+    `required` are silently ignored (the recompute path can only
+    operate on the required closure). Forced names land in
+    `recovered_nan` of the result for auditability.
+
+    `recover_nan`: when True, auto-detect names that are
+    sidecar-current but fully-NaN in `measurements.parquet`
+    (using `check_recoverable_nan`) and add them to the force
+    set. Closes the silent-NaN gap where the sidecar says
+    "computed" but the trace col was cloud-evicted at the time.
+
     No-op when `runs.parquet` is missing (returns an empty
     `RecomputeResult` with the corpus_dir field set). The caller
     typically logs this case and continues.
@@ -771,15 +1063,41 @@ def recompute_corpus_measurables(
             unregistered=tuple(required),
         )
 
+    # Resolve the effective force-set: explicit `force` ∪
+    # auto-detected stale-NaN names (when recover_nan=True).
+    # Track origin separately for the audit fields.
+    force_explicit: set[str] = set(force) if force else set()
+    nan_detected: tuple[str, ...] = ()
+    if recover_nan:
+        nan_detected = check_recoverable_nan(
+            corpus_dir,
+            required=required,
+            measurable_signature_fn=sig_fn,
+        )
+    force_from_nan: set[str] = set(nan_detected)
+    # Intersect with `required`: forcing names outside the
+    # required closure has no recompute pathway (build_measurements
+    # only operates on `required`).
+    required_set = set(required)
+    force_explicit &= required_set
+    force_from_nan &= required_set
+    # A name in BOTH explicit and NaN-detected is attributed to
+    # the explicit set (operator intent dominates auto-detection).
+    force_from_nan -= force_explicit
+    force_set = force_explicit | force_from_nan
+
     # 1. Classify each required name vs the current sidecar state.
     stored = current_signatures(corpus_dir)
     unregistered: list[str] = []
     already_current: list[str] = []
-    gap: list[str] = []   # missing OR drifted
+    gap: list[str] = []   # missing OR drifted OR forced
     for name in required:
         live = sig_fn(name)
         if live is None:
             unregistered.append(name)
+            continue
+        if name in force_set:
+            gap.append(name)
             continue
         if stored.get(name) == live:
             already_current.append(name)
@@ -793,6 +1111,8 @@ def recompute_corpus_measurables(
             already_current=tuple(already_current),
             unsatisfiable=(),
             unregistered=tuple(unregistered),
+            recovered_nan=(),
+            forced_recompute=(),
         )
 
     # 2. Walk the gap and decide which are satisfiable from local
@@ -836,6 +1156,8 @@ def recompute_corpus_measurables(
             already_current=tuple(already_current),
             unsatisfiable=tuple(unsatisfiable),
             unregistered=tuple(unregistered),
+            recovered_nan=(),
+            forced_recompute=(),
         )
 
     # 3. Load runs + join the trace cols the satisfiable
@@ -881,12 +1203,26 @@ def recompute_corpus_measurables(
         measurable_signature_fn=sig_fn,
     )
 
+    # Split recomputed into 3 disjoint audit slots:
+    # - `recovered_nan`: auto-detected stale-NaN (recover_nan=True)
+    # - `forced_recompute`: explicit operator force (force=...)
+    # - `recomputed`: regular substrate-driven gap (missing or drifted)
+    satisfiable_set = set(satisfiable)
+    nan_in_satisfiable = satisfiable_set & force_from_nan
+    forced_in_satisfiable = satisfiable_set & force_explicit
     return RecomputeResult(
         corpus_dir=corpus_dir,
-        recomputed=tuple(satisfiable),
+        recomputed=tuple(
+            n for n in satisfiable
+            if n not in nan_in_satisfiable and n not in forced_in_satisfiable
+        ),
         already_current=tuple(already_current),
         unsatisfiable=tuple(unsatisfiable),
         unregistered=tuple(unregistered),
+        recovered_nan=tuple(n for n in satisfiable if n in nan_in_satisfiable),
+        forced_recompute=tuple(
+            n for n in satisfiable if n in forced_in_satisfiable
+        ),
     )
 
 
@@ -960,6 +1296,7 @@ __all__ = [
     'RecomputeResult',
     'build_measurements',
     'check_drift',
+    'check_recoverable_nan',
     'current_signatures',
     'load_measurements',
     'recompute_corpus_measurables',

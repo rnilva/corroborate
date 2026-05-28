@@ -2117,8 +2117,54 @@ def _load_one_corpus(
         # NaN. The per-corpus store is the source of truth in this
         # branch — load it directly into df.
         if not measurements_current:
+            # **Unsatisfiable-pending-restore guard**: filter
+            # `required` to measurables whose transitive reads are
+            # available in `df.columns`. Without this guard, a
+            # newly-required measurable whose trace deps are
+            # cloud-evicted + `restore_from_cloud=False` would be
+            # called with an empty injected array → guarded NaN →
+            # NaN persisted with a "current" closure-hash, which
+            # then sticks across future ingests (the sidecar says
+            # "computed" so build_measurements never retries).
+            # Filtering here matches `recompute_corpus_measurables`'s
+            # unsatisfiable classification: skip the measurable
+            # entirely rather than stamp a bogus NaN result.
+            from corroborate.measurables.measurable import (
+                transitive_reads as _transitive_reads,
+            )
+            df_cols = set(df.columns)
+            satisfiable_required: list[str] = []
+            unsatisfiable_skipped: list[str] = []
+            for name in required:
+                try:
+                    reads = _transitive_reads(name)
+                except KeyError:
+                    # Unregistered — let downstream null-pad.
+                    satisfiable_required.append(name)
+                    continue
+                if reads.issubset(df_cols):
+                    satisfiable_required.append(name)
+                else:
+                    # Only flag as unsatisfiable when the measurable
+                    # is actually drifted/missing. Already-current
+                    # measurables don't need recompute regardless of
+                    # local trace availability.
+                    if name in set(_drifted_or_missing_measurables(
+                        sub, required,
+                    )):
+                        unsatisfiable_skipped.append(name)
+                    else:
+                        satisfiable_required.append(name)
+            if unsatisfiable_skipped:
+                log_lines.append(
+                    f'{prefix}: WARNING — skipping {len(unsatisfiable_skipped)} '
+                    f'drifted/missing measurable(s) — transitive reads not '
+                    f'available locally (traces evicted? pass --restore or '
+                    f'`corroborate restore`): '
+                    f'{", ".join(sorted(unsatisfiable_skipped))}',
+                )
             build_measurements(
-                sub, required=required, runs_df=df,
+                sub, required=satisfiable_required, runs_df=df,
                 measurable_signature_fn=_measurable_signature,
             )
         loaded = load_measurements(sub, columns=list(required))
