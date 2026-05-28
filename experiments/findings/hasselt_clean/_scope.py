@@ -109,6 +109,8 @@ CANONICAL_G099_CORPORA: tuple[str, ...] = (
     'g099_Asterix-MinAtar',                  # MinAtar γ=0.99 v2 (sub-corpus, parent has no runs.parquet)
     'g099_Breakout-MinAtar',
     'g099_Freeway-MinAtar',
+    'g099_SpaceInvaders-MinAtar',            # MinAtar γ=0.99 v2 SI sibling — kept as a fallback alongside
+                                             # `si_g099_canonical_n_eps1_ckpt` for cache-ingest robustness.
     'si_g099_canonical_n_eps1_ckpt',         # SpaceInvaders γ=0.99 (NEW: full-Q canonical_n_eps1_ckpt, n=30, 1M, sync=1000, supersedes g099_SpaceInvaders-MinAtar)
     'snake_1M',                              # Snake γ=0.99 (n_episodes=3 — noisier than rest)
     'pacman_1M_postfix',                     # PacMan γ=0.99 (n_episodes=3, 10 seeds/arm)

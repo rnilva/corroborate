@@ -15,18 +15,18 @@ recipe", refined v10 §2.11):
   4. Refutations (placebo + RCC) on the total ATE — sanity-checks
      the foundation.
 
-This script runs the full pipeline per env on the canonical γ=0.99
-panel, with a candidate mediator set drawn from the populated
-scalar measurables in the hasselt_clean cache:
-
-  Bellman-side (non-tautological):
-    - bootstrap_action_mismatch_late
-  Q-shape (non-tautological):
-    - q_trajectory_autocorr_late
-    - q_action_grad_overlap_late
-  Bias-side (with tautology caveat):
-    - jensen_gap (clamped Q − MC, MC-leak)
-    - normalized_bias_redq_late (REDQ-style, partial de-tautology)
+The candidate mediator set is **auto-detected** from the cache:
+any registered cell-level Float scalar that is populated above
+50% finite, minus outcome variants and arm encodings. After the
+`REQUIRED_MEASURABLES` expansion in `hasselt_clean/__init__.py`,
+this yields ~30 candidates spanning Q-dynamics, Q-shape, Q-MC
+calibration, Lambda_a, TD, policy, state-coverage, and Bellman
+families — much broader than the 5 hand-picked candidates this
+script used in its first iteration. Soft-tautological candidates
+(jensen_gap, normalized_bias_redq_late, q_mc_*, pearson_r_*) are
+flagged in the output but not excluded — PC + partial Spearman
+can still surface them as best-by-absorption per env, with the
+flag making the tautology caveat visible.
 
 Numerics reported per env:
   - PC skeleton: list of mediators adjacent to arm AND outcome
@@ -35,9 +35,7 @@ Numerics reported per env:
   - placebo refutation drift / RCC drift for sanity
 
 Honest per-env table + figure showing which mediator survives PC
-+ Spearman + DoWhy at each env. Most envs will have no PC-detected
-mediation (small marginal ρ or no adjacency); a few (Asterix,
-FourRooms, MetaMaze) will surface their canonical channel.
++ Spearman + DoWhy at each env.
 """
 from __future__ import annotations
 import sys
@@ -67,25 +65,73 @@ OUT_PNG = SCRIPT_DIR.parent / 'figures' / '03b_per_env_best_mediator.png'
 OUT_CSV = SCRIPT_DIR.parent / 'figures' / '03b_per_env_best_mediator.csv'
 
 
-# Candidate scalar mediator set (cell-level, populated in cache).
-# We exclude jensen_gap-only candidates from the "PC-clean" set
-# because they share MC inputs with the outcome (soft tautology),
-# but report both for comparison.
-CLEAN_MEDIATORS: tuple[str, ...] = (
-    'bootstrap_action_mismatch_late',
-    'q_trajectory_autocorr_late',
-    'q_action_grad_overlap_late',
+# Candidate set is auto-detected from the cache: any registered
+# cell-level Float scalar that is populated (>50% finite) is a
+# potential mediator. We explicitly exclude outcome variants
+# (eval_*, late_window_mean, outcome_episode_*) and arm-encoded
+# columns. The framework's `_late` paired scalars + the broader
+# Q-dynamics / TD / policy / state-coverage families requested by
+# hasselt_clean.REQUIRED_MEASURABLES make this a ~30-candidate set.
+OUTCOME_RELATED_PREFIXES: tuple[str, ...] = (
+    'eval_', 'mc_return', 'late_window_mean', 'outcome_',
+    'mean_per_state_cumulative_bias',  # outcome-input by construction
 )
-TAUT_MEDIATORS: tuple[str, ...] = (
+# Strict tautology — read `mc_return_from_step` directly. The
+# soft-tautology cluster (q_mc_*, pearson_r_*, jensen_*,
+# normalized_bias_redq_*) is INCLUDED in the candidate set with
+# a flag.
+EXCLUDE_FROM_CANDIDATES: frozenset[str] = frozenset({
+    'arm_is_baseline',
+    'arm_code',
+})
+SOFT_TAUTOLOGY_FLAG: frozenset[str] = frozenset({
     'jensen_gap',
+    'jensen_dormancy_gap',
     'normalized_bias_redq_late',
-)
+    'q_mc_calibration_pearson',
+    'q_mc_burst_correlation_late',
+    'pearson_r_online_target',
+})
 
 
 def _absorption(rho_marg: float, rho_part: float) -> float:
     if abs(rho_marg) < 1e-9 or np.isnan(rho_marg) or np.isnan(rho_part):
         return float('nan')
     return (1 - abs(rho_part) / abs(rho_marg)) * 100
+
+
+def _autodetect_candidates(df: pl.DataFrame, min_finite_frac: float = 0.5) -> tuple[str, ...]:
+    """Auto-detect cell-level scalar mediator candidates from the
+    cache: any Float column that is populated above `min_finite_frac`
+    and not in `OUTCOME_RELATED_PREFIXES` / `EXCLUDE_FROM_CANDIDATES`.
+
+    Importing the substrate's registered-measurable list at the top
+    ensures we don't accidentally pick up substrate-config knobs
+    (those aren't @measurable-registered, only data columns are).
+    Skips list-typed (per-burst) columns; PC operates on cell-level
+    scalars."""
+    import sys
+    sys.path.insert(0, str(Path('src/corroborate_rl').resolve()))
+    import corroborate_rl.dqn.measurables  # noqa: F401 — registers
+    from corroborate.measurables.measurable import registered_names
+    registered = set(registered_names())
+
+    candidates: list[str] = []
+    for c in df.columns:
+        if c not in registered:  # only @measurable scalars
+            continue
+        if c in EXCLUDE_FROM_CANDIDATES:
+            continue
+        if any(c.startswith(p) for p in OUTCOME_RELATED_PREFIXES):
+            continue
+        dt = df.schema[c]
+        if not str(dt).startswith(('Float', 'Int')):
+            continue  # skip list types, strings, etc.
+        n_finite = df.select(pl.col(c).is_finite().sum()).item()
+        if n_finite < df.height * min_finite_frac:
+            continue
+        candidates.append(c)
+    return tuple(sorted(candidates))
 
 
 def main() -> None:
@@ -95,7 +141,15 @@ def main() -> None:
           .when(pl.col('arm_key') == BASELINE_ARM).then(0)
           .otherwise(None).alias('arm_code')
     ).filter(pl.col('arm_code').is_not_null())
-    print(f'panel: {df.height} cells')
+
+    candidates = _autodetect_candidates(df)
+    n_clean = sum(1 for c in candidates if c not in SOFT_TAUTOLOGY_FLAG)
+    n_soft = len(candidates) - n_clean
+    print(f'panel: {df.height} cells; auto-detected {len(candidates)} '
+          f'mediator candidates ({n_clean} clean + {n_soft} soft-tautology):')
+    for c in candidates:
+        flag = ' [soft-taut]' if c in SOFT_TAUTOLOGY_FLAG else ''
+        print(f'    {c}{flag}')
 
     rows: list[dict[str, object]] = []
     for env in ENV_ORDER:
@@ -113,8 +167,13 @@ def main() -> None:
             'marg_rho': marg.rho_pooled,
         }
 
-        # PC adjacency over (arm + candidates + outcome)
-        all_cands = CLEAN_MEDIATORS + TAUT_MEDIATORS
+        # PC adjacency over (arm + candidates + outcome).
+        # Auto-detected candidate set is shared across envs (one
+        # cache-wide pass); per-env we filter to cells where each
+        # candidate is finite — env-specific candidate availability
+        # may differ (e.g. Snake / PacMan have lower n_episodes,
+        # so some `_late` reads may be NaN).
+        all_cands = candidates
         nodes = ('arm_code', *all_cands, OUTCOME_LATE_COL)
         # Filter to cells where ALL candidates are finite (PC needs them all)
         sub_pc = sub.filter(

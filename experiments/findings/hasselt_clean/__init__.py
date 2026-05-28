@@ -133,4 +133,79 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     'q_lambda_a_per_burst',
     'state_conditional_argmax_entropy_per_burst',
     'bootstrap_disagree_gap_conditional_per_burst',
+    # Framework-registered late-window scalars paired with the
+    # per-burst measurables above. Required for cell-level static
+    # mediation analysis (L3 / L3b of papers/g099_mediation) —
+    # without these in the cache, scripts would have to recompute
+    # them ad-hoc from list-typed per-burst columns, breaking the
+    # framework's measurable-graph discipline. The framework's
+    # `_registered(...)` calls in `dqn/measurables.py` pair each
+    # `*_per_burst` with its `*_late` companion; we just need to
+    # request the late ones explicitly.
+    'argmax_entropy_late',
+    'state_conditional_argmax_entropy_late',
+    'state_hash_n_unique_late',
+    'state_hash_entropy_late',
+    'state_repeat_rate_window64_late',
+    'q_argmax_margin_late',
+    'q_action_std_late',
+    'q_autocorr_late',
+    'greedy_match_late',
+    # Broader cell-level scalar mediator-candidate set, surfaced
+    # for L3b per-env best-mediator discovery (`papers/g099_mediation/
+    # scripts/03b_per_env_best_mediator.py`). Without these, PC
+    # discovery only sees the narrow per-burst-paired _late slice
+    # and misses Q-dynamics, Q-MC-calibration, TD, policy-churn,
+    # state-coverage extras, and Bellman-side dominance metrics.
+    # All read from runs.parquet or per-burst local data; recompute
+    # is cheap (~minutes per corpus).
+    #
+    # Q-dynamics scalars
+    'q_late_mean',
+    'q_max_temporal_cv_late',
+    'q_gap_late',
+    'q_gap_growth',
+    'q_signal_to_noise_late',
+    'q_range_to_std_late',
+    'q_growth_max_minus_initial',
+    'q_max_growth',
+    'q_action_gap_relative_late',
+    # Q-burst autocorrelation
+    'q_burst_autocorr_lag1',
+    'q_burst_autocorr_long',
+    'q_margin_burst_autocorr_lag1',
+    'q_burst_autoregression_lag1',
+    # Q-MC calibration (read both Q and mc_return — soft tautology
+    # downstream; informative for mediator discovery but flag-aware)
+    'q_mc_calibration_pearson',
+    'q_mc_burst_correlation_late',
+    'pearson_r_online_target',
+    # Lambda_a family (no `q_lambda_a_late` — not registered; the
+    # canonical scalar Λ_a quantity is exposed via the growth /
+    # init / tail decomposition only)
+    'q_lambda_a_growth_ratio',
+    'q_lambda_a_init_mean',
+    'q_lambda_a_tail_cv',
+    # TD dynamics
+    'td_residual_late',
+    'td_within_batch_var_late',
+    'td_burst_trend',
+    # Policy / argmax dynamics
+    'policy_churn_late',
+    'policy_growth_fraction',
+    'policy_anchors_before_bias',
+    'argmax_persistence_late',
+    'argmax_mode_freq_late',
+    # State coverage extras
+    'state_coverage_kl_uniform_late',
+    'mutual_info_state_argmax_late',
+    'state_burst_jaccard_lag1',
+    'state_burst_jaccard_long',
+    'state_repeat_rate_window256_late',
+    'unique_states_visited_late',
+    # Bellman extras
+    'bootstrap_gap_frac_active',
+    'bootstrap_self_reference_fraction',
+    'bootstrap_dominated_burst_fraction',
+    'clip_wedge_polarity_aligned',
 )

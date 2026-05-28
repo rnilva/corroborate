@@ -1,13 +1,13 @@
 env,n,marg_rho,pc_arm_adj,pc_outcome_adj,pc_mediators,best_med,best_part_rho,best_absorb_pct,dowhy_ate,dowhy_placebo_drift,dowhy_rcc_drift,note
-Asterix,60,+0.731,"q_trajectory_autocorr_late","normalized_bias_redq_late","",jensen_gap,+0.318,+56.5,+7.135,0.000,0.015,
-Breakout,60,-0.148,"jensen_gap|normalized_bias_redq_late","q_action_grad_overlap_late","",jensen_gap,-0.042,+71.3,-1.620,0.000,0.017,
-Freeway,60,+0.217,"jensen_gap","normalized_bias_redq_late","",q_action_grad_overlap_late,+0.145,+33.2,+1.427,0.000,0.007,
-SpaceInvaders,60,-0.121,"jensen_gap|normalized_bias_redq_late","","",bootstrap_action_mismatch_late,-0.061,+49.8,-2.076,0.000,0.006,
+Asterix,60,+0.731,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
+Breakout,60,-0.148,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
+Freeway,60,+0.217,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
+SpaceInvaders,60,+nan,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
 PacMan,20,+0.277,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
 Snake,60,-0.206,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
-MetaMaze,60,+0.393,"jensen_gap","bootstrap_action_mismatch_late|normalized_bias_redq_late","",bootstrap_action_mismatch_late,+0.122,+68.8,+3.445,0.000,0.028,
-FourRooms,60,+0.533,"jensen_gap","normalized_bias_redq_late","",q_trajectory_autocorr_late,+0.321,+39.8,+0.225,0.000,0.001,
-CartPole,60,+0.060,"","q_trajectory_autocorr_late|q_action_grad_overlap_late","",q_action_grad_overlap_late,+0.048,+18.7,+nan,nan,nan,
-Acrobot,60,-0.148,"","q_trajectory_autocorr_late|normalized_bias_redq_late","",q_trajectory_autocorr_late,-0.068,+54.4,-3.191,0.000,0.027,
-MountainCar,60,-0.022,"","q_trajectory_autocorr_late|jensen_gap","",,+nan,+nan,+nan,nan,nan,
-LunarLander,60,+0.104,"","bootstrap_action_mismatch_late","",q_trajectory_autocorr_late,+0.058,+44.6,+20.769,0.000,0.239,
+MetaMaze,60,+0.393,"greedy_match_late|jensen_gap","normalized_bias_redq_late","",greedy_match_late,+0.001,+99.8,+3.445,0.000,0.003,
+FourRooms,60,+0.533,"q_inter_state_grad_overlap_late|state_hash_entropy_late","normalized_bias_redq_late","",argmax_entropy_late,+0.033,+93.7,+0.225,0.000,0.001,
+CartPole,60,+0.060,"","state_repeat_rate_window64_late","",state_hash_entropy_late,+0.009,+85.4,+4.053,0.000,0.324,
+Acrobot,60,-0.148,"","normalized_bias_redq_late|q_trajectory_autocorr_late","",state_hash_entropy_late,-0.066,+55.5,-3.191,0.000,0.027,
+MountainCar,60,-0.022,"","state_hash_entropy_late","",,+nan,+nan,+nan,nan,nan,
+LunarLander,60,+0.104,"","","",state_repeat_rate_window64_late,+0.036,+65.7,+28.210,0.000,0.885,
