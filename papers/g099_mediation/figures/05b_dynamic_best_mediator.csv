@@ -1,0 +1,13 @@
+env,n_bursts,n_marg_bursts,n_winning,n_distinct,family_counts,per_burst_winners
+Asterix,50,24,18,4,"(no winner):32|Bellman:3|Q-shape:14|State-coverage:1","-|-|-|-|-|-|-|-|-|-|-|-|Q-shape|-|-|-|-|-|-|-|-|-|Q-shape|-|-|Q-shape|Q-shape|-|-|Q-shape|Q-shape|Q-shape|Bellman|-|Q-shape|Q-shape|-|Bellman|-|State-coverage|-|-|Q-shape|-|Q-shape|Q-shape|Q-shape|Q-shape|Bellman|-"
+Breakout,50,2,2,1,"(no winner):48|Q-shape:2","-|-|Q-shape|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|Q-shape|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-"
+Freeway,50,4,4,2,"(no winner):46|Bellman:1|Q-shape:3","-|-|Bellman|-|-|-|-|-|-|-|-|-|-|Q-shape|-|-|-|-|-|-|-|-|-|-|-|-|Q-shape|-|-|-|-|-|-|-|-|-|-|-|-|-|-|Q-shape|-|-|-|-|-|-|-|-"
+SpaceInvaders,50,4,4,2,"(no winner):46|Q-shape:4","-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|Q-shape|-|-|-|-|-|-|-|Q-shape|-|-|-|Q-shape|-|-|-|-|-|-|-|-|-|-|-|-|-|Q-shape|-|-|-|-|-|-|-"
+PacMan,10,0,0,0,"(no winner):10","-|-|-|-|-|-|-|-|-|-"
+Snake,20,2,0,0,"(no winner):20","-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-"
+MetaMaze,10,2,2,1,"(no winner):8|Bellman:2","-|Bellman|Bellman|-|-|-|-|-|-|-"
+FourRooms,20,11,9,2,"(no winner):11|Policy:8|State-coverage:1","-|-|-|-|-|Policy|Policy|Policy|Policy|Policy|Policy|-|-|Policy|Policy|State-coverage|-|-|-|-"
+CartPole,10,0,0,0,"(no winner):10","-|-|-|-|-|-|-|-|-|-"
+Acrobot,20,0,0,0,"(no winner):20","-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-"
+MountainCar,10,0,0,0,"(no winner):10","-|-|-|-|-|-|-|-|-|-"
+LunarLander,50,0,0,0,"(no winner):50","-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-"
