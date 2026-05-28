@@ -864,11 +864,40 @@ def restore(
     return restored
 
 
+DEFAULT_RESTORE_ROW_GROUP_SIZE = 2
+"""Default cells-per-row-group for `restore_columns` local rewrite.
+
+The cloud-hosted parquet may have been written as a single huge
+row group (e.g. snake_g099_canonical_3M_ckpt: 60 cells × ~30 GB
+uncompressed, 1 row group). Streaming readers downstream
+(`compute_trace_measurables_streaming`, `_load_one_corpus`'s
+row-group iteration) take row groups as the atomic streaming
+unit — a single row group means "stream everything at once" →
+OOM on the next ingest pass.
+
+The local file is what we control; rewriting with row groups
+sized to a small cell-count (default 2) restores the row-group
+axis as a meaningful streaming boundary. Downstream
+`build_measurements_streaming` then iterates with bounded RAM
+regardless of the cloud writer's row-group choice.
+
+Small row groups (2 cells) keep the streaming batcher's
+per-batch decompressed footprint well under
+`measurements.DEFAULT_TRACE_BYTE_BUDGET` even for the heaviest
+3M-step MinAtar per-step list columns (~183 MB/cell → ~365 MB per
+2-cell group), so the row-group batch path (which reads ONLY the
+grouped row groups, not the whole file) handles them with low
+single-digit GB peak. Lighter substrates pack many such groups
+into one batch. Comfortable on the 12-16 GB RAM envelopes the
+framework runs in."""
+
+
 def restore_columns(
     sweep_dir: Path,
     *,
     file_columns: Mapping[str, Sequence[str]],
     overwrite: bool = True,
+    row_group_size: int | None = DEFAULT_RESTORE_ROW_GROUP_SIZE,
 ) -> list[str]:
     """Column-projected restore: scan cloud-hosted parquet with
     `pl.scan_parquet(..., columns=[...])` (real S3 column pushdown
@@ -893,8 +922,18 @@ def restore_columns(
         })
 
     The columns must be subsets of the cloud file's schema; an
-    unknown column raises at scan time. Returns the list of
-    relpaths actually rewritten."""
+    unknown column raises at scan time.
+
+    `row_group_size`: cells per row group in the LOCAL rewrite.
+    Defaults to `DEFAULT_RESTORE_ROW_GROUP_SIZE` (8). Cloud files
+    written by a sweep merger may have a single huge row group
+    spanning all cells; reading any subset then materialises the
+    whole file (OOM on multi-GB traces). Re-chunking row groups
+    at restore time gives downstream streaming primitives a
+    meaningful per-batch boundary. Pass `None` to disable
+    re-chunking (preserves the source writer's row groups).
+
+    Returns the list of relpaths actually rewritten."""
     manifest = load_manifest(sweep_dir)
     if manifest is None:
         raise FileNotFoundError(
@@ -927,10 +966,26 @@ def restore_columns(
             # Nothing useful in this file for the requested colset;
             # skip the write rather than create a zero-column file.
             continue
-        df = pl.scan_parquet(remote_uri).select(keep).collect()
         local.parent.mkdir(parents=True, exist_ok=True)
         tmp = local.with_suffix(local.suffix + '.tmp')
-        df.write_parquet(tmp)
+        lazy = pl.scan_parquet(remote_uri).select(keep)
+        # Stream remote→local through `sink_parquet` so cloud files
+        # whose single row group is larger than RAM don't OOM at
+        # restore time. `sink_parquet` evaluates the query in
+        # streaming mode and writes chunks to disk; the local file
+        # comes out with row groups sized to `row_group_size` so
+        # downstream `compute_trace_measurables_streaming` has a
+        # meaningful per-batch boundary regardless of the cloud
+        # writer's row-group choice.
+        sink_row_group_size = row_group_size
+        if sink_row_group_size is None:
+            # Match the legacy behaviour: a single row group per
+            # write. Callers who opt out of re-chunking are
+            # accepting the responsibility to avoid 1-RG OOM
+            # downstream.
+            lazy.sink_parquet(tmp)
+        else:
+            lazy.sink_parquet(tmp, row_group_size=sink_row_group_size)
         tmp.replace(local)
         restored.append(relpath)
     return restored
