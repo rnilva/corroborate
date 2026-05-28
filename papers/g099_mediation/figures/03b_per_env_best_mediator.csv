@@ -1,10 +1,10 @@
 env,n,marg_rho,pc_arm_adj,pc_outcome_adj,pc_mediators,best_med,best_part_rho,best_absorb_pct,dowhy_ate,dowhy_placebo_drift,dowhy_rcc_drift,note
 Asterix,30,+0.728,"","normalized_bias_redq_late","",jensen_gap,+0.070,+90.4,+5.417,0.000,0.011,
-Breakout,60,-0.148,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
-Freeway,60,+0.217,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
-SpaceInvaders,60,+nan,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
-PacMan,20,+0.277,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
-Snake,60,-0.206,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
+Breakout,60,-0.148,"jensen_gap|normalized_bias_redq_late","","",jensen_gap,-0.042,+71.3,-1.620,0.000,0.004,
+Freeway,60,+0.217,"jensen_gap","normalized_bias_redq_late","",q_action_grad_overlap_late,+0.145,+33.2,+1.427,0.000,0.035,
+SpaceInvaders,60,+nan,"bootstrap_action_mismatch_late|jensen_dormancy_gap|jensen_gap|q_action_grad_overlap_late|q_inter_state_grad_overlap_late|q_trajectory_autocorr_late","bootstrap_action_mismatch_late|jensen_dormancy_gap|jensen_gap|q_action_grad_overlap_late|q_inter_state_grad_overlap_late|q_trajectory_autocorr_late","bootstrap_action_mismatch_late|jensen_dormancy_gap|jensen_gap|q_action_grad_overlap_late|q_inter_state_grad_overlap_late|q_trajectory_autocorr_late",,+nan,+nan,+nan,nan,nan,
+PacMan,20,+0.277,"","","",argmax_entropy_late,+0.085,+69.5,+132.250,0.000,0.716,
+Snake,60,-0.206,"argmax_entropy_late|jensen_gap","normalized_bias_redq_late","",argmax_entropy_late,-0.034,+83.6,+0.040,0.000,0.000,
 MetaMaze,60,+0.393,"jensen_gap|policy_anchors_before_bias","normalized_bias_redq_late","",greedy_match_late,+0.001,+99.8,+3.445,0.000,0.003,
 FourRooms,60,+0.533,"","normalized_bias_redq_late|q_mc_burst_correlation_late","",state_conditional_argmax_entropy_late,+0.029,+94.6,+0.225,0.000,0.001,
 CartPole,60,+0.060,"","state_repeat_rate_window64_late","",state_hash_entropy_late,+0.009,+85.4,+4.053,0.000,0.324,

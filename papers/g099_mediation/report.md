@@ -173,15 +173,15 @@ broad-mediator re-ingest):
   | Asterix (n=30) | +0.73 | jensen_gap *(soft-taut)* | 90% | +5.42 | 0.00 / 0.01 |
   | FourRooms | +0.53 | state_conditional_argmax_entropy | 95% | +0.23 | 0.00 / 0.00 |
   | MetaMaze | +0.39 | greedy_match | 100% | +3.45 | 0.00 / 0.00 |
-  | PacMan | +0.28 | — | — | — | PC underpowered |
-  | Freeway | +0.22 | — | — | — | PC underpowered |
-  | Snake | −0.21 | — | — | — | PC underpowered |
-  | Breakout | −0.15 | — | — | — | PC underpowered |
+  | PacMan (n=20) | +0.28 | argmax_entropy | 70% | +132.25 | 0.00 / **0.72** ← RCC flag |
+  | Freeway | +0.22 | q_action_grad_overlap | 33% | +1.43 | 0.00 / 0.04 |
+  | Snake | −0.21 | argmax_entropy | 84% | +0.04 | 0.00 / 0.00 |
+  | Breakout | −0.15 | jensen_gap *(soft-taut)* | 71% | −1.62 | 0.00 / 0.00 |
   | Acrobot | −0.15 | state_hash_entropy | 56% | −3.19 | 0.00 / 0.03 |
   | LunarLander | +0.10 | q_mc_calibration_pearson *(soft-taut)* | 71% | +28.21 | 0.00 / **0.88** ← RCC flag |
   | CartPole | +0.06 | state_hash_entropy | 85% | +4.05 | 0.00 / **0.32** ← RCC flag |
   | MountainCar | −0.02 | q_range_to_std | 100% *(near-zero marg)* | −0.49 | 0.00 / 0.05 |
-  | SpaceInvaders | (NaN) | — | — | — | NaN marg ρ |
+  | SpaceInvaders | (NaN) | — | — | — | NaN marg ρ (outcome variance) |
 
 Substantive findings:
 - **Asterix is the canonical Hasselt result**: jensen_gap absorbs
@@ -190,26 +190,34 @@ Substantive findings:
   tautology caveat: `jensen_gap` shares MC inputs with the outcome
   — see Layer 4's discussion of why pooling these env-specific
   reads is dangerous.
-- **MetaMaze + FourRooms surface non-bias mediators**: MetaMaze
-  picks `greedy_match_late` (100% absorption, ATE=+3.45);
-  FourRooms picks `state_conditional_argmax_entropy_late` (95%,
-  ATE=+0.23). Both have clean refutations. Different envs route
-  through different channels.
-- **5 envs PC-underpowered** (Breakout, Freeway, SpaceInvaders,
-  PacMan, Snake): the MinAtar/Jumanji envs don't have the
-  Q-dynamics / TD / policy-churn / state-coverage scalars in
-  cache (g099_*-MinAtar corpora pre-date the canonical_n_eps20_ckpt
-  rebuild). Cache-side limitation; not a substantive null.
-- **2 envs RCC-flagged**: LunarLander (RCC drift = 0.88) picks
-  `q_mc_calibration_pearson` — soft-tautology AND non-robust to
-  synthetic confounders. CartPole (drift = 0.32) — non-robust AND
-  saturating peak (Layer 2 ⊥ flag). Both linear-mediation
-  estimates fail the framework's RCC gate; the framework refuses
-  to ship them.
+- **Per-env best mediator is env-specific** (no universal channel):
+  Asterix → jensen_gap; Breakout → jensen_gap; MetaMaze →
+  greedy_match; FourRooms → state_cond_argmax_entropy; Snake +
+  PacMan → argmax_entropy; Acrobot + CartPole → state_hash_entropy;
+  Freeway → q_action_grad_overlap; LunarLander →
+  q_mc_calibration_pearson; MountainCar → q_range_to_std. Three
+  rough channel families (bias, policy-shape, state-coverage)
+  partition the 11 mediating envs.
+- **3 envs RCC-flagged**: LunarLander (drift = 0.88), PacMan (0.72),
+  CartPole (0.32) — all well above the 0.05 tolerance. Linear-
+  mediation estimates fail synthetic-confounder robustness.
+  PacMan's flag includes an absurd ATE = +132 — the framework
+  catches both the absurd magnitude AND the RCC fragility. CartPole
+  pairs with the Layer 2 ⊥ saturation flag for double-attention.
 - **No env has a PC-detected mediator** (joint arm AND outcome
   adjacency under conservative depth-2 conditioning). The
   "best by absorption" column reports what would survive an
   absorption-only rule; PC's strict gate refuses every candidate.
+  At SpaceInvaders, PC over-detects (6 candidates show as adjacent
+  to both arm and outcome simultaneously — a degenerate result
+  where outcome variance is the underlying problem; partial
+  Spearman returns NaN for the marg).
+- **Per-env candidate sets differ**: MinAtar / Jumanji envs
+  (Breakout, Freeway, PacMan, SpaceInvaders, Snake) carry a
+  narrower scalar set than the MLP envs (g099_*-MinAtar corpora
+  pre-date the broad measurable expansion; PacMan + Snake share
+  the gap). The script auto-detects per-env to handle this; PC
+  runs on whatever each env carries.
 
 The framework's per-env panel + refutation gates collectively say:
 "no single mediator is universal across envs; state-coverage

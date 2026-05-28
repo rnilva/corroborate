@@ -142,14 +142,13 @@ def main() -> None:
           .otherwise(None).alias('arm_code')
     ).filter(pl.col('arm_code').is_not_null())
 
-    candidates = _autodetect_candidates(df)
-    n_clean = sum(1 for c in candidates if c not in SOFT_TAUTOLOGY_FLAG)
-    n_soft = len(candidates) - n_clean
-    print(f'panel: {df.height} cells; auto-detected {len(candidates)} '
-          f'mediator candidates ({n_clean} clean + {n_soft} soft-tautology):')
-    for c in candidates:
-        flag = ' [soft-taut]' if c in SOFT_TAUTOLOGY_FLAG else ''
-        print(f'    {c}{flag}')
+    # GLOBAL union for reporting; per-env we re-detect to handle
+    # the env-specific NaN pattern (some envs lack the broad
+    # mediator set in their cache).
+    candidates_global = _autodetect_candidates(df)
+    print(f'panel: {df.height} cells; '
+          f'auto-detected {len(candidates_global)} mediator candidates '
+          f'(global union; per-env may be smaller).')
 
     rows: list[dict[str, object]] = []
     for env in ENV_ORDER:
@@ -167,13 +166,18 @@ def main() -> None:
             'marg_rho': marg.rho_pooled,
         }
 
-        # PC adjacency over (arm + candidates + outcome).
-        # Auto-detected candidate set is shared across envs (one
-        # cache-wide pass); per-env we filter to cells where each
-        # candidate is finite — env-specific candidate availability
-        # may differ (e.g. Snake / PacMan have lower n_episodes,
-        # so some `_late` reads may be NaN).
-        all_cands = candidates
+        # PC adjacency over (arm + candidates + outcome). Re-detect
+        # candidates PER-ENV: many MinAtar / Jumanji corpora carry
+        # only a subset of the broad cell-scalar set (Q-dynamics,
+        # TD, policy-churn families require traces that those
+        # corpora don't have). A global candidate union would drop
+        # every cell for these envs via the all-finite filter.
+        all_cands = _autodetect_candidates(sub)
+        if len(all_cands) < 2:
+            record['note'] = f'no usable candidates (cache gap)'
+            rows.append(record)
+            continue
+        record['n_candidates'] = len(all_cands)
         nodes = ('arm_code', *all_cands, OUTCOME_LATE_COL)
         # Filter to cells where ALL candidates are finite (PC needs them all)
         sub_pc = sub.filter(
