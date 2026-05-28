@@ -86,6 +86,15 @@ class PgxEnv(Generic[StateT]):
         step_key, reset_key = jax.random.split(rng)
         next_state = self.inner.step(state, action.astype(jnp.int32), step_key)
         done = next_state.terminated | next_state.truncated
+        # Pgx natively distinguishes terminated (genuine terminal)
+        # from truncated (artificial cap, e.g. pgx's
+        # `_step_count >= max_termination_steps`). Surface
+        # truncated through `info['truncated']` so the substrate's
+        # `bootstrap` claim continues bootstrap on truncations.
+        # See `pgx/core.py:105` for the upstream split.
+        info: dict[str, object] = {
+            'truncated': next_state.truncated.astype(jnp.float32),
+        }
         # Auto-reset on done — pgx itself doesn't auto-reset; without
         # this, `done` stays high forever after the first episode ends.
         reset_state = self.inner.init(reset_key)
@@ -100,7 +109,7 @@ class PgxEnv(Generic[StateT]):
         )
         # pgx's rewards field is a 1-element array (single-agent envs)
         reward = next_state.rewards.squeeze()
-        return (final_obs, final_state, reward, done, {})
+        return (final_obs, final_state, reward, done, info)
 
     def step_env(
         self,
@@ -116,13 +125,20 @@ class PgxEnv(Generic[StateT]):
         physical-continuation state in replay (load-bearing for the
         truncation-aware Bellman target — bootstraps against
         `v(s_pre_reset)` at truncations, not
-        `v(s_reset_initial)`)."""
+        `v(s_reset_initial)`).
+
+        `info['truncated']` carries the pgx-native truncation flag
+        (`_step_count >= max_termination_steps`) so the rollout's
+        Bellman target masks correctly at the cap."""
         del params
         next_state = self.inner.step(state, action.astype(jnp.int32), rng)
         done = next_state.terminated | next_state.truncated
+        info: dict[str, object] = {
+            'truncated': next_state.truncated.astype(jnp.float32),
+        }
         next_obs = self._cast_obs(next_state.observation)
         reward = next_state.rewards.squeeze()
-        return next_obs, next_state, reward, done, {}
+        return next_obs, next_state, reward, done, info
 
     def action_space(
         self, params: gymnax_env.EnvParams,

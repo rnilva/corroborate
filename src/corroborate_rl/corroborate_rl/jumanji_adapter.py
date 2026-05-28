@@ -69,6 +69,21 @@ class JumanjiEnv(Generic[ObsT, StateT]):
         # `reset_env` Protocol method matches `reset` here.
         return self.reset(rng, params)
 
+    def _classify_done(
+        self, ts_step_type: jax.Array, ts_discount: jax.Array,
+    ) -> tuple[jax.Array, jax.Array]:
+        """Jumanji distinguishes natural termination from
+        truncation by the `(step_type, discount)` pair (see
+        `jumanji.types.termination` vs `jumanji.types.truncation`):
+        - termination: step_type == LAST (==2), discount == 0
+        - truncation:  step_type == LAST (==2), discount > 0
+        Returns `(done, truncated)` both as float32 in {0.0, 1.0}."""
+        is_last = ts_step_type == 2
+        # discount > 0 alongside LAST → truncation. Termination has
+        # discount=0; mid-episode has step_type != LAST.
+        truncated_bool = jnp.logical_and(is_last, ts_discount > 0.0)
+        return is_last.astype(jnp.float32), truncated_bool.astype(jnp.float32)
+
     def step(
         self,
         rng: jax.Array,
@@ -80,29 +95,28 @@ class JumanjiEnv(Generic[ObsT, StateT]):
     ]:
         del params
         next_state, ts = self.inner.step(state, action.astype(jnp.int32))
-        # dm_env step_type==2 is LAST (terminal). Jumanji also sets
-        # discount to 0 on terminal — either is canonical; step_type
-        # is the documented invariant.
-        done = ts.step_type == 2
+        done, truncated = self._classify_done(ts.step_type, ts.discount)
+        info: dict[str, object] = {'truncated': truncated}
         # Auto-reset on done to match gymnax env contract — jumanji
         # itself doesn't auto-reset, so without this the env stays in
         # a permanently-terminal state for the rest of training (the
         # `done` flag stays 1 forever after the first episode ends,
         # producing degenerate TD targets).
         reset_state, reset_ts = self.inner.reset(rng)
+        done_bool = done > 0.5
         final_state = jax.tree.map(
-            lambda r, n: jnp.where(done, r, n),
+            lambda r, n: jnp.where(done_bool, r, n),
             reset_state, next_state,
         )
         next_obs = self.obs_extract(ts.observation)
         reset_obs = self.obs_extract(reset_ts.observation)
-        final_obs = jnp.where(done, reset_obs, next_obs)
+        final_obs = jnp.where(done_bool, reset_obs, next_obs)
         return (
             final_obs,
             final_state,
             ts.reward,
-            done,
-            {},
+            done_bool,
+            info,
         )
 
     def step_env(
@@ -119,12 +133,18 @@ class JumanjiEnv(Generic[ObsT, StateT]):
         physical-continuation state in replay (load-bearing for the
         truncation-aware Bellman target — bootstraps against
         `v(s_pre_reset)` at truncations, not
-        `v(s_reset_initial)`)."""
+        `v(s_reset_initial)`).
+
+        `info['truncated']` is set from jumanji's
+        `(step_type, discount)` pair via `_classify_done` —
+        truncation (LAST + nonzero discount) propagates to the
+        Bellman target so it continues bootstrap rather than zeroing."""
         del rng, params
         next_state, ts = self.inner.step(state, action.astype(jnp.int32))
-        done = ts.step_type == 2
+        done, truncated = self._classify_done(ts.step_type, ts.discount)
+        info: dict[str, object] = {'truncated': truncated}
         next_obs = self.obs_extract(ts.observation)
-        return next_obs, next_state, ts.reward, done, {}
+        return next_obs, next_state, ts.reward, done > 0.5, info
 
     def action_space(
         self, params: gymnax_env.EnvParams,
