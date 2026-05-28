@@ -8,3 +8,6 @@ from corroborate.analyses.diagnostic.tautology_audit import (  # noqa: F401
 from corroborate.analyses.diagnostic.verdict_distribution import (  # noqa: F401
     verdict_distribution_per_env as _verdict_dist,  # pyright: ignore[reportUnusedImport]
 )
+from corroborate.analyses.diagnostic.mediator_leak_adjudication import (  # noqa: F401
+    mediator_leak_adjudication as _leak_adj,  # pyright: ignore[reportUnusedImport]
+)
