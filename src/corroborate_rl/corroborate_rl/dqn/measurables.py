@@ -3081,6 +3081,115 @@ def mean_per_state_cumulative_bias_late(
     return float(weighted.sum() / total_weight)
 
 
+@measurable(reads=(
+    'predicted_q_per_step', 'mc_return_from_step', 'active_per_step',
+))
+def relative_bias_redq_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """REDQ-style normalized bias (Chen et al. 2021, "Randomized
+    Ensembled Double Q-Learning") per burst:
+
+      rel_bias[b] = E_{s,a}[Q(s,a) − V^π(s,a)] / |E_{s,a}[V^π(s,a)]|
+
+    where the expectation is over all active eval (s,a) pairs in
+    burst b. Numerator is the active-weighted mean of
+    `predicted_q_per_step − mc_return_from_step`; denominator is
+    the absolute active-weighted mean of `mc_return_from_step`
+    (the on-policy value-function estimate from the trajectory
+    that follows).
+
+    REDQ uses |E[V^π]| (not |E[Q]|) so the metric is positive when
+    Q over-estimates V^π, negative when under. The absolute-value
+    in the denominator preserves the sign of the numerator (the
+    bias direction). On envs where MC ≈ 0 (Snake / FR success-rate
+    sparse-reward), the denominator is near-zero and the ratio
+    blows up — gated with `eps = 1e-6` returning NaN.
+
+    Returns shape `(n_bursts,)` with NaN at bursts where:
+      - no active steps,
+      - |E[mc]| < eps (denominator near-zero — ratio undefined).
+
+    Pair with `mean_per_state_cumulative_bias_per_burst` (which
+    returns RAW bias in env-units): the RAW version is what gets
+    reduced into the chain edge; the REDQ version is the
+    scale-invariant cross-env-aggregatable form. Note both
+    measurables READ `mc_return_from_step` directly — they remain
+    tautological with `eval_*_raw_mean` and `mc_return__mean_axis_-1`
+    outcomes that derive from the same `mc_return` trace. Use only
+    in mediator-audit / sensitivity contexts, not as a primary
+    LINK predictor."""
+    q = record.get('predicted_q_per_step')
+    mc = record.get('mc_return_from_step')
+    active = record.get('active_per_step')
+    if q is None or mc is None or active is None:
+        return np.zeros((0,), dtype=np.float64)
+    q_arr = np.asarray(q, dtype=np.float64)
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    a_arr = np.asarray(active, dtype=np.float64)
+    if q_arr.ndim < 3 or q_arr.size == 0:
+        return np.zeros((0,), dtype=np.float64)
+    bias = q_arr - mc_arr
+    num = (bias * a_arr).sum(axis=(1, 2))
+    mc_mean = (mc_arr * a_arr).sum(axis=(1, 2))
+    den = a_arr.sum(axis=(1, 2))
+    eps = 1e-6
+    with np.errstate(divide='ignore', invalid='ignore'):
+        active_ok = den > 0
+        denom_ok = np.abs(np.where(active_ok, mc_mean / np.where(den > 0, den, 1.0), np.nan)) > eps
+        numer = np.where(active_ok, num / np.where(den > 0, den, 1.0), np.nan)
+        denom = np.where(active_ok, mc_mean / np.where(den > 0, den, 1.0), np.nan)
+        out = np.where(denom_ok, numer / np.abs(denom), np.nan)
+    return out.astype(np.float64)
+
+
+@measurable(reads=(
+    'predicted_q_per_step', 'mc_return_from_step', 'active_per_step',
+))
+def relative_bias_redq_late(record: Mapping[str, object]) -> float:
+    """Late-half-of-bursts scalar version of REDQ-style normalized
+    bias. Sibling of `mean_per_state_cumulative_bias_late` — RAW
+    bias / |E[mc]| over the late half of training bursts.
+
+    Returns NaN when:
+      - n_bursts < 2,
+      - total active weight in late half is < 1,
+      - |E_{late}[mc]| < eps (denominator near-zero).
+
+    The scale invariance lets cross-env aggregation compare
+    Acrobot (E[mc] ≈ −80) vs Asterix (E[mc] ≈ 20) without scaling
+    artifacts — useful for the dual-metric LINK sensitivity panel
+    where the raw `mean_per_state_cumulative_bias_late` mediator
+    has env-specific magnitude. Tautology-audit caveat applies:
+    reads `mc_return_from_step` directly, so this is a
+    diagnostic-only mediator, not a primary LINK predictor."""
+    q = record.get('predicted_q_per_step')
+    mc = record.get('mc_return_from_step')
+    active = record.get('active_per_step')
+    if q is None or mc is None or active is None:
+        return float('nan')
+    q_arr = np.asarray(q, dtype=np.float64)
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    a_arr = np.asarray(active, dtype=np.float64)
+    if q_arr.ndim < 1 or q_arr.size == 0:
+        return float('nan')
+    n_b = q_arr.shape[0]
+    if n_b < 2:
+        return float('nan')
+    late_q = q_arr[n_b // 2:]
+    late_mc = mc_arr[n_b // 2:]
+    late_active = a_arr[n_b // 2:]
+    bias = late_q - late_mc
+    total_weight = late_active.sum()
+    if total_weight < 1.0:
+        return float('nan')
+    num = (bias * late_active).sum() / total_weight
+    den = (late_mc * late_active).sum() / total_weight
+    if abs(den) < 1e-6:
+        return float('nan')
+    return float(num / abs(den))
+
+
 @measurable(reads=('online_argmax_per_step',))
 def argmax_persistence_late(record: Mapping[str, object]) -> float:
     """Fraction of consecutive late-window step-pairs where the
@@ -5447,6 +5556,15 @@ def dqn_default_measurables() -> tuple[
         # Distinct from `jensen_gap` which only probes start states
         # (chain-deepest endpoint).
         mean_per_state_cumulative_bias_late,
+        # REDQ-style normalized bias (Chen et al. 2021): bias divided
+        # by |E[V^π]| over the late half of training. Scale-invariant
+        # form for cross-env aggregation (Acrobot's −80-scale vs
+        # Asterix's 20-scale) — pair with the RAW
+        # `mean_per_state_cumulative_bias_late` to disentangle
+        # "bigger absolute bias" from "bigger relative bias".
+        # Reads `mc_return_from_step` directly → tautology-audit
+        # caveat applies; diagnostic-only mediator.
+        relative_bias_redq_late,
         # Algorithmic activation rate: 1 − greedy_match_late = rate at
         # which DDQN's argmax/max correction fires per step on this
         # cell's trajectory. Per-cell scalar that's *not*
