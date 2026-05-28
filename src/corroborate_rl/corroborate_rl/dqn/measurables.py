@@ -3082,6 +3082,44 @@ def mean_per_state_cumulative_bias_late(
 
 
 @measurable(reads=(
+    'mc_return_from_step', 'active_per_step',
+))
+def mean_mc_per_state_per_burst(
+    record: Mapping[str, object],
+) -> npt.NDArray[np.float64]:
+    """Per-burst active-weighted mean of `mc_return_from_step` over
+    all visited (s, a) pairs.
+
+    Numerically equal to REDQ's `E_{s,a∼π}[Q^π(s,a)]` denominator
+    pre-|·| — the active-weighted MC mean across all eval-trajectory
+    states. The sibling-pair to `mean_per_state_cumulative_bias_per_burst`
+    along the bias = Q − MC decomposition:
+
+        bias_per_burst = q_per_state_per_burst − mc_per_state_per_burst
+
+    Used as a conditioning variable to test whether the cumulative
+    bias mediator's d-separation power survives when MC is also in
+    the conditioning set — i.e., whether bias mediates the arm→
+    outcome edge beyond what MC alone explains. Linear-conditioning
+    equivalent to residualizing bias against MC; under multi-Z
+    partial-Spearman both reduce to projecting out MC's linear
+    component. Tautology-audit caveat: reads `mc_return_from_step`
+    directly → diagnostic-use only."""
+    mc = record.get('mc_return_from_step')
+    active = record.get('active_per_step')
+    if mc is None or active is None:
+        return np.zeros((0,), dtype=np.float64)
+    mc_arr = np.asarray(mc, dtype=np.float64)
+    a_arr = np.asarray(active, dtype=np.float64)
+    if mc_arr.ndim < 3 or mc_arr.size == 0:
+        return np.zeros((0,), dtype=np.float64)
+    num = (mc_arr * a_arr).sum(axis=(1, 2))
+    den = a_arr.sum(axis=(1, 2))
+    out = np.where(den > 0, num / den, np.nan)
+    return out.astype(np.float64)
+
+
+@measurable(reads=(
     'predicted_q_per_step', 'mc_return_from_step', 'active_per_step',
 ))
 def normalized_bias_redq_per_burst(

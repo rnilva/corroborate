@@ -113,6 +113,13 @@ REQUIRED_MEASURABLES: tuple[str, ...] = (
     # mc_return-based outcomes, diagnostic-only.
     'normalized_bias_redq_late',
     'normalized_bias_redq_per_burst',
+    # MC-per-state mean per burst — sibling to
+    # `mean_per_state_cumulative_bias_per_burst` along the
+    # bias = Q − MC decomposition. Used as a conditioning variable
+    # in the dual-test (MC-leak adjudication) of whether the
+    # cumulative-bias mediator's d-separation power survives when
+    # MC is in the conditioning set. Also tautological by audit.
+    'mean_mc_per_state_per_burst',
     # Additional non-tautological per-burst candidates surfaced by the
     # registered-measurables audit. Q-side (Bellman-tautological wrt
     # the bias premise but axis-distinct): q_argmax_margin, q_action_std,
