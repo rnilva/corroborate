@@ -16,8 +16,8 @@ export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 SCRIPTS_DIR="papers/g099_mediation/scripts"
 
-for s in 01_mech_per_env 02_outcome_per_env 03_static_mediation \
-         04_aggregation_danger 05_dynamic_mediation; do
+for s in 01_mech_per_env 02_outcome_per_env 02b_learning_curves \
+         03_static_mediation 04_aggregation_danger 05_dynamic_mediation; do
     echo "─── ${s} ───"
     uv run python "${SCRIPTS_DIR}/${s}.py"
 done

@@ -104,7 +104,19 @@ agreement, P=0.58" as evidence of "DDQN works on average."
 Heterogeneity-honest verdict says: this n=12 panel has too much
 between-env variance to support a generalisable outcome claim.
 
-→ `figures/02_outcome_per_env.png` and `.csv`
+**Companion figure — per-env learning curves**
+(`figures/02b_learning_curves.png`): the per-burst trajectory
+behind the scalar table. Each panel shows V vs D median across
+seeds + IQR + 5/95 envelope, with mean per-seed peak (♦) and the
+late-30% window (gold band). Title shows P(D>V) under both
+metrics: **6 of 12 envs are metric-sensitive (↕)** — their
+peak-vs-late30 P(D>V) disagree on sign (SpaceInvaders, MetaMaze,
+MountainCar, Acrobot, FourRooms, Snake, CartPole). This is the
+methodological finding the framework's dual-metric reporting
+discipline (peak ∥ late30) is designed to surface.
+
+→ `figures/02_outcome_per_env.png` and `.csv` (per-env Cohen's d table)
+→ `figures/02b_learning_curves.png` (per-burst trajectory panel)
 
 ---
 
