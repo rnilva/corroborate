@@ -507,6 +507,25 @@ class RewardScaledEnv:
         )
         return next_obs, next_state, reward * self.scale, done, info
 
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, params)
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step_env(
+            rng, state, action, params,
+        )
+        return next_obs, next_state, reward * self.scale, done, info
+
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
 
@@ -542,6 +561,13 @@ class RewardClippedEnv:
     clip_min: float | None = None
     clip_max: float | None = None
 
+    def _apply_clip(self, reward: jax.Array) -> jax.Array:
+        if self.clip_min is not None:
+            reward = jnp.maximum(reward, self.clip_min)
+        if self.clip_max is not None:
+            reward = jnp.minimum(reward, self.clip_max)
+        return reward
+
     def reset(
         self, rng: jax.Array, params: EnvParams,
     ) -> tuple[jax.Array, EnvState]:
@@ -559,11 +585,26 @@ class RewardClippedEnv:
         next_obs, next_state, reward, done, info = self.inner.step(
             rng, state, action, params,
         )
-        if self.clip_min is not None:
-            reward = jnp.maximum(reward, self.clip_min)
-        if self.clip_max is not None:
-            reward = jnp.minimum(reward, self.clip_max)
-        return next_obs, next_state, reward, done, info
+        return next_obs, next_state, self._apply_clip(reward), done, info
+
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, params)
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step_env(
+            rng, state, action, params,
+        )
+        return next_obs, next_state, self._apply_clip(reward), done, info
 
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
@@ -607,6 +648,24 @@ class ActionDuplicatedEnv:
         inner_action = action % inner_space.n
         return self.inner.step(rng, state, inner_action, params)
 
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, params)
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        inner_space = self.inner.action_space(params)
+        inner_action = action % inner_space.n
+        return self.inner.step_env(rng, state, inner_action, params)
+
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
 
@@ -628,6 +687,14 @@ class ActionDiscretizedEnv:
     inner: Env
     n_bins: int
 
+    def _to_continuous(self, action: jax.Array, params: EnvParams) -> jax.Array:
+        inner_space = self.inner.action_space(params)
+        low = jnp.asarray(inner_space.low, dtype=jnp.float32)
+        high = jnp.asarray(inner_space.high, dtype=jnp.float32)
+        denom = jnp.float32(max(self.n_bins - 1, 1))
+        t = action.astype(jnp.float32) / denom
+        return low + (high - low) * t
+
     def reset(
         self, rng: jax.Array, params: EnvParams,
     ) -> tuple[jax.Array, EnvState]:
@@ -642,13 +709,27 @@ class ActionDiscretizedEnv:
     ) -> tuple[
         jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
     ]:
-        inner_space = self.inner.action_space(params)
-        low = jnp.asarray(inner_space.low, dtype=jnp.float32)
-        high = jnp.asarray(inner_space.high, dtype=jnp.float32)
-        denom = jnp.float32(max(self.n_bins - 1, 1))
-        t = action.astype(jnp.float32) / denom
-        continuous = low + (high - low) * t
-        return self.inner.step(rng, state, continuous, params)
+        return self.inner.step(
+            rng, state, self._to_continuous(action, params), params,
+        )
+
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, params)
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        return self.inner.step_env(
+            rng, state, self._to_continuous(action, params), params,
+        )
 
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
@@ -669,6 +750,19 @@ class RewardSparsifiedEnv:
     terminal_bonus: float
     success_threshold: float
 
+    def _sparsify_reward(
+        self, reward: jax.Array, done: jax.Array,
+    ) -> jax.Array:
+        # Per-step (not done) → 0.
+        # done & reward ≥ success_threshold (success) → terminal_bonus.
+        # done & reward < success_threshold (timeout) → 0.
+        success = done & (reward >= self.success_threshold)
+        return jnp.where(
+            success,
+            jnp.full_like(reward, self.terminal_bonus),
+            jnp.zeros_like(reward),
+        )
+
     def reset(
         self, rng: jax.Array, params: EnvParams,
     ) -> tuple[jax.Array, EnvState]:
@@ -686,16 +780,32 @@ class RewardSparsifiedEnv:
         next_obs, next_state, reward, done, info = self.inner.step(
             rng, state, action, params,
         )
-        # Per-step (not done) → 0.
-        # done & reward ≥ success_threshold (success) → terminal_bonus.
-        # done & reward < success_threshold (timeout) → 0.
-        success = done & (reward >= self.success_threshold)
-        new_reward = jnp.where(
-            success,
-            jnp.full_like(reward, self.terminal_bonus),
-            jnp.zeros_like(reward),
+        return (
+            next_obs, next_state,
+            self._sparsify_reward(reward, done), done, info,
         )
-        return next_obs, next_state, new_reward, done, info
+
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, params)
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step_env(
+            rng, state, action, params,
+        )
+        return (
+            next_obs, next_state,
+            self._sparsify_reward(reward, done), done, info,
+        )
 
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
@@ -715,6 +825,17 @@ class ActionNoisedEnv:
     inner: Env
     prob: float
 
+    def _effective_action(
+        self, rng: jax.Array, action: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, jax.Array]:
+        """Splits rng into (action_select, downstream_step_key) and
+        returns (effective_action, step_key)."""
+        key_random, key_action, key_step = jax.random.split(rng, 3)
+        choose_random = jax.random.uniform(key_random, ()) < self.prob
+        random_action = self.inner.action_space(params).sample(key_action)
+        effective_action = jax.lax.select(choose_random, random_action, action)
+        return effective_action, key_step
+
     def reset(
         self, rng: jax.Array, params: EnvParams,
     ) -> tuple[jax.Array, EnvState]:
@@ -729,11 +850,25 @@ class ActionNoisedEnv:
     ) -> tuple[
         jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
     ]:
-        key_random, key_action, key_step = jax.random.split(rng, 3)
-        choose_random = jax.random.uniform(key_random, ()) < self.prob
-        random_action = self.inner.action_space(params).sample(key_action)
-        effective_action = jax.lax.select(choose_random, random_action, action)
+        effective_action, key_step = self._effective_action(rng, action, params)
         return self.inner.step(key_step, state, effective_action, params)
+
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, params)
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        effective_action, key_step = self._effective_action(rng, action, params)
+        return self.inner.step_env(key_step, state, effective_action, params)
 
     def observation_space(self, params: EnvParams) -> Box:
         return self.inner.observation_space(params)
@@ -768,6 +903,25 @@ class RewardDensifiedEnv:
         jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
     ]:
         next_obs, next_state, reward, done, info = self.inner.step(
+            rng, state, action, params,
+        )
+        return next_obs, next_state, reward + self.per_step, done, info
+
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, params)
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step_env(
             rng, state, action, params,
         )
         return next_obs, next_state, reward + self.per_step, done, info
@@ -815,6 +969,23 @@ class PotentialShapedEnv:
             f"known: ['fr_manhattan_to_goal']",
         )
 
+    def _apply_shaping(
+        self,
+        state: EnvState,
+        next_state: EnvState,
+        reward: jax.Array,
+        done: jax.Array,
+    ) -> jax.Array:
+        phi_curr = self._phi(state)
+        phi_next = self._phi(next_state)
+        # Absorbing-state convention: Φ(terminal) = 0 in the
+        # shaping. At done, shaped contribution is just −Φ(s).
+        # Done-aware: jnp.where to keep this jit-compatible.
+        gamma_phi_next = jnp.where(
+            done, jnp.float32(0.0), self.gamma * phi_next,
+        )
+        return reward + gamma_phi_next - phi_curr
+
     def step(
         self,
         rng: jax.Array,
@@ -827,15 +998,27 @@ class PotentialShapedEnv:
         next_obs, next_state, reward, done, info = self.inner.step(
             rng, state, action, params,
         )
-        phi_curr = self._phi(state)
-        phi_next = self._phi(next_state)
-        # Absorbing-state convention: Φ(terminal) = 0 in the
-        # shaping. At done, shaped contribution is just −Φ(s).
-        # Done-aware: jnp.where to keep this jit-compatible.
-        gamma_phi_next = jnp.where(
-            done, jnp.float32(0.0), self.gamma * phi_next,
+        shaped = self._apply_shaping(state, next_state, reward, done)
+        return next_obs, next_state, shaped, done, info
+
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, params)
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step_env(
+            rng, state, action, params,
         )
-        shaped = reward + gamma_phi_next - phi_curr
+        shaped = self._apply_shaping(state, next_state, reward, done)
         return next_obs, next_state, shaped, done, info
 
     def observation_space(self, params: EnvParams) -> Box:
@@ -894,6 +1077,25 @@ class EpisodeLengthCappedEnv:
     ) -> tuple[jax.Array, EnvState]:
         return self.inner.reset(rng, self._cap(params))
 
+    def _classify_truncated(
+        self, state: EnvState, done: jax.Array,
+    ) -> jax.Array:
+        """`truncated = done AND cap_reached`: the cap fired at or
+        past the limit AND the episode ended this step. The
+        pre-step time is read directly off `state.time` — the
+        inner env increments `.time` only inside `step_env`, so
+        the value we see here is the COUNT of steps taken BEFORE
+        this action (pre+1 is the logical step index of the action
+        just taken). For envs without natural termination at this
+        step, the cap is the cause; rare edge case is inner env
+        terminating exactly at the cap (mis-classified — see
+        class docstring)."""
+        pre_step_time = state.time
+        step_index = pre_step_time + jnp.int32(1)
+        cap_reached = step_index >= jnp.int32(self.max_steps)
+        is_done = done.astype(jnp.bool_)
+        return jnp.logical_and(is_done, cap_reached).astype(jnp.float32)
+
     def step(
         self,
         rng: jax.Array,
@@ -903,30 +1105,48 @@ class EpisodeLengthCappedEnv:
     ) -> tuple[
         jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
     ]:
-        # Pre-step step counter. The inner env increments .time
-        # inside `step_env`; here we snapshot the pre-step value
-        # because gymnax's outer `step()` does auto-reset on done
-        # (post-step state.time goes back to 0). pre+1 is the
-        # logical step index of the action just taken.
-        pre_step_time = state.time
+        # Pre-step time read off `state.time`. `inner.step()`
+        # auto-resets so the post-step `next_state.time` would be 0;
+        # we read off the PRE-step state which is unaffected.
         next_obs, next_state, reward, done, info = self.inner.step(
             rng, state, action, self._cap(params),
         )
-        step_index = pre_step_time + jnp.int32(1)
-        cap_reached = step_index >= jnp.int32(self.max_steps)
-        # `truncated = done AND cap_reached`: cap fired at or past
-        # the limit AND the episode ended this step. For envs
-        # without natural termination at this step, the cap is the
-        # cause; rare edge case is inner env terminating exactly
-        # at the cap (mis-classified — see class docstring).
-        is_done = done.astype(jnp.bool_)
-        truncated = jnp.logical_and(is_done, cap_reached).astype(jnp.float32)
+        truncated = self._classify_truncated(state, done)
         # Build new info dict carrying truncated alongside whatever
         # the inner env emitted. Note: under jax.lax.scan the info
         # dict's keys are STATIC across iterations — adding our key
         # here is safe because this wrapper either is or isn't in
         # the wrapper chain for a given cell; the structure is set
         # at JIT trace time.
+        out_info: dict[str, object] = {**info, 'truncated': truncated}
+        return next_obs, next_state, reward, done, out_info
+
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, self._cap(params))
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        # No-auto-reset path. The inner `step_env` returns the
+        # pre-reset state, so we read the pre-step `state.time` and
+        # classify truncation the same way as `step`. Bootstrap
+        # uses `info['truncated']` to mask `(1 − terminated)` at
+        # the time-limit boundary — store the physical
+        # continuation `next_obs` (no `lax.select` reset swap)
+        # so the Bellman target reads `v(s_pre_reset)`, not
+        # `v(s_reset_initial)`.
+        next_obs, next_state, reward, done, info = self.inner.step_env(
+            rng, state, action, self._cap(params),
+        )
+        truncated = self._classify_truncated(state, done)
         out_info: dict[str, object] = {**info, 'truncated': truncated}
         return next_obs, next_state, reward, done, out_info
 
@@ -968,6 +1188,26 @@ class UniformRewardEnv:
             rng, state, action, params,
         )
         # Inner reward discarded; constant emitted at every step.
+        constant = jnp.full_like(reward, self.value)
+        return next_obs, next_state, constant, done, info
+
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]:
+        return self.inner.reset_env(rng, params)
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array, EnvState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        next_obs, next_state, reward, done, info = self.inner.step_env(
+            rng, state, action, params,
+        )
         constant = jnp.full_like(reward, self.value)
         return next_obs, next_state, constant, done, info
 

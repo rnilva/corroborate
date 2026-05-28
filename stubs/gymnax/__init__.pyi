@@ -114,6 +114,20 @@ class Env(Protocol):
     `Env` is at `gymnax.environments.environment.Environment`, not
     at `gymnax.Env`).
 
+    Two step / reset surfaces are required:
+
+    - `step` / `reset` — gymnax's auto-resetting public API.
+      `step` does `obs = lax.select(done, obs_reset, obs_st)`
+      under the hood; eval / single-shot consumers want this.
+    - `step_env` / `reset_env` — the no-auto-reset primitives.
+      `step_env` returns the pre-reset `(next_obs_st, next_state_st)`
+      so the rollout-phase can store the PHYSICAL continuation
+      state in replay (load-bearing for the Sutton-Barto §6.6 /
+      Gymnasium-API truncation-aware bootstrap: the Bellman target
+      bootstraps against `v(s_pre_reset)` at truncations, not
+      `v(s_reset_initial)`). Every substrate wrapper exposes both
+      surfaces; gymnax's runtime `Environment` ships both natively.
+
     `observation_space` returns `Box` and `action_space` returns
     `Discrete` for every env the substrate currently runs (verified
     by walking `env_catalogue`'s registrations). Tighter than the
@@ -134,6 +148,24 @@ class Env(Protocol):
     ) -> tuple[
         jax.Array,           # next_obs
         EnvState,            # next_state
+        jax.Array,           # reward
+        jax.Array,           # done
+        dict[str, object],   # info
+    ]: ...
+
+    def reset_env(
+        self, rng: jax.Array, params: EnvParams,
+    ) -> tuple[jax.Array, EnvState]: ...
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: EnvState,
+        action: jax.Array,
+        params: EnvParams,
+    ) -> tuple[
+        jax.Array,           # next_obs_pre_reset
+        EnvState,            # next_state_pre_reset
         jax.Array,           # reward
         jax.Array,           # done
         dict[str, object],   # info

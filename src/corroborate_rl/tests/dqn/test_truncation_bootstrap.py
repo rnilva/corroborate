@@ -17,11 +17,19 @@ sampling-distribution slack.
 
 Replay round-trip and n-step accumulation are covered as well —
 the truncation column has to survive the buffer write/sample
-cycle for end-to-end correctness."""
+cycle for end-to-end correctness.
+
+The Pardo 2018 fix (rollout uses `step_env` + manual reset to
+capture pre-reset `next_obs` in the replay) is exercised by the
+`test_rollout_stores_pre_reset_next_obs_on_truncation` test
+against a synthetic step-counter env."""
 from __future__ import annotations
+
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+from gymnax import EnvParams
 
 from corroborate_rl.dqn.claims.bootstrap import (
     bootstrap as bootstrap_claim,
@@ -242,3 +250,267 @@ def test_n_step_return_propagates_truncated_within_window() -> None:
         f'n-step accumulated reward off: expected 2.8, '
         f'got {float(emitted_2.reward)}'
     )
+
+
+# ============ Pardo 2018 — pre-reset obs in replay (#1) ============
+
+class _StepCounterEnvState(NamedTuple):
+    """Synthetic env state carrying a single int32 step counter.
+    `time` field satisfies gymnax's base `EnvState` interface so
+    the rollout phase can read it without special-casing."""
+    time: jax.Array  # () int32
+
+
+def _make_step_counter_env(cap: int = 5) -> object:
+    """Build a tiny synthetic env that auto-resets at step `cap`.
+    The obs IS the step counter: `obs[0] = state.time` (float).
+
+    Pre-reset path (`step_env`):
+      `obs[0] = state.time + 1` (the count of steps taken so far).
+      `done = (state.time + 1 >= cap)`.
+
+    Auto-reset path (`step`):
+      Wraps `step_env` then `lax.select`s in `reset_env`'s obs when
+      done.
+
+    The env's reset returns `obs=[0.0]`, distinguishable from any
+    `state.time + 1 >= 1` pre-reset obs — the test's discriminator
+    for "replay stored pre-reset" vs "replay stored auto-reset"."""
+    cap_local = cap
+
+    class StepCounterEnv:
+        def reset(
+            self, rng: jax.Array, params: EnvParams,
+        ) -> tuple[jax.Array, _StepCounterEnvState]:
+            del rng, params
+            return jnp.float32([0.0]), _StepCounterEnvState(
+                time=jnp.int32(0),
+            )
+
+        def reset_env(
+            self, rng: jax.Array, params: EnvParams,
+        ) -> tuple[jax.Array, _StepCounterEnvState]:
+            return self.reset(rng, params)
+
+        def step_env(
+            self,
+            rng: jax.Array,
+            state: _StepCounterEnvState,
+            action: jax.Array,
+            params: EnvParams,
+        ) -> tuple[
+            jax.Array,
+            _StepCounterEnvState,
+            jax.Array,
+            jax.Array,
+            dict[str, object],
+        ]:
+            del rng, action, params
+            new_time = state.time + jnp.int32(1)
+            next_state = _StepCounterEnvState(time=new_time)
+            next_obs = new_time.astype(jnp.float32).reshape((1,))
+            done = (new_time >= jnp.int32(cap_local)).astype(jnp.bool_)
+            # Mark the cap-triggered done as truncated (artificial
+            # time-limit cutoff). Natural terminations are
+            # truncated=0 by construction here.
+            truncated = done.astype(jnp.float32)
+            info: dict[str, object] = {'truncated': truncated}
+            return next_obs, next_state, jnp.float32(1.0), done, info
+
+        def step(
+            self,
+            rng: jax.Array,
+            state: _StepCounterEnvState,
+            action: jax.Array,
+            params: EnvParams,
+        ) -> tuple[
+            jax.Array,
+            _StepCounterEnvState,
+            jax.Array,
+            jax.Array,
+            dict[str, object],
+        ]:
+            next_obs_pre, next_state_pre, reward, done, info = self.step_env(
+                rng, state, action, params,
+            )
+            reset_obs, reset_state = self.reset_env(rng, params)
+            final_state = jax.tree.map(
+                lambda r, n: jnp.where(done, r, n), reset_state, next_state_pre,
+            )
+            final_obs = jnp.where(done, reset_obs, next_obs_pre)
+            return final_obs, final_state, reward, done, info
+
+        def observation_space(self, params: EnvParams):  # type: ignore[no-untyped-def]
+            del params
+            from gymnax.environments import spaces
+            return spaces.Box(
+                low=0.0, high=float(cap_local), shape=(1,), dtype=jnp.float32,
+            )
+
+        def action_space(self, params: EnvParams):  # type: ignore[no-untyped-def]
+            del params
+            from gymnax.environments import spaces
+            return spaces.Discrete(num_categories=2)
+
+    return StepCounterEnv()
+
+
+def test_rollout_stores_pre_reset_next_obs_on_truncation() -> None:
+    """Pardo 2018 fix: when the env auto-resets on cap (truncation),
+    the replay's `next_obs` must be the PRE-RESET continuation
+    state, not the post-reset initial obs. The Bellman target then
+    bootstraps against `v(s_pre_reset)` — without this, the agent
+    learns "the world resets to obs[0] at the cap" instead of the
+    physical continuation.
+
+    Closed-form test: a synthetic step-counter env where
+    `obs[0] = state.time`. At cap=5, the truncated transition's
+    `state.obs = [4.0]`, `next_obs_pre_reset = [5.0]`,
+    `next_obs_post_reset = [0.0]`. The replay's stored next_obs
+    must be `[5.0]`, NOT `[0.0]`."""
+    from corroborate_rl.dqn.dqn import init_state
+    from corroborate_rl.dqn.phases import rollout_phase
+    from corroborate_rl.dqn.claims.action_select import (
+        epsilon_greedy, linear_epsilon,
+    )
+    from corroborate_rl.dqn.claims.q_network import mlp_q, MLP
+    from corroborate_rl.dqn.claims.optimizer import adam, warmed_update
+    from functools import partial
+
+    env = _make_step_counter_env(cap=5)
+    rng = jax.random.PRNGKey(7)
+    obs_shape = (1,)
+    n_actions = 2
+
+    arch = MLP(hidden=(8,))
+    arch.init(rng, obs_shape, n_actions)
+
+    # State machine — random policy is fine (the env ignores the
+    # action). Replay capacity 16 / batch 1; we only need to
+    # observe the cap step.
+    replay = Replay(capacity=16, batch_size=1)
+    init = init_state(
+        env=env,  # type: ignore[arg-type]  # synthetic struct conforms to Env Protocol
+        env_params=EnvParams(),  # type: ignore[call-arg]  # gymnax base EnvParams; default field is enough
+        obs_shape=obs_shape, n_actions=n_actions,
+        rng_key=rng, optimizer=warmed_update(inner=partial(adam), warmup_steps=10),
+        replay=replay,
+    )
+
+    # Step 5 times — episode caps at step 5 (4→5 transition).
+    state = init
+    step_fn = partial(
+        rollout_phase,
+        env=env, env_params=EnvParams(),  # type: ignore[arg-type,call-arg]
+        n_actions=n_actions, replay=replay,
+        q_network=mlp_q,
+        action_select=partial(
+            epsilon_greedy,
+            # ε=0 throughout — deterministic argmax. Action doesn't
+            # affect the step-counter env's dynamics anyway.
+            schedule=partial(
+                linear_epsilon, eps_init=0.0, eps_final=0.0,
+                anneal_steps=1,
+            ),
+        ),
+        state_hash=lambda obs: jnp.int32(0),  # type: ignore[arg-type,return-value]
+        n_step=1, gamma=0.99,
+    )
+    for _ in range(5):
+        state, _ = step_fn(state)
+
+    # After 5 steps, the buffer has 5 transitions. The cap-step
+    # transition has `obs=[4.0]` and pre-reset `next_obs=[5.0]`.
+    buf_obs = state.replay.obs  # (capacity, 1)
+    buf_next_obs = state.replay.next_obs  # (capacity, 1)
+    buf_done = state.replay.done  # (capacity,)
+    buf_truncated = state.replay.truncated  # (capacity,)
+
+    # Slot 4 (the 5th transition) is the cap-step.
+    cap_obs = float(buf_obs[4, 0])
+    cap_next_obs = float(buf_next_obs[4, 0])
+    cap_done = float(buf_done[4])
+    cap_truncated = float(buf_truncated[4])
+
+    # The 5th action was taken from `state.time=4` → obs=[4.0].
+    assert cap_obs == 4.0, f'cap-step obs expected 4.0, got {cap_obs}'
+    # Cap fired: done=1, truncated=1.
+    assert cap_done == 1.0
+    assert cap_truncated == 1.0, (
+        f'cap-step truncated expected 1.0, got {cap_truncated}'
+    )
+    # THE LOAD-BEARING ASSERTION: pre-reset next_obs is [5.0], not [0.0].
+    # If the bug were still present (env.step used instead of
+    # env.step_env), the next_obs would be the reset initial [0.0]
+    # and the bootstrap target would mask against v(s=0) instead of
+    # v(s=5) — a different MDP than the physical continuation.
+    assert cap_next_obs == 5.0, (
+        f'Pardo 2018 bug: replay stored post-reset next_obs={cap_next_obs} '
+        f'instead of pre-reset value 5.0. The Bellman target would now '
+        f'bootstrap against v(s_reset_initial=0) — teaching the agent the '
+        f'wrong MDP.'
+    )
+
+
+def test_rollout_state_obs_resets_after_truncation() -> None:
+    """Companion to `test_rollout_stores_pre_reset_next_obs_on_truncation`:
+    the rollout's `state.obs` (for the NEXT step) MUST be the
+    reset initial obs after a `done`. Replay sees the pre-reset
+    `next_obs`; the state's next iteration starts fresh. Without
+    this, training would run on a permanently-terminal state."""
+    from corroborate_rl.dqn.dqn import init_state
+    from corroborate_rl.dqn.phases import rollout_phase
+    from corroborate_rl.dqn.claims.action_select import (
+        epsilon_greedy, linear_epsilon,
+    )
+    from corroborate_rl.dqn.claims.q_network import mlp_q, MLP
+    from corroborate_rl.dqn.claims.optimizer import adam, warmed_update
+    from functools import partial
+
+    env = _make_step_counter_env(cap=3)
+    rng = jax.random.PRNGKey(11)
+    obs_shape = (1,)
+    n_actions = 2
+
+    arch = MLP(hidden=(4,))
+    arch.init(rng, obs_shape, n_actions)
+
+    replay = Replay(capacity=8, batch_size=1)
+    init = init_state(
+        env=env,  # type: ignore[arg-type]
+        env_params=EnvParams(),  # type: ignore[call-arg]
+        obs_shape=obs_shape, n_actions=n_actions,
+        rng_key=rng, optimizer=warmed_update(inner=partial(adam), warmup_steps=2),
+        replay=replay,
+    )
+
+    step_fn = partial(
+        rollout_phase,
+        env=env, env_params=EnvParams(),  # type: ignore[arg-type,call-arg]
+        n_actions=n_actions, replay=replay,
+        q_network=mlp_q,
+        action_select=partial(
+            epsilon_greedy,
+            schedule=partial(
+                linear_epsilon, eps_init=0.0, eps_final=0.0,
+                anneal_steps=1,
+            ),
+        ),
+        state_hash=lambda obs: jnp.int32(0),  # type: ignore[arg-type,return-value]
+        n_step=1, gamma=0.99,
+    )
+    # Step through full episode + one step into fresh episode.
+    state = init
+    for _ in range(4):
+        state, _ = step_fn(state)
+    # After the cap (step 3 of 1st ep) the state.obs was reset to
+    # [0.0]; step 4 brought us to [1.0] in the 2nd episode.
+    next_obs_after_reset = float(state.obs[0])
+    assert next_obs_after_reset == 1.0, (
+        f'After truncation + 1 more step, state.obs expected [1.0] '
+        f'(reset to [0.0] then advanced to [1.0]); got {next_obs_after_reset}. '
+        f'state.obs did not reset on done — agent is still in the '
+        f'terminal state.'
+    )
+
+

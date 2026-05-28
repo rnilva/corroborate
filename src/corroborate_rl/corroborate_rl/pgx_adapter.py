@@ -65,6 +65,14 @@ class PgxEnv(Generic[StateT]):
         state = self.inner.init(rng)
         return self._cast_obs(state.observation), state
 
+    def reset_env(
+        self, rng: jax.Array, params: gymnax_env.EnvParams,
+    ) -> tuple[jax.Array, StateT]:
+        # Pgx's `init` is the no-auto-reset reset (there's no
+        # separate auto-resetting `reset`); the gymnax-side
+        # `reset_env` Protocol method matches `reset` here.
+        return self.reset(rng, params)
+
     def step(
         self,
         rng: jax.Array,
@@ -93,6 +101,28 @@ class PgxEnv(Generic[StateT]):
         # pgx's rewards field is a 1-element array (single-agent envs)
         reward = next_state.rewards.squeeze()
         return (final_obs, final_state, reward, done, {})
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: StateT,
+        action: jax.Array,
+        params: gymnax_env.EnvParams,
+    ) -> tuple[
+        jax.Array, StateT, jax.Array, jax.Array, dict[str, object],
+    ]:
+        """No-auto-reset step. Returns the pre-reset
+        `(next_obs, next_state)` so the rollout-phase stores the
+        physical-continuation state in replay (load-bearing for the
+        truncation-aware Bellman target — bootstraps against
+        `v(s_pre_reset)` at truncations, not
+        `v(s_reset_initial)`)."""
+        del params
+        next_state = self.inner.step(state, action.astype(jnp.int32), rng)
+        done = next_state.terminated | next_state.truncated
+        next_obs = self._cast_obs(next_state.observation)
+        reward = next_state.rewards.squeeze()
+        return next_obs, next_state, reward, done, {}
 
     def action_space(
         self, params: gymnax_env.EnvParams,

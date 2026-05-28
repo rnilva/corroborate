@@ -919,7 +919,12 @@ class LunarLanderEnv:
         )
         return init_obs, state
 
-    def step(
+    def reset_env(
+        self, rng: jax.Array, params: LunarLanderParams,
+    ) -> tuple[jax.Array, LunarLanderState]:
+        return self.reset(rng, params)
+
+    def step_env(
         self,
         rng: jax.Array,
         state: LunarLanderState,
@@ -928,7 +933,50 @@ class LunarLanderEnv:
     ) -> tuple[
         jax.Array, LunarLanderState, jax.Array, jax.Array, dict[str, object],
     ]:
+        """No-auto-reset step. Returns the pre-reset
+        `(next_obs, next_state, reward, done, info)` so the
+        rollout-phase stores the physical-continuation state in
+        replay (load-bearing for the truncation-aware Bellman
+        target). Truncation here is the `timeout` predicate:
+        `state.time >= max_steps_in_episode` — natural terminations
+        (crash / landed / OOB) have `truncated=0` per
+        Sutton-Barto §6.6."""
         del rng
+        next_obs, next_state, reward, done = self._step_physics(
+            state, action, params,
+        )
+        # Truncation: timeout in the absence of a natural terminal.
+        # `_is_terminal` predicates: crashed | landed | OOB | timeout.
+        natural_terminal_full = self._is_natural_terminal(next_state, next_obs)
+        timeout = next_state.time >= params.max_steps_in_episode
+        truncated = jnp.logical_and(
+            done, jnp.logical_and(
+                timeout, jnp.logical_not(natural_terminal_full),
+            ),
+        ).astype(jnp.float32)
+        info: dict[str, object] = {'truncated': truncated}
+        return next_obs, next_state, reward, done, info
+
+    def _is_natural_terminal(
+        self, state: LunarLanderState, obs: jax.Array,
+    ) -> jax.Array:
+        """`crashed | landed | out_of_bounds` — terminal predicates
+        OTHER than the timeout. Used by `step_env` to distinguish
+        truncation (timeout-only) from natural termination."""
+        out_of_bounds = jnp.abs(obs[0]) >= jnp.float32(1.0)
+        return state.crashed | state.landed | out_of_bounds
+
+    def _step_physics(
+        self,
+        state: LunarLanderState,
+        action: jax.Array,
+        params: LunarLanderParams,
+    ) -> tuple[jax.Array, LunarLanderState, jax.Array, jax.Array]:
+        """Pre-reset physics path. Identical to `step`'s body
+        through the final terminal predicate, MINUS the auto-reset
+        post-processing block. Returns `(next_obs, next_state,
+        reward, done)`. Internal: `step` and `step_env` both
+        delegate here."""
 
         act = action.astype(jnp.int32)
         is_main = act == 2
@@ -1201,15 +1249,30 @@ class LunarLanderEnv:
 
         done = self._is_terminal(new_state, params)
 
-        reset_obs, reset_state = self.reset(
-            jax.random.PRNGKey(0),
-            params,
-        )
+        return obs, new_state, reward, done
+
+    def step(
+        self,
+        rng: jax.Array,
+        state: LunarLanderState,
+        action: jax.Array,
+        params: LunarLanderParams,
+    ) -> tuple[
+        jax.Array, LunarLanderState, jax.Array, jax.Array, dict[str, object],
+    ]:
+        """Auto-resetting step (gymnax-API equivalent). Calls
+        `_step_physics` then `lax.select`s in a fresh-reset state /
+        obs when `done`. Substrate's eval-loop consumes this; the
+        rollout-phase reaches for `step_env` to capture the
+        pre-reset `next_obs` (load-bearing for the
+        truncation-aware Bellman target)."""
+        del rng
+        obs, new_state, reward, done = self._step_physics(state, action, params)
+        reset_obs, reset_state = self.reset(jax.random.PRNGKey(0), params)
         final_state = jax.tree.map(
             lambda r, n: jnp.where(done, r, n), reset_state, new_state,
         )
         final_obs = jnp.where(done, reset_obs, obs)
-
         return final_obs, final_state, reward, done, {}
 
     def _get_obs(self, state: LunarLanderState) -> jax.Array:

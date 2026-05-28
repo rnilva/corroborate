@@ -108,6 +108,22 @@ def rollout_phase(
     `n_step>1`, `replay.add` runs gated by the emit mask — adds
     are no-op when the window hasn't yet filled.
 
+    **Pardo 2018 / Sutton-Barto §6.6 truncation-aware path.** This
+    phase calls `env.step_env` (no-auto-reset primitive) instead of
+    `env.step` so the `next_obs` / `next_env_state` stored in the
+    replay are the PHYSICAL continuation of the trajectory — not
+    the fresh-episode initial state gymnax's auto-resetting `step`
+    would `lax.select` in on `done`. At a truncated transition
+    (artificial time-limit cutoff), the Bellman target then
+    bootstraps against `v(s_pre_reset)` rather than
+    `v(s_reset_initial)`, which is the load-bearing correctness
+    property — without it, the half-fixed refactor still teaches
+    the agent that "the world resets to obs[0]" at the cap.
+    After storing the transition, the rollout calls `env.reset_env`
+    when `done` to obtain a fresh `(obs, state)` for the next
+    iteration's `state.obs` / `state.env_state` — `jax.tree.map`
+    + `lax.select` interleaves the reset, JIT-compatible.
+
     Returns `(new_state, diagnostic_dict)` — the dict's keys
     (`reward, done, max_q, ep_return, action, state_hash_per_step,
     buf_size`) are the measurable signals bridges target. Reward
@@ -117,22 +133,32 @@ def rollout_phase(
     # Q-values at current obs — single observation, not batched.
     q_values = q_network(state.online_params, state.obs)
 
-    select_key, env_key, next_rng_key = jax.random.split(state.rng_key, 3)
+    select_key, env_key, reset_key, next_rng_key = jax.random.split(
+        state.rng_key, 4,
+    )
     action = action_select(q_values, select_key, state.step, n_actions)
 
-    # gymnax's env.step returns (next_obs, env_state, reward, done, info)
-    next_obs, next_env_state, reward, done, info = env.step(
+    # `step_env` returns the PRE-reset transition: `(next_obs,
+    # next_state)` are the physical continuation, never swapped
+    # to the reset initial. Substrate adapters / wrappers all
+    # expose this surface (see env_catalogue.py / pgx_adapter.py /
+    # jumanji_adapter.py / lunar_lander_jax.py); gymnax's runtime
+    # `Environment` ships it natively. The auto-reset that
+    # `env.step` performs is reproduced HERE, after we've captured
+    # the pre-reset obs for the replay.
+    next_obs_pre, next_env_state_pre, reward, done, info = env.step_env(
         env_key, state.env_state, action.astype(jnp.int32), env_params,
     )
     # state.obs is at native shape from init_state; reshape is a
     # no-op for well-shaped envs and a defensive guard.
-    next_obs = next_obs.reshape(state.obs.shape)
+    next_obs_pre = next_obs_pre.reshape(state.obs.shape)
 
     # Truncation (Sutton-Barto §6.6 / Gymnasium-API): artificial
     # time-limit cutoffs distinct from genuine termination. The
-    # `EpisodeLengthCappedEnv` wrapper publishes `info['truncated']`;
-    # envs without truncation default to 0.0. JAX-compatible:
-    # `info.get(...)` is evaluated at trace time, not under scan.
+    # `EpisodeLengthCappedEnv` wrapper / pgx adapter / jumanji
+    # adapter publish `info['truncated']`; envs without truncation
+    # default to 0.0. JAX-compatible: `info.get(...)` is evaluated
+    # at trace time, not under scan.
     truncated_obj = info.get('truncated')
     if isinstance(truncated_obj, jax.Array):
         truncated = truncated_obj.astype(jnp.float32)
@@ -141,7 +167,7 @@ def rollout_phase(
 
     raw_transition = Transition(
         obs=state.obs, action=action,
-        reward=reward, next_obs=next_obs, done=done,
+        reward=reward, next_obs=next_obs_pre, done=done,
         truncated=truncated,
     )
     new_pending, emitted, should_emit = n_step_return(
@@ -150,6 +176,21 @@ def rollout_phase(
         n_step=n_step, gamma=gamma,
     )
     new_replay = replay.add(state.replay, emitted, mask=should_emit)
+
+    # Manual auto-reset. `env.step_env` returned the PRE-reset
+    # `(next_obs, next_state)`; for the next rollout iteration we
+    # need a fresh episode when `done` fires. `env.reset_env`
+    # produces `(reset_obs, reset_state)`; `jax.tree.map` blends
+    # under `done`, mirroring gymnax base `Environment.step`'s
+    # behaviour but cleanly separated from the replay write path.
+    reset_obs, reset_env_state = env.reset_env(reset_key, env_params)
+    reset_obs = reset_obs.reshape(state.obs.shape)
+    done_bool = done.astype(jnp.bool_)
+    next_env_state = jax.tree.map(
+        lambda r, p: jnp.where(done_bool, r, p),
+        reset_env_state, next_env_state_pre,
+    )
+    next_obs = jnp.where(done_bool, reset_obs, next_obs_pre)
 
     # Episode return: accumulate this step's reward into the
     # running tally. The state's tally resets to 0 on done so the

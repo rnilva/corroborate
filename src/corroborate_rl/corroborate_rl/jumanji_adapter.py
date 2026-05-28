@@ -61,6 +61,14 @@ class JumanjiEnv(Generic[ObsT, StateT]):
         state, ts = self.inner.reset(rng)
         return self.obs_extract(ts.observation), state
 
+    def reset_env(
+        self, rng: jax.Array, params: gymnax_env.EnvParams,
+    ) -> tuple[jax.Array, StateT]:
+        # Jumanji's `reset` is the no-auto-reset reset (jumanji
+        # doesn't auto-reset elsewhere); the gymnax-side
+        # `reset_env` Protocol method matches `reset` here.
+        return self.reset(rng, params)
+
     def step(
         self,
         rng: jax.Array,
@@ -96,6 +104,27 @@ class JumanjiEnv(Generic[ObsT, StateT]):
             done,
             {},
         )
+
+    def step_env(
+        self,
+        rng: jax.Array,
+        state: StateT,
+        action: jax.Array,
+        params: gymnax_env.EnvParams,
+    ) -> tuple[
+        jax.Array, StateT, jax.Array, jax.Array, dict[str, object],
+    ]:
+        """No-auto-reset step. Returns the pre-reset
+        `(next_obs, next_state)` so the rollout-phase stores the
+        physical-continuation state in replay (load-bearing for the
+        truncation-aware Bellman target — bootstraps against
+        `v(s_pre_reset)` at truncations, not
+        `v(s_reset_initial)`)."""
+        del rng, params
+        next_state, ts = self.inner.step(state, action.astype(jnp.int32))
+        done = ts.step_type == 2
+        next_obs = self.obs_extract(ts.observation)
+        return next_obs, next_state, ts.reward, done, {}
 
     def action_space(
         self, params: gymnax_env.EnvParams,
