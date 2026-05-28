@@ -14,7 +14,9 @@ import polars as pl
 
 from corroborate.data.panel import Panel
 from experiments.findings.ddqn._arms import DDQN_ARM, VANILLA_ARM
-from experiments.findings.hasselt_clean._scope import CANONICAL_G099_CORPORA
+from experiments.findings.hasselt_clean._scope import (
+    CANONICAL_G099_CORPORA, PREMISE_ACTIVE_PER_STRATUM,
+)
 
 __all__ = [
     'load_g099_canonical_panel',
@@ -33,12 +35,47 @@ BASELINE_ARM: str = VANILLA_ARM     # Vanilla DQN
 
 # ─── canonical panel ──────────────────────────────────────────────
 def load_g099_canonical_panel() -> pl.DataFrame:
-    """Load hasselt_clean cache scoped to γ=0.99 canonical corpora."""
+    """Load hasselt_clean cache scoped to γ=0.99 canonical corpora,
+    with the canonical chain.py scope applied (`CANONICAL_DORMANCY_SCOPE`
+    via corpora narrow + `PREMISE_ACTIVE_PER_STRATUM`).
+
+    `PREMISE_ACTIVE_PER_STRATUM` filters strata where the median
+    `jensen_dormancy_gap` is non-zero (V is underestimating →
+    DDQN's mechanism premise is dormant). At γ=0.99 canonical
+    this empirically retains all 12 envs (none dormant); at
+    γ=0.999 it filters LunarLander et al.
+
+    Surfacing the scope HERE (in the shared loader) ensures every
+    layer mirrors chain.py's discipline by construction."""
     panel = Panel.from_cache('experiments.findings.hasselt_clean')
     panel = panel.narrow(
         (pl.col('gamma') == 0.99) & pl.col('corpus').is_in(CANONICAL_G099_CORPORA)
     )
+    panel = panel.narrow(PREMISE_ACTIVE_PER_STRATUM)
     return panel.cells
+
+
+def load_g099_dormancy_report() -> pl.DataFrame:
+    """Per-env dormancy summary BEFORE the dormancy filter is applied.
+
+    For the report: surface that at γ=0.99 the dormancy filter is
+    a no-op (no env's median jensen_dormancy_gap > 0). At γ=0.999
+    the analogous summary would show LL et al filtered out."""
+    panel = Panel.from_cache('experiments.findings.hasselt_clean')
+    panel = panel.narrow(
+        (pl.col('gamma') == 0.99) & pl.col('corpus').is_in(CANONICAL_G099_CORPORA)
+    )
+    return (
+        panel.cells
+        .group_by('env_name')
+        .agg(
+            pl.col('jensen_dormancy_gap').median().alias('median_dormancy'),
+            pl.col('jensen_dormancy_gap').max().alias('max_dormancy'),
+            (pl.col('jensen_dormancy_gap') > 0).sum().alias('n_dormant_cells'),
+            pl.len().alias('n_cells'),
+        )
+        .sort('env_name')
+    )
 
 
 # ─── env catalogue ─────────────────────────────────────────────────

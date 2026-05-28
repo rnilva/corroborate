@@ -14,4 +14,5 @@ LunarLander,46.2791,43.7872,-0.218,0.259,30,30
 
 # DL pool: d=-2.648 SE=0.533 τ²=3.162 I²=0.97
 # PI: [-6.784, +1.488]
-# Verdict: NO_EFFECT
+# DL Verdict: NO_EFFECT
+# Bridge cross_env_consistency_binomial: 11/12 envs in direction (of 12 total), p=0.0032

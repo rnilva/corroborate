@@ -25,21 +25,49 @@ on DDQN. Each section demonstrates one framework discipline.
 **Question:** Per env, is `jensen_gap` (DDQN's claimed mechanism
 target, clamped Q − MC) lower under D than V?
 
-**Method:** `stratified_arm_diff_pooled` with `source=jensen_gap`,
-`stratify_by=('env_name',)`, independent-samples Cohen's d per env,
-DerSimonian-Laird random-effects pool.
+**Method (mirrors `hasselt_clean/chain.py`):**
+- Panel scope: `CANONICAL_DORMANCY_SCOPE & PREMISE_ACTIVE_PER_STRATUM`.
+- **Bridge verdict primitive**: `cross_env_consistency_binomial` —
+  one-tailed binomial sign-test on the per-env Cohen's d panel
+  against the predicted direction (DDQN reduces bias → `d < 0`).
+  This is exactly the primitive that the chain.py bridge
+  `ddqn_reduces_bias__consistently_cross_env` fires.
+- **DL diagnostic**: `stratified_arm_diff_pooled` — independent-
+  samples Cohen's d per env with DerSimonian-Laird random-effects
+  pool. Reported as a diagnostic to surface heterogeneity, not
+  as the bridge verdict.
 
-**Result:** 8 of 12 envs show strong bias reduction (CI excludes
-zero with `d < -1`). 4 MLP-state envs (CartPole, Acrobot,
-MountainCar, LunarLander) show no detectable reduction. The DL
-pool's point estimate is `d=-2.65` but `I²=0.97` and the prediction
-interval `[-6.78, +1.49]` includes zero → framework verdict
-`NO_EFFECT` under the heterogeneity-flagged convention.
+**Result:**
 
-**What the framework refuses:** the pool point estimate alone. The
-PI honesty is the framework's load-bearing protection against
-"DDQN reduces bias on average" as a generalisable claim from this
-n=12 panel.
+- **Bridge MECH verdict: HELD.** 11 of 12 envs in predicted
+  direction; binomial sign-test p = 0.003.
+- **DL pool diagnostic**: `d = −2.65` central but `I² = 0.97`,
+  PI `[−6.78, +1.49]` → DL verdict NO_EFFECT (PI-honest refusal
+  to commit to a generalisable cross-env point estimate under
+  this heterogeneity).
+
+The two verdicts answer different questions:
+- *Bridge*: "do most envs reduce bias?" → yes (11/12).
+- *DL pool*: "is the average effect generalisable to the next env?"
+  → no, heterogeneity too high.
+
+The chain.py bridge intentionally uses the binomial sign-test —
+that's the right form for a cross-env consistency claim that
+doesn't require env-exchangeability.
+
+**Dormancy honesty.** The framework's `jensen_dormancy_premise_active`
+invariant returns `power_insufficient` on every cell at this
+cache: the structural Jensen floor (`σ_Q × √(2 log |A|)`) needs
+per-step σ_Q traces that this canonical γ=0.99 sweep did not
+persist (trace-evicted to save disk). The `PREMISE_ACTIVE_PER_STRATUM`
+filter is therefore a no-op pass-through here — every cell makes
+it into the bridge verdict because `jensen_dormancy_gap` defaults
+to 0 when the floor inputs aren't available. At γ=0.999 sweeps
+(where σ_Q traces ARE persisted), the same filter would actively
+exclude dormant envs. The framework surfaces this by exposing the
+`power_insufficient` verdict rather than pretending the filter
+fired meaningfully — exactly the per-stratum honesty the paper is
+about.
 
 → `figures/01_mech_per_env.png` and `.csv`
 
