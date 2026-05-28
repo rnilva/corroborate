@@ -166,7 +166,8 @@ The test cannot distinguish:
 - **(b) Q-via-state-visitation** — DDQN changes Q; Q changes
   policy; policy changes state visitation; state visitation
   changes outcome. Bias contains Q, so it predicts outcome via
-  this longer pathway.
+  this longer pathway. (Refuted below at Asterix at the
+  per-burst state-hash granularity.)
 - **(c) "Q is what DDQN modifies"** — DDQN is by construction a
   Q-side intervention, so any Q-side mediator (bias, q_argmax,
   Q-magnitude, …) will mediate by construction to the extent
@@ -186,20 +187,62 @@ The substantive paper-honest claim is therefore narrower than
 > non-Q channels (state visitation, exploration) is the next
 > falsification step.
 
-### Next falsification step
+### State-visitation as a parallel non-Q channel: refuted at Asterix
 
-Run the adjudication with state-visitation siblings:
-`state_hash_n_unique_per_burst`, `state_hash_entropy_per_burst`,
-`state_repeat_rate_window64_per_burst`. If conditioning on
-state-visitation ALSO d-separates the arm→outcome edge at
-Asterix γ=0.99, then non-Q channels are doing parallel work and
-the Q-channel isn't unique. If only Q-side mediators work and
-state-visitation doesn't, the Q-channel is genuinely special and
-bias is one of multiple admissible Q-summaries inside it.
+We ran the adjudication primitive in both directions across the
+three state-visitation candidates
+(`state_hash_n_unique_per_burst`, `state_hash_entropy_per_burst`,
+`state_repeat_rate_window64_per_burst`) on the 32 Asterix γ=0.99
+marg-edge bursts, with Bonferroni multiplicity = 3 per direction.
 
-The current primitive supports single-mediator + single-sibling.
-Multi-input siblings (needed for the proper Q-vs-non-Q contrast)
-are queued as the next development.
+  | direction (mediator \| sibling) | sib alone | joint | n_01 | n_10 | z | verdict |
+  | --- | ---: | ---: | ---: | ---: | ---: | --- |
+  | **bias \| state_n_unique** | 6% | 91% | 27 | 0 | +5.00 | GENUINE |
+  | **bias \| state_entropy**  | 6% | 94% | 29 | 1 | +4.93 | GENUINE |
+  | **bias \| state_repeat64** | 16% | 91% | 25 | 1 | +4.51 | GENUINE |
+  | state_n_unique \| bias | 91% | 91% | 0 | 0 | — | UPFG |
+  | state_entropy  \| bias | 91% | 94% | 2 | 1 | +0.00 | UPFG |
+  | state_repeat64 \| bias | 91% | 91% | 0 | 0 | — | UPFG |
+
+**State-visitation alone d-separates only 6-16%** of Asterix's
+marg-edge bursts — barely above the false-detection floor. **Bias
+added to state-visitation jumps d-separation to 91-94%** (27-29
+discordant pairs all favor bias, zero against). **State-visitation
+added to bias adds nothing** (n_01 ≤ 2 across all three siblings,
+all within paired-noise of zero).
+
+The "UNDERPOWERED_FOR_GENUINE" verdict in the reverse direction
+is a primitive convention (<5 discordant pairs); in this corpus
+it reflects a genuine null — getting 0 discordant pairs across 32
+marg-edge bursts and three independent state-visitation
+operationalizations is evidence of *absence of incremental
+signal*, not power shortage. (Power shortage would look like
+high marg-edge counts with low and balanced n_01, n_10 — which
+is what we observe.)
+
+**Caveat (b) is refuted at Asterix at this granularity.** The
+Q-via-state-visitation pathway is NOT carrying parallel work that
+bias misses. The non-Q channel operationalized as state-coverage
+/ state-entropy / state-repeat-rate is empirically subsumed by
+bias and adds zero incremental d-separation on the same bursts.
+
+Two limitations remain:
+
+- **Granularity.** State-hash here is per-environment-step;
+  exploration dynamics that operate at a different time scale or
+  on continuous state features (visitation density, novelty
+  signal) are not captured.
+- **(a) vs other Q-properties is still open.** Refuting (b)
+  narrows the Q-channel question but doesn't single out
+  bias-reduction as load-bearing inside the Q-channel. Other
+  Q-summaries (action-gap, magnitude, trajectory coherence) are
+  still candidates and only multi-input sibling adjudication
+  will sort them.
+
+See `figures/report_state_visitation_sibling_test.png` for the
+bar-chart visualization and
+`scripts/gen_state_visitation_sibling_test.py` for the
+reproduction script.
 
 ## Multiple Q-side summaries — bias subsumes q_argmax_margin
 
@@ -242,9 +285,10 @@ folk reading but non-trivial:
   mediation actually tests.
 - This is **not** "DDQN's bias-clip mechanism is confirmed."
   It is "the Q-channel is active and bias is one admissible
-  per-burst summary inside it." The Q-vs-non-Q channel
-  question, and the bias-vs-other-Q-property question, both
-  remain open.
+  per-burst summary inside it." The Q-vs-non-Q channel question
+  is refuted (state-visitation operationalizations do not carry
+  parallel signal at Asterix); the bias-vs-other-Q-property
+  question remains open.
 - **Other envs are underpowered, not refuted.** The data cannot
   distinguish a small mediation effect from zero at FourRooms /
   MetaMaze / SpaceInvaders / Freeway. The framework's
