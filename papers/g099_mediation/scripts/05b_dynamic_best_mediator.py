@@ -42,39 +42,46 @@ from _common import (
     env_label,
 )
 
-# Per-burst raw outcome — undiscounted MC return per burst. Use the
-# RAW variant rather than `_common.OUTCOME_PER_BURST_COL`
-# (`mc_return__mean_axis_-1`, γ-discounted) because the discounted
-# column is all-null in the current cache slice and undiscounted is
-# the right choice for cross-env mediation anyway (γ scaling at
-# γ=0.99 vs γ=0.999 is itself a moderator we shouldn't bake in).
-OUTCOME_PER_BURST_COL: str = 'mc_return_raw__mean_axis_-1'
+# Per-burst outcome. Switched back to the γ-discounted variant
+# (`mc_return__mean_axis_-1`) on the rebuilt canonical cache —
+# it's populated 440/440. The raw variant (`mc_return_raw__mean_axis_-1`)
+# is absent in the rebuilt cache. At γ=0.99 the discounting effect
+# on per-burst correlations is modest (γ^t fades over ~100 steps
+# of evaluation), and the cross-env comparison is internally
+# consistent since every env shares γ.
+OUTCOME_PER_BURST_COL: str = 'mc_return__mean_axis_-1'
 
 from corroborate.analyses.dynamic_mediation.pc_adjacency import (
     dynamic_pc_adjacency,
 )
 
 
-# Script-local loader: bypasses the shared `load_g099_canonical_panel`
-# because (a) the canonical cache file is currently being rebuilt by
-# the framework-fixes agent and (b) the CANONICAL_G099_CORPORA list
-# in _scope.py has been swapped to the new full-Q sweep names, but
-# the `_g099.parquet` slice on disk still carries the older corpus
-# names. Until the agent's rebuild lands, this loader takes the slice
-# as-is and applies just the γ + arm filters.
+# Script-local loader: prefers the rebuilt canonical
+# `hasselt_clean.parquet` (carries the broader 17-per-burst
+# candidate set from the post-2026-05-28 framework-fixes rebuild),
+# falls back to the pre-rebuild `_g099.parquet` slice (7 candidates,
+# 12 envs at the legacy corpus names) if the canonical isn't there.
 def _load_panel() -> pl.DataFrame:
+    canonical = Path('experiments/data/cache/hasselt_clean.parquet')
     sliced = Path('experiments/data/cache/hasselt_clean_g099.parquet')
-    if not sliced.exists():
-        raise SystemExit(
-            'expected experiments/data/cache/hasselt_clean_g099.parquet — '
-            'cache is missing; the framework-fixes agent may be mid-rebuild'
-        )
-    df = pl.read_parquet(sliced)
+    if canonical.exists():
+        df = pl.read_parquet(canonical)
+    elif sliced.exists():
+        df = pl.read_parquet(sliced)
+    else:
+        raise SystemExit('no hasselt_clean cache found')
     return df.filter(pl.col('gamma') == 0.99)
 
 
 OUT_PNG = SCRIPT_DIR.parent / 'figures' / '05b_dynamic_best_mediator.png'
 OUT_CSV = SCRIPT_DIR.parent / 'figures' / '05b_dynamic_best_mediator.csv'
+
+# Pass via --include-bias-soft-taut to put soft-tautological bias mediators
+# (`mean_per_state_cumulative_bias_per_burst`, `normalized_bias_redq_per_burst`)
+# back into the candidate pool. Default EXCLUDES them — they win by
+# MC-input overlap, not by capturing a distinct mediation channel
+# (see `feedback_tautology_audit_is_conservative`).
+INCLUDE_BIAS_SOFT_TAUT: bool = '--include-bias-soft-taut' in sys.argv
 
 # Candidate per-burst mediators, grouped by family for color coding.
 CANDIDATES_BY_FAMILY: dict[str, tuple[str, ...]] = {
@@ -123,7 +130,9 @@ def _candidate_family(name: str) -> str:
 
 def _populated_candidates(sub: pl.DataFrame) -> tuple[str, ...]:
     out: list[str] = []
-    for fam_members in CANDIDATES_BY_FAMILY.values():
+    for fam, fam_members in CANDIDATES_BY_FAMILY.items():
+        if fam == 'Bias (soft-taut)' and not INCLUDE_BIAS_SOFT_TAUT:
+            continue
         for c in fam_members:
             if c not in sub.columns:
                 continue
