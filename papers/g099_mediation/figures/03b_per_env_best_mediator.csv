@@ -1,13 +1,13 @@
 env,n,marg_rho,pc_arm_adj,pc_outcome_adj,pc_mediators,best_med,best_part_rho,best_absorb_pct,dowhy_ate,dowhy_placebo_drift,dowhy_rcc_drift,note
-Asterix,60,+0.731,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
+Asterix,30,+0.728,"","normalized_bias_redq_late","",jensen_gap,+0.070,+90.4,+5.417,0.000,0.011,
 Breakout,60,-0.148,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
 Freeway,60,+0.217,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
 SpaceInvaders,60,+nan,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
 PacMan,20,+0.277,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
 Snake,60,-0.206,"","","",,+nan,+nan,+nan,nan,nan,PC underpowered
-MetaMaze,60,+0.393,"greedy_match_late|jensen_gap","normalized_bias_redq_late","",greedy_match_late,+0.001,+99.8,+3.445,0.000,0.003,
-FourRooms,60,+0.533,"q_inter_state_grad_overlap_late|state_hash_entropy_late","normalized_bias_redq_late","",argmax_entropy_late,+0.033,+93.7,+0.225,0.000,0.001,
+MetaMaze,60,+0.393,"jensen_gap|policy_anchors_before_bias","normalized_bias_redq_late","",greedy_match_late,+0.001,+99.8,+3.445,0.000,0.003,
+FourRooms,60,+0.533,"","normalized_bias_redq_late|q_mc_burst_correlation_late","",state_conditional_argmax_entropy_late,+0.029,+94.6,+0.225,0.000,0.001,
 CartPole,60,+0.060,"","state_repeat_rate_window64_late","",state_hash_entropy_late,+0.009,+85.4,+4.053,0.000,0.324,
-Acrobot,60,-0.148,"","normalized_bias_redq_late|q_trajectory_autocorr_late","",state_hash_entropy_late,-0.066,+55.5,-3.191,0.000,0.027,
-MountainCar,60,-0.022,"","state_hash_entropy_late","",,+nan,+nan,+nan,nan,nan,
-LunarLander,60,+0.104,"","","",state_repeat_rate_window64_late,+0.036,+65.7,+28.210,0.000,0.885,
+Acrobot,60,-0.148,"","normalized_bias_redq_late","",state_hash_entropy_late,-0.066,+55.5,-3.191,0.000,0.027,
+MountainCar,60,-0.022,"","q_max_growth","",q_range_to_std_late,-0.000,+100.0,-0.489,0.000,0.051,
+LunarLander,60,+0.104,"","","",q_mc_calibration_pearson,+0.031,+70.5,+28.210,0.000,0.885,

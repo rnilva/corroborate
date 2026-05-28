@@ -170,40 +170,46 @@ broad-mediator re-ingest):
 
   | env | marg ρ | best mediator (cell-scalar) | absorb | DoWhy ATE | placebo / RCC drift |
   | --- | ---: | --- | ---: | ---: | --- |
-  | Asterix | +0.73 | — | — | — | PC underpowered |
-  | FourRooms | +0.53 | argmax_entropy | 94% | +0.23 | 0.00 / 0.00 |
+  | Asterix (n=30) | +0.73 | jensen_gap *(soft-taut)* | 90% | +5.42 | 0.00 / 0.01 |
+  | FourRooms | +0.53 | state_conditional_argmax_entropy | 95% | +0.23 | 0.00 / 0.00 |
   | MetaMaze | +0.39 | greedy_match | 100% | +3.45 | 0.00 / 0.00 |
   | PacMan | +0.28 | — | — | — | PC underpowered |
   | Freeway | +0.22 | — | — | — | PC underpowered |
   | Snake | −0.21 | — | — | — | PC underpowered |
   | Breakout | −0.15 | — | — | — | PC underpowered |
   | Acrobot | −0.15 | state_hash_entropy | 56% | −3.19 | 0.00 / 0.03 |
-  | LunarLander | +0.10 | state_repeat_rate_window64 | 66% | +28.21 | 0.00 / **0.88** ← RCC flag |
+  | LunarLander | +0.10 | q_mc_calibration_pearson *(soft-taut)* | 71% | +28.21 | 0.00 / **0.88** ← RCC flag |
   | CartPole | +0.06 | state_hash_entropy | 85% | +4.05 | 0.00 / **0.32** ← RCC flag |
-  | MountainCar | −0.02 | — | — | — | no signal |
+  | MountainCar | −0.02 | q_range_to_std | 100% *(near-zero marg)* | −0.49 | 0.00 / 0.05 |
   | SpaceInvaders | (NaN) | — | — | — | NaN marg ρ |
 
 Substantive findings:
-- **No env has a PC-detected mediator** (a candidate adjacent to
-  BOTH arm and outcome under conservative depth-2 conditioning).
-  PC's strict adjacency requirement isn't met for any scalar
-  candidate at any env. The "best by absorption" column reports
-  what would survive an absorption-only rule.
-- **6 of 12 envs are PC-underpowered** (Asterix, Breakout, Freeway,
-  SpaceInvaders, PacMan, Snake): the candidate set × cell-count
-  combination doesn't satisfy PC's conservative conditioning. The
-  framework refuses to discover mediators at these envs.
-- **5 envs surface best-by-absorption mediators**, with
-  state-coverage candidates (state_hash_entropy, state_repeat_rate,
-  greedy_match) winning at most of them, NOT the canonical Hasselt
-  bias mediator. MetaMaze's 100% absorption via `greedy_match_late`
-  is the strongest finding (DoWhy ATE = +3.45, both refutations
-  clean). FourRooms hits 94% via `argmax_entropy_late`.
-- **2 envs RCC-flagged**: LunarLander (RCC drift = 0.88) and
-  CartPole (drift = 0.32) — both well above the 0.05 tolerance.
-  Linear-mediation estimate is non-robust to synthetic
-  confounders. CartPole's flag aligns with the ⊥ saturation flag
-  from Layer 2; LunarLander's is independent.
+- **Asterix is the canonical Hasselt result**: jensen_gap absorbs
+  90% of the marg ρ = +0.73, DoWhy ATE = +5.42 with clean
+  refutations (placebo / RCC drift both well below 0.05). Soft-
+  tautology caveat: `jensen_gap` shares MC inputs with the outcome
+  — see Layer 4's discussion of why pooling these env-specific
+  reads is dangerous.
+- **MetaMaze + FourRooms surface non-bias mediators**: MetaMaze
+  picks `greedy_match_late` (100% absorption, ATE=+3.45);
+  FourRooms picks `state_conditional_argmax_entropy_late` (95%,
+  ATE=+0.23). Both have clean refutations. Different envs route
+  through different channels.
+- **5 envs PC-underpowered** (Breakout, Freeway, SpaceInvaders,
+  PacMan, Snake): the MinAtar/Jumanji envs don't have the
+  Q-dynamics / TD / policy-churn / state-coverage scalars in
+  cache (g099_*-MinAtar corpora pre-date the canonical_n_eps20_ckpt
+  rebuild). Cache-side limitation; not a substantive null.
+- **2 envs RCC-flagged**: LunarLander (RCC drift = 0.88) picks
+  `q_mc_calibration_pearson` — soft-tautology AND non-robust to
+  synthetic confounders. CartPole (drift = 0.32) — non-robust AND
+  saturating peak (Layer 2 ⊥ flag). Both linear-mediation
+  estimates fail the framework's RCC gate; the framework refuses
+  to ship them.
+- **No env has a PC-detected mediator** (joint arm AND outcome
+  adjacency under conservative depth-2 conditioning). The
+  "best by absorption" column reports what would survive an
+  absorption-only rule; PC's strict gate refuses every candidate.
 
 The framework's per-env panel + refutation gates collectively say:
 "no single mediator is universal across envs; state-coverage

@@ -106,7 +106,10 @@ CANONICAL_G099_CORPORA: tuple[str, ...] = (
     'mountaincar_g099_canonical_n_eps20_ckpt',
     'mountaincar_g099_canonical_n_eps20_ckpt_seeds15to29',
     # MinAtar / Jumanji envs — partial canonical swap
-    'g099_Asterix-MinAtar',                  # MinAtar γ=0.99 v2 (sub-corpus, parent has no runs.parquet)
+    'asterix_g099_canonical_n_eps20_ckpt',   # Asterix γ=0.99 NEW canonical_n_eps20_ckpt corpus
+                                             # (carries the broad mediator candidate set;
+                                             # supersedes `g099_Asterix-MinAtar` which lacked Q-dynamics /
+                                             # TD / policy / state-coverage scalars).
     'g099_Breakout-MinAtar',
     'g099_Freeway-MinAtar',
     'g099_SpaceInvaders-MinAtar',            # MinAtar γ=0.99 v2 SI sibling — kept as a fallback alongside
