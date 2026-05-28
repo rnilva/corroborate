@@ -13,125 +13,163 @@ catches the *risk* of structural redundancy but cannot tell apart:
   leak.
 
 This document records the **empirical adjudication discipline**
-established at γ=0.99 canonical (commit `bd1c4e2`) for handling
-soft-tautological mediators, and how it should propagate into
-future bridge authoring.
+established at γ=0.99 canonical for handling soft-tautological
+mediators, and how it propagates into bridge authoring. The
+discipline went through a critic-driven rigor upgrade on
+2026-05-28; the empirical findings should be read against the
+**v2 (rigorous)** verdicts, not the v1 (ad-hoc) ones that
+preceded the upgrade.
 
-## The empirical adjudication test
+## The empirical adjudication test (v2 — rigorous)
 
 For a soft-tautological mediator `M` whose reads include outcome
 inputs `O_inputs`:
 
 **Step 1 — Author the outcome-input sibling.** Construct a
-measurable `M_sibling` that depends ONLY on `O_inputs` (no
-independent inputs). The sibling has the same outcome-overlap as
-`M` but none of `M`'s independent-input contribution.
+measurable `M_sibling` that depends ONLY on `O_inputs`. The sibling
+covers the SAME outcome-overlap as `M` but NONE of `M`'s
+independent-input contribution.
 
-Example: `mean_per_state_cumulative_bias_per_burst` (the bias
-mediator) reads both `predicted_q_per_step` (Q, independent) and
-`mc_return_from_step` (MC, also in outcome's chain). Its sibling
-is `mean_mc_per_state_per_burst` — same MC reduction, no Q.
+  Example: `mean_per_state_cumulative_bias_per_burst` (bias) reads
+  both `predicted_q_per_step` (Q, independent) and
+  `mc_return_from_step` (MC, in outcome's chain). The sibling is
+  `mean_mc_per_state_per_burst` — same MC reduction, no Q.
 
-**Step 2 — Multi-mediator d-separation comparison.** Via
-`dynamic_pc_adjacency` (or static `partial_spearman_rho_multi`),
-run three conditioning sets and report d-sep%:
+**Step 2 — Run three df-matched conditioning sets.** Via
+`dynamic_pc_adjacency` with noise-padding at depth-2 so all three
+runs cost the same df (this is the v2 fix — the v1 implementation
+compared depth-1 single-mediator runs against depth-2 joint runs
+and conflated info gain with df cost):
 
-  | conditioning set | what it tells you |
-  | --- | --- |
-  | `{M_sibling}` | what the outcome-input leak alone explains |
-  | `{M}` | the full mediator's apparent power (may include leak) |
-  | `{M, M_sibling}` | does conditioning on BOTH improve over sibling alone? |
+  | conditioning set | depth | what it estimates |
+  | --- | --- | --- |
+  | `{sibling, ε}` | 2 | outcome-input leak alone (ε ~ N(0,1)) |
+  | `{mediator, ε}` | 2 | full mediator alone |
+  | `{mediator, sibling}` | 2 | joint conditioning |
 
-**Step 3 — Verdict by margin.** Let `Δ = dsep({M, sibling}) − dsep({sibling})`.
+**Step 3 — Binomial Wald z-test, NOT an ad-hoc Δ threshold.**
+Compute `Δ = dsep({mediator, sibling}) − dsep({sibling, ε})` and
+its Wald SE under binomial:
 
-- `Δ ≥ +10pp` → `M` carries genuine independent-input information
-  at this stratum. The mediator is doing real work beyond the
-  leak. Disposition: **GENUINE**.
-- `−5pp ≤ Δ < +10pp` → `M` is mostly outcome-leak. The bulk of
-  its d-separation power is the sibling's contribution. The strict
-  tautology audit was right at this stratum. Disposition:
-  **LEAK**.
-- `Δ < −5pp` → conditioning on `M` HURTS d-separation
-  (`M` is contaminating the conditioning set). Disposition:
-  **HURTS** — refuse to use `M` here.
+  ```
+  SE_Δ ≈ sqrt(p_j(1−p_j)/n_j + p_s(1−p_s)/n_s) × 100   (pp-scale)
+  z    = Δ / SE_Δ
+  ```
 
-**Step 4 — Report env-conditionally.** Do NOT pool the
-adjudication verdict across stratum. The same mediator can be
-GENUINE at one env and LEAK at another. The discipline is
-per-stratum, not global.
+  Disposition:
+  - `z ≥ +z_genuine` (default 1.65, 95% one-sided) → **GENUINE**
+  - `z ≤ −z_hurts`   (default 1.65, symmetric)       → **HURTS**
+  - `|z| < z_genuine`                                  → **LEAK**
+  - `n_marg < min_marginal_edges` (default 3)          → **UNDERPOWERED**
 
-## The empirical case study: bias-mediator at γ=0.99 canonical
+This is sample-size-aware: a +30pp Δ at n=3 is z≈1.2 (LEAK), while
+the same +30pp at n=32 is z≈2.8 (GENUINE). The v1 implementation's
+fixed +10pp threshold inflated small-n positives.
+
+**Step 4 — Report env-conditionally.** The same mediator can be
+GENUINE at one env and LEAK at another. Do not pool the
+adjudication verdict across stratum.
+
+## Interpretation caveat (load-bearing)
+
+**A GENUINE verdict does NOT confirm the mediator's mechanism
+claim.** It establishes that the mediator's signal extends beyond
+the LINEAR span of mean-sibling. Higher moments (variance, sign
+concentration), nonlinear couplings, and alternative causal
+channels are not in the sibling-span.
+
+At γ=0.99 with `bias = Q − MC`, GENUINE means **mean-Q contains
+predictive info beyond mean-MC**. That could equally well be:
+
+- (a) The bias-clip mechanism (Hasselt's claim) is the real
+  causal channel — bias-as-mediator.
+- (b) Q has independent causal effects on outcome via OTHER
+  channels (state visitation, exploration drive, etc.) that the
+  bias mediator picks up because it contains Q.
+
+The adjudication test **cannot distinguish (a) from (b)**. It is
+necessary-but-not-sufficient for the bias-clip mediation claim.
+Bridges using this primitive should state the disposition AND
+explicitly note what the test does not adjudicate.
+
+## The empirical case study (γ=0.99 canonical, v2 verdicts)
 
 `mean_per_state_cumulative_bias_per_burst` paired with
 `mean_mc_per_state_per_burst`. Outcome:
-`mc_return__mean_axis_-1`. Stratum: env (12 envs in canonical
-panel, 5 with PC-detectable marginal edge n ≥ 3).
+`mc_return__mean_axis_-1`. Stratum: env.
 
-  | env | n_marg | `{sibling}` | `{M, sibling}` | Δ | disposition |
-  | --- | --- | --- | --- | --- | --- |
-  | Asterix | 32 | 47% | **81%** | +34pp | GENUINE |
-  | MetaMaze | 12 | 67% | **83%** | +16pp | GENUINE |
-  | SI | 3 | 67% | 100% | +33pp | GENUINE (small n) |
-  | FourRooms | 44 | 84% | 86% | +2pp | LEAK |
-  | Freeway | 5 | 40% | 40% | +0pp | LEAK (pure) |
+  | env | n_marg | `{sib,ε}` | `{med,ε}` | `{m,s}` | Δ | SE_Δ | z | disposition |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Asterix | 32 | 50% | 91% | 81% | +31pp | 11.2 | **+2.79** | **GENUINE** |
+  | MetaMaze | 12 | 58% | 75% | 83% | +25pp | 17.8 | +1.40 | LEAK |
+  | SI | 3 | 67% | 33% | 100% | +33pp | 27.2 | +1.22 | LEAK |
+  | FR | 44 | 80% | 89% | 86% | +7pp | 8.0 | +0.85 | LEAK |
+  | Freeway | 5 | 40% | 80% | 40% | +0pp | 31.0 | +0.00 | LEAK |
+  | (other 7 envs) | <3 | — | — | — | — | — | — | UNDERPOWERED |
 
-So the bias mediator is **GENUINE at the envs where Hasselt's
-bias-clip mechanism mechanistically operates** (Asterix and
-MetaMaze are the canonical "DDQN-helps via bias reduction" cases)
-and **pure outcome-leak at FR / Freeway**. The strict tautology
-verdict would have rejected bias as a mediator globally — but the
-adjudication shows that's the wrong disposition at 2 of 5 envs.
+**Only Asterix passes the rigorous threshold.** MetaMaze and SI
+were called GENUINE under v1's ad-hoc +10pp threshold; under
+sample-size-aware z, both are LEAK. The +33pp Δ at SI's n=3 was
+the v1 protocol's worst-case false positive — corrected here.
 
-(This is also the empirical answer to the question "is the
-bias-mediator real or is it just the MC bleeding through?": at
-some envs it's real, at others it's bleeding.)
+The substantive finding: at γ=0.99 Asterix, bias carries
+predictive information beyond mean-MC at the 95% level. Whether
+this is the bias-clip mechanism or a Q-via-other-channel effect
+remains undistinguished — the test does not adjudicate that.
+At the other 4 PC-detectable envs, the bias-mediator's apparent
+d-separation power is consistent with the MC-leak alone.
 
 ## How to bake this into bridge authoring
 
 Bridges using a soft-tautological mediator should:
 
-1. Reference (or compute) the joint d-sep adjudication for the
-   bridge's scope. Don't just cite a global "M mediates X" result.
+1. Call `mediator_leak_adjudication` (in
+   `corroborate.analyses.diagnostic`) over the bridge's scope.
 
-2. State the per-stratum disposition (GENUINE / LEAK / HURTS)
-   alongside the bridge verdict. A bridge that holds via a
-   LEAK-disposition mediator is reporting an outcome-leak, not a
-   causal mediation.
+2. State the per-stratum disposition (GENUINE / LEAK / HURTS /
+   UNDERPOWERED) alongside the bridge verdict.
 
 3. Pair the mediator-of-interest with its sibling in
-   REQUIRED_MEASURABLES. Both columns must be cached for the
-   adjudication to run.
+   REQUIRED_MEASURABLES so both columns are cached for the
+   adjudication.
 
-4. Treat REDQ-style normalization (`(Q − MC) / |E[MC]|`) the same
-   way — REDQ is a monotone transform of the raw bias when the
-   denominator is positive, so its adjudication should match the
-   raw bias's adjudication at every stratum. Don't claim REDQ
-   "fixes" the tautology — it doesn't, it just rescales.
+4. Explicitly note that GENUINE is **necessary-but-not-sufficient**
+   for the bridge's mechanistic claim — additional evidence
+   (alternative-channel falsification, dose-response, intervention
+   studies) is needed to attribute mediation to a specific
+   mechanism.
 
-## Framework-level next step
+## REDQ note (correction)
 
-The current `tautology_audit` primitive is binary (clean vs
-flagged). A future upgrade should extend the verdict enum:
+A prior version of this doc claimed `normalized_bias_redq` would
+adjudicate identically to raw bias because REDQ is "a monotone
+transform of the raw bias when the denominator is positive." That
+is **incorrect**. REDQ divides each cell by its own |E[MC]|, which
+is per-cell (per-burst), not stratum-constant. A per-burst
+rescaling does NOT preserve cross-burst rank correlations — which
+is what the partial-Spearman CI tests run on. REDQ may genuinely
+shift the adjudication relative to raw bias and should be
+adjudicated independently if it's the bridge's mediator-of-record.
 
-- `clean` — no reads overlap.
-- `HARD_TAUTOLOGY` — full functional determination by outcome
-  inputs (refuse).
-- `SOFT_TAUTOLOGY_GENUINE` — adjudication finds Δ ≥ +10pp on the
-  scope of interest (mediator carries genuine info).
-- `SOFT_TAUTOLOGY_LEAK` — adjudication finds Δ < +10pp
-  (mediator is mostly leak, but disposition is per-stratum).
-- `SOFT_TAUTOLOGY_UNADJUDICATED` — overlap detected, sibling
-  available, but adjudication not yet run (caller should run it).
+## Limitations (what the primitive does NOT yet support)
 
-Until that primitive lands, the `gen_mc_leak_adjudication.py`
-script under `papers/g099_mediation/scripts/` is the reference
-implementation. Wire its logic into a typed analysis primitive
-(`mediator_leak_adjudication`) when the next bridge needs to
-adjudicate a soft tautology.
+- **Multi-input siblings**: a 3-component mediator like
+  `(Q − target_Q − MC)` needs two siblings + a depth-3 joint test
+  (df = n − 3 − 3). The primitive currently supports only single
+  mediator + single sibling at depth-2.
+- **McNemar/paired test**: SE_Δ uses the independent-binomial form
+  (slightly conservative for paired data — same n_marg cells).
+  Replace with McNemar discordant-pair test when per-burst d-sep
+  booleans are exposed by `dynamic_pc_adjacency` (currently it
+  exposes counts only).
+- **Measurable-instance mediators**: must currently pass column
+  names (strings) so the noise-padding can use the column's
+  per-cell array lengths. Bare `Measurable` instances would need
+  transitive-reads walking to recover lengths.
 
 ## Cross-references
 
 - `feedback_tautology_audit_is_conservative.md` — agent-memory entry
 - `paper_g099_mediation_mc_leak_finding.md` — empirical findings memory
-- `papers/g099_mediation/scripts/gen_mc_leak_adjudication.py` — reference test
-- `papers/g099_mediation/figures/report_mc_leak_adjudication.png` — visual
+- `src/corroborate/analyses/diagnostic/mediator_leak_adjudication.py` — primitive
+- `papers/g099_mediation/scripts/gen_mc_leak_adjudication.py` — visual report
