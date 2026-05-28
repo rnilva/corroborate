@@ -272,12 +272,14 @@ def bootstrap(
     next_obs: jax.Array,
     reward: jax.Array,
     done: jax.Array,
+    truncated: jax.Array,
     gamma: float,
     greedification: Greedification = max_greedify,
     gradient_rule: GradientRule = semi_gradient,
 ) -> jax.Array:
-    """Bellman target: `reward + gamma · (1−done) · gradient_rule(
-    greedification(...))`.
+    """Bellman target: `reward + gamma · (1−terminated) ·
+    gradient_rule(greedification(...))` where `terminated = done
+    AND NOT truncated`.
 
     `gamma` here is the BOOTSTRAP DISCOUNT on v(s'), which equals
     γⁿ for an n-step return and γ¹ = γ for the standard 1-step
@@ -289,7 +291,17 @@ def bootstrap(
     `reward` is the (potentially-aggregated) n-step return
     `Σⱼ γʲ rⱼ` precomputed by the `n_step_return` Free Claim
     during rollout. For 1-step this is just rₜ and the formula
-    collapses to the textbook `rₜ + γ·(1−d)·v(s_{t+1})`.
+    collapses to the textbook `rₜ + γ·(1−term)·v(s_{t+1})`.
+
+    `done` is the env-reset signal (any reason the episode ended);
+    `truncated=1` flags the subset of dones that were artificial
+    time-limit cutoffs. Sutton-Barto §6.6 / Gymnasium-API
+    distinction: bootstrap continues through truncations
+    (trajectory physically continues, experiment chose to stop);
+    bootstrap zeros only for genuine terminal absorbing states.
+    Envs that don't expose truncation feed `truncated=0`
+    throughout — `terminated == done` and the formula collapses to
+    the pre-truncation `(1 − done)` mask.
 
     `greedification` is the DDQN-vs-vanilla axis; `gradient_rule`
     is the semi-gradient-vs-full-gradient axis. Authors swap
@@ -305,7 +317,12 @@ def bootstrap(
         q_network=q_network,
         next_obs=next_obs,
     )
-    target = reward + gamma * (1.0 - done) * v_next
+    # `terminated = done · (1 − truncated)`: 1 only when done fires
+    # AND was not a time-limit cutoff. For envs without truncation
+    # (truncated≡0), this collapses to `done` — pre-refactor
+    # semantics preserved.
+    terminated = done * (1.0 - truncated)
+    target = reward + gamma * (1.0 - terminated) * v_next
     return gradient_rule(target)
 
 

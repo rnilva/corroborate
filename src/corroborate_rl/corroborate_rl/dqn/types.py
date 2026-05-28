@@ -92,7 +92,8 @@ class GradientRule(Protocol):
 
 class Bootstrap(Protocol):
     """Bellman target. The default `bootstrap` composition is
-    `reward + gamma · (1−done) · gradient_rule(greedification(...))`.
+    `reward + gamma · (1−terminated) · gradient_rule(greedification(...))`
+    where `terminated = done AND NOT truncated`.
 
     `gamma` here is the BOOTSTRAP DISCOUNT — for n-step it equals
     γⁿ (computed by dqn_step from the env's γ); for 1-step it's
@@ -100,6 +101,13 @@ class Bootstrap(Protocol):
     precomputed during rollout by the `n_step_return` Free Claim.
     bootstrap itself doesn't need to know `n_step` — single leaf
     in the configuration surface.
+
+    `done` is the env-reset signal (terminated OR truncated);
+    `truncated` flags artificial time-limit cutoffs (Sutton-Barto
+    §6.6 / Gymnasium-API). Bootstrap continues through truncations
+    (trajectory physically continues), zeros only on genuine
+    terminations. Envs without truncation feed `truncated≡0`,
+    collapsing the formula to `(1 − done) · v(s')`.
 
     Keyword-only signature so the swap is a clean call-site drop-
     in. The DEFAULT swap-axis for DDQN-vs-vanilla is now
@@ -114,6 +122,7 @@ class Bootstrap(Protocol):
         next_obs: jax.Array,
         reward: jax.Array,
         done: jax.Array,
+        truncated: jax.Array,
         gamma: float,
     ) -> jax.Array: ...
 

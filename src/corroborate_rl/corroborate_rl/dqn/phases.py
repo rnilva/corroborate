@@ -121,16 +121,28 @@ def rollout_phase(
     action = action_select(q_values, select_key, state.step, n_actions)
 
     # gymnax's env.step returns (next_obs, env_state, reward, done, info)
-    next_obs, next_env_state, reward, done, _info = env.step(
+    next_obs, next_env_state, reward, done, info = env.step(
         env_key, state.env_state, action.astype(jnp.int32), env_params,
     )
     # state.obs is at native shape from init_state; reshape is a
     # no-op for well-shaped envs and a defensive guard.
     next_obs = next_obs.reshape(state.obs.shape)
 
+    # Truncation (Sutton-Barto §6.6 / Gymnasium-API): artificial
+    # time-limit cutoffs distinct from genuine termination. The
+    # `EpisodeLengthCappedEnv` wrapper publishes `info['truncated']`;
+    # envs without truncation default to 0.0. JAX-compatible:
+    # `info.get(...)` is evaluated at trace time, not under scan.
+    truncated_obj = info.get('truncated')
+    if isinstance(truncated_obj, jax.Array):
+        truncated = truncated_obj.astype(jnp.float32)
+    else:
+        truncated = jnp.zeros_like(done, dtype=jnp.float32)
+
     raw_transition = Transition(
         obs=state.obs, action=action,
         reward=reward, next_obs=next_obs, done=done,
+        truncated=truncated,
     )
     new_pending, emitted, should_emit = n_step_return(
         pending=state.pending_n_step,
@@ -171,6 +183,14 @@ def rollout_phase(
     diagnostics: dict[str, jax.Array] = {
         'reward': reward,
         'done': done.astype(jnp.float32),
+        # Per-step truncation flag (artificial time-limit cutoff,
+        # distinct from genuine env terminal). Defaults to 0.0 for
+        # envs that don't publish `info['truncated']`. Downstream
+        # measurables that need to discriminate "the trajectory
+        # continued physically; only the experiment chose to stop"
+        # consume this column; the default `bootstrap_fraction`
+        # measurable continues to read `done` alone (back-compat).
+        'truncated': truncated,
         'max_q': jnp.max(q_values),
         'ep_return': cumulative,
         'action': action.astype(jnp.int32),
@@ -294,6 +314,7 @@ def train_phase(
             target_params=state.target_params,
             q_network=q_network,
             next_obs=batch.next_obs, reward=batch.reward, done=batch.done,
+            truncated=batch.truncated,
             gamma=bootstrap_gamma,
         )
         per_sample = loss_fn(predicted, target)        # (batch,)

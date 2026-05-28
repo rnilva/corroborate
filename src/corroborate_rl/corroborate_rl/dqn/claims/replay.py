@@ -58,17 +58,27 @@ class ReplayState(NamedTuple):
     swapping `Replay` for a different implementation (e.g. PER)
     define their own `ReplayState`-shaped substate.
 
-    Five parallel arrays + a monotonic add-counter — kept flat so
+    Six parallel arrays + a monotonic add-counter — kept flat so
     the pytree leaves are individually `jax.Array` (vmap-friendly).
     `size` is the unbounded count of `Replay.add` calls with mask=1
     (the FIFO write head is `size % capacity`); the populated-slot
     count for sampling is `min(size, capacity)`, computed at sample
-    time inside `uniform_sample`."""
+    time inside `uniform_sample`.
+
+    `truncated` carries the Sutton-Barto §6.6 / Gymnasium-API
+    distinction: `done` is the env-reset signal (any reason the
+    episode ended); `truncated=1` flags the subset of dones that
+    were artificial time-limit cutoffs rather than genuine terminal
+    absorbing states. The Bellman target consumes `terminated =
+    done * (1 - truncated)` so trajectories continue bootstrap when
+    truncated. Envs that don't expose `info['truncated']` default
+    the column to 0.0, recovering pre-truncation semantics."""
     obs: jax.Array          # (capacity, *obs_shape)
     action: jax.Array       # (capacity,) int32
     reward: jax.Array       # (capacity,)
     next_obs: jax.Array     # (capacity, *obs_shape)
     done: jax.Array         # (capacity,) float32 (0/1)
+    truncated: jax.Array    # (capacity,) float32 (0/1)
     size: jax.Array         # () int32 — total adds (unbounded; not slot count)
 
 
@@ -81,12 +91,18 @@ class PendingNStepState(NamedTuple):
 
     For `n_step=1` the window emits on every step and these
     fields turn over once per call — observable behavior matches
-    pre-n-step DQN exactly."""
+    pre-n-step DQN exactly.
+
+    `acc_truncated` mirrors `acc_done` for the truncation flag: at
+    most one raw step in a window can be terminal (the window emits
+    on done), so `max` is the consistent OR-aggregate of the
+    truncation signal across the window."""
     head_obs: jax.Array         # (*obs_shape,) — sₜ at start of window
     head_action: jax.Array      # () int32 — aₜ
     acc_reward: jax.Array       # () float32 — Σ γᵏ r_{t+k}
     next_obs: jax.Array         # (*obs_shape,) — most recent s'
     acc_done: jax.Array         # () float32 — max done in window
+    acc_truncated: jax.Array    # () float32 — max truncated in window
     n_in_window: jax.Array      # () int32 — raw transitions in window
 
 
@@ -100,17 +116,26 @@ def init_pending_n_step(obs_shape: tuple[int, ...]) -> PendingNStepState:
         acc_reward=jnp.float32(0.0),
         next_obs=jnp.zeros(obs_shape),
         acc_done=jnp.float32(0.0),
+        acc_truncated=jnp.float32(0.0),
         n_in_window=jnp.int32(0),
     )
 
 
 class Transition(NamedTuple):
-    """One transition's worth of data passed to `Replay.add`."""
+    """One transition's worth of data passed to `Replay.add`.
+
+    `truncated` flags an artificial time-limit cutoff (vs `done`,
+    which is the env-reset signal regardless of reason). The
+    Bellman target masks bootstrap on `terminated = done AND NOT
+    truncated`. Envs without truncation default the field to 0.0
+    so all dones are treated as true terminations (pre-truncation
+    semantics)."""
     obs: jax.Array
     action: jax.Array
     reward: jax.Array
     next_obs: jax.Array
     done: jax.Array
+    truncated: jax.Array
 
 
 class Batch(NamedTuple):
@@ -125,6 +150,7 @@ class Batch(NamedTuple):
     reward: jax.Array       # (batch_size,)
     next_obs: jax.Array     # (batch_size, *obs_shape)
     done: jax.Array         # (batch_size,)
+    truncated: jax.Array    # (batch_size,)
     indices: jax.Array      # (batch_size,) int32
 
 
@@ -152,6 +178,7 @@ def uniform_sample(
         reward=state.reward[indices],
         next_obs=state.next_obs[indices],
         done=state.done[indices],
+        truncated=state.truncated[indices],
         indices=indices.astype(jnp.int32),
     )
 
@@ -229,6 +256,14 @@ def n_step_return(
     acc_done = jnp.maximum(
         pending.acc_done, transition.done.astype(jnp.float32),
     )
+    # `acc_truncated` mirrors `acc_done`: OR-aggregate (via max) of
+    # the per-step truncation flag across the window. The window
+    # emits when acc_done fires, so at most one step's truncated
+    # bit is propagated — taking `max` is equivalent to "did any
+    # step in the window get truncated".
+    acc_truncated = jnp.maximum(
+        pending.acc_truncated, transition.truncated.astype(jnp.float32),
+    )
     next_obs = transition.next_obs.astype(obs_dtype)
     n_in_window = pending.n_in_window + 1
 
@@ -237,7 +272,7 @@ def n_step_return(
 
     emitted = Transition(
         obs=head_obs, action=head_action, reward=acc_reward,
-        next_obs=next_obs, done=acc_done,
+        next_obs=next_obs, done=acc_done, truncated=acc_truncated,
     )
     new_pending = PendingNStepState(
         head_obs=jnp.where(should_emit_bool, jnp.zeros_like(head_obs), head_obs),
@@ -245,6 +280,7 @@ def n_step_return(
         acc_reward=jnp.where(should_emit_bool, jnp.float32(0.0), acc_reward),
         next_obs=jnp.where(should_emit_bool, jnp.zeros_like(next_obs), next_obs),
         acc_done=jnp.where(should_emit_bool, jnp.float32(0.0), acc_done),
+        acc_truncated=jnp.where(should_emit_bool, jnp.float32(0.0), acc_truncated),
         n_in_window=jnp.where(should_emit_bool, jnp.int32(0), n_in_window),
     )
     return new_pending, emitted, should_emit
@@ -305,6 +341,7 @@ class Replay:
             reward=jnp.zeros((self.capacity,)),
             next_obs=jnp.zeros((self.capacity, *obs_shape)),
             done=jnp.zeros((self.capacity,)),
+            truncated=jnp.zeros((self.capacity,)),
             size=jnp.int32(0),
         )
 
@@ -343,6 +380,7 @@ class Replay:
         old_reward = state.reward[idx]
         old_next_obs = state.next_obs[idx]
         old_done = state.done[idx]
+        old_truncated = state.truncated[idx]
         new_obs_val = (
             emit.reshape((1,) * old_obs.ndim) * transition.obs.astype(old_obs.dtype)
             + keep.reshape((1,) * old_obs.ndim) * old_obs
@@ -362,12 +400,17 @@ class Replay:
         new_done_val = (
             emit * transition.done.astype(jnp.float32) + keep * old_done
         )
+        new_truncated_val = (
+            emit * transition.truncated.astype(jnp.float32)
+            + keep * old_truncated
+        )
         return ReplayState(
             obs=state.obs.at[idx].set(new_obs_val),
             action=state.action.at[idx].set(new_action_val),
             reward=state.reward.at[idx].set(new_reward_val),
             next_obs=state.next_obs.at[idx].set(new_next_obs_val),
             done=state.done.at[idx].set(new_done_val),
+            truncated=state.truncated.at[idx].set(new_truncated_val),
             # Unbounded: the FIFO write head is `size % capacity` so
             # capping `size` at `capacity` would freeze the head at 0
             # after the buffer fills (every subsequent add overwriting

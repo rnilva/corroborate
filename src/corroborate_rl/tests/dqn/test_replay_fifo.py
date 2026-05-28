@@ -43,6 +43,7 @@ def _scalar_transition(reward_value: jax.Array) -> Transition:
         reward=r,
         next_obs=(r + 0.5).reshape((1,)),
         done=jnp.float32(0.0),
+        truncated=jnp.float32(0.0),
     )
 
 

@@ -159,15 +159,18 @@ def test_ddqn_and_vanilla_bootstrap_differ_when_params_differ() -> None:
     next_obs = jax.random.normal(obs_key, (batch_size, obs_dim))
     reward = jnp.ones((batch_size,))
     done = jnp.zeros((batch_size,))
+    truncated = jnp.zeros((batch_size,))
 
     target_v = bootstrap_claim(
         online_params=online, target_params=target, q_network=mlp_q,
-        next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+        next_obs=next_obs, reward=reward, done=done,
+        truncated=truncated, gamma=0.99,
         greedification=max_greedify,
     )
     target_d = bootstrap_claim(
         online_params=online, target_params=target, q_network=mlp_q,
-        next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+        next_obs=next_obs, reward=reward, done=done,
+        truncated=truncated, gamma=0.99,
         greedification=double_greedify,
     )
 
@@ -198,15 +201,18 @@ def test_ddqn_and_vanilla_bootstrap_match_when_params_equal() -> None:
     next_obs = jax.random.normal(obs_key, (batch_size, obs_dim))
     reward = jnp.ones((batch_size,))
     done = jnp.zeros((batch_size,))
+    truncated = jnp.zeros((batch_size,))
 
     target_v = bootstrap_claim(
         online_params=params, target_params=params, q_network=mlp_q,
-        next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+        next_obs=next_obs, reward=reward, done=done,
+        truncated=truncated, gamma=0.99,
         greedification=max_greedify,
     )
     target_d = bootstrap_claim(
         online_params=params, target_params=params, q_network=mlp_q,
-        next_obs=next_obs, reward=reward, done=done, gamma=0.99,
+        next_obs=next_obs, reward=reward, done=done,
+        truncated=truncated, gamma=0.99,
         greedification=double_greedify,
     )
     # Online == target → both take the same argmax → identical targets.

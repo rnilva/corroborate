@@ -37,8 +37,13 @@ import jax
 
 class EnvState:
     """Opaque environment-state pytree. Concrete shape is per-env;
-    the substrate never inspects it (just threads through scan)."""
-    ...
+    the substrate never inspects it beyond the `time` step-counter
+    field. `time` is declared on gymnax's base `EnvState` class
+    (`gymnax/environments/environment.py`) — every concrete env's
+    state subclass inherits it. Direct access is type-honest;
+    consumers needing other env-specific fields narrow at the use
+    site."""
+    time: jax.Array
 
 
 class EnvParams:
