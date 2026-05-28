@@ -145,9 +145,18 @@ def _build_invariant_measurable(
         v: object = kwargs.get(source_name)
         if v is None:
             v = record.get(source_name)
-        if v is None or isinstance(v, bool) or not isinstance(v, (int, float)):
+        if v is None or isinstance(v, bool):
             return 'power_insufficient'
-        fv = float(v)
+        # Accept Python int/float AND numpy scalar numeric types
+        # (np.float32, np.int64, etc.). The earlier check
+        # `isinstance(v, (int, float))` rejected non-float64 numpy
+        # scalars even though `float(v)` would coerce cleanly, leading
+        # to spurious `'power_insufficient'` verdicts on parquet-
+        # roundtripped numeric columns. Test via duck-typed coercion.
+        try:
+            fv = float(v)  # pyright: ignore[reportArgumentType]
+        except (TypeError, ValueError):
+            return 'power_insufficient'
         if math.isnan(fv):
             return 'power_insufficient'
         if use_at_most:

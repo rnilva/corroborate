@@ -55,19 +55,17 @@ The chain.py bridge intentionally uses the binomial sign-test —
 that's the right form for a cross-env consistency claim that
 doesn't require env-exchangeability.
 
-**Dormancy honesty.** The framework's `jensen_dormancy_premise_active`
-invariant returns `power_insufficient` on every cell at this
-cache: the structural Jensen floor (`σ_Q × √(2 log |A|)`) needs
-per-step σ_Q traces that this canonical γ=0.99 sweep did not
-persist (trace-evicted to save disk). The `PREMISE_ACTIVE_PER_STRATUM`
-filter is therefore a no-op pass-through here — every cell makes
-it into the bridge verdict because `jensen_dormancy_gap` defaults
-to 0 when the floor inputs aren't available. At γ=0.999 sweeps
-(where σ_Q traces ARE persisted), the same filter would actively
-exclude dormant envs. The framework surfaces this by exposing the
-`power_insufficient` verdict rather than pretending the filter
-fired meaningfully — exactly the per-stratum honesty the paper is
-about.
+**Dormancy: empirically inactive at γ=0.99.** The
+`PREMISE_ACTIVE_PER_STRATUM` scope filter retains every env at this
+cache because V's observed overestimation is **~10–100× larger
+than the Jensen structural floor** `σ_Q × √(2 log |A|)` in every
+env. Concretely, at LL γ=0.99 cell 0: σ_late = 0.41, floor =
+σ_late × √(2 log 4) = 0.68, observed bias = 45.6 — DDQN has bias
+to correct ~67× beyond what Jensen-alone would predict. The
+filter exists because at γ=0.999 (longer effective horizon),
+LunarLander and other envs flip into the dormant regime where
+the filter actively excludes; at γ=0.99 it's a no-op for the
+right reason.
 
 → `figures/01_mech_per_env.png` and `.csv`
 
