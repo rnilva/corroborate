@@ -115,10 +115,13 @@ CANONICAL_G099_CORPORA: tuple[str, ...] = (
     'g099_SpaceInvaders-MinAtar',            # MinAtar γ=0.99 v2 SI sibling — kept as a fallback alongside
                                              # `si_g099_canonical_n_eps1_ckpt` for cache-ingest robustness.
     'si_g099_canonical_n_eps1_ckpt',         # SpaceInvaders γ=0.99 (NEW: full-Q canonical_n_eps1_ckpt, n=30, 1M, sync=1000, supersedes g099_SpaceInvaders-MinAtar)
-    'snake_g099_canonical_3M_ckpt',          # Snake γ=0.99 canonical_3M (3M steps, 30 seeds × 2 arms = 60 cells, n_eps=5,
-                                             # 150 bursts/cell, full-Q ckpts). Supersedes legacy `snake_1M` (1M, n_eps=3, 20 bursts);
-                                             # `snake_1M` is dropped from the canonical set — both shared corpus stamp
-                                             # `Snake-jumanji` so leaving both in produced ragged-burst Snake strata.
+    'snake_1M',                              # Snake γ=0.99 (n_episodes=3 — noisier than rest)
+    # NOTE: `snake_g099_canonical_3M_ckpt` exists on cloud (60 cells, 3M steps, 30 seeds,
+    # n_eps=5, 150 bursts) but its traces.parquet is 18 GB in a single 11.5 GB row group
+    # — both the runner's full-load path AND `compute_trace_measurables_streaming` OOM
+    # because there is no row-group boundary to chunk on. Blocked on a framework
+    # streaming-ingest fix (row-group rewrite during restore, or per-cell scan via
+    # lazy-predicate-pushdown integrated into the runner).
     'pacman_1M_postfix',                     # PacMan γ=0.99 (n_episodes=3, 10 seeds/arm)
 )
 

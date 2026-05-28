@@ -46,13 +46,19 @@ def load_g099_canonical_panel() -> pl.DataFrame:
     γ=0.999 it filters LunarLander et al.
 
     Surfacing the scope HERE (in the shared loader) ensures every
-    layer mirrors chain.py's discipline by construction."""
-    panel = Panel.from_cache('experiments.findings.hasselt_clean')
-    panel = panel.narrow(
+    layer mirrors chain.py's discipline by construction.
+
+    Single source of truth: the framework's canonical cache
+    `experiments/data/cache/hasselt_clean.parquet`, loaded via
+    `Panel.from_cache`. Update it via `corroborate hypothesis
+    hasselt_clean --ingest <corpus>` — never by hand.
+    """
+    cells = Panel.from_cache('experiments.findings.hasselt_clean').cells
+    cells = cells.filter(
         (pl.col('gamma') == 0.99) & pl.col('corpus').is_in(CANONICAL_G099_CORPORA)
     )
-    panel = panel.narrow(PREMISE_ACTIVE_PER_STRATUM)
-    return panel.cells
+    cells = cells.filter(PREMISE_ACTIVE_PER_STRATUM)
+    return cells
 
 
 def load_g099_dormancy_report() -> pl.DataFrame:
