@@ -109,11 +109,20 @@ between-env variance to support a generalisable outcome claim.
 behind the scalar table. Each panel shows V vs D median across
 seeds + IQR + 5/95 envelope, with mean per-seed peak (♦) and the
 late-30% window (gold band). Title shows P(D>V) under both
-metrics: **6 of 12 envs are metric-sensitive (↕)** — their
-peak-vs-late30 P(D>V) disagree on sign (SpaceInvaders, MetaMaze,
-MountainCar, Acrobot, FourRooms, Snake, CartPole). This is the
-methodological finding the framework's dual-metric reporting
-discipline (peak ∥ late30) is designed to surface.
+metrics. Cross-env partition: **6 ✓ agree, 4 metric-sensitive ↕,
+2 saturated ⊥**. The ↕ envs are exactly what the framework's
+dual-metric reporting discipline (peak ∥ late30) is designed to
+surface.
+
+**Saturation flag (⊥)**: CartPole and FourRooms have >70% of
+seeds peaking within 1% of the env reward cap (CartPole 29/30 V
++ 28/30 D at 500; FourRooms binary goal-reach). At these envs the
+peak P(D>V) is dominated by 1-2 below-cap outlier seeds and is
+not a real treatment effect. The forest plot's d_peak marker
+shows CartPole at d≈-0.27 (red harm), but this is a sampling
+artifact — both arms saturate. Longer training (e.g., 200k steps)
+would either remove the saturation or expose a meaningful
+post-saturation stability difference; left for future work.
 
 → `figures/02_outcome_per_env.png` and `.csv` (per-env Cohen's d table)
 → `figures/02b_learning_curves.png` (per-burst trajectory panel)

@@ -61,6 +61,33 @@ def main() -> None:
     late = _arm_diff_per_env(df, OUTCOME_LATE_COL)
     peak = _arm_diff_per_env(df, OUTCOME_PEAK_COL)
 
+    # Saturation detection: an env's peak metric is uninformative
+    # when most seeds in either arm reach the env's reward cap.
+    # Flag envs where >70% of seeds in EITHER arm peak within 1% of
+    # the joint env-cap. CartPole (29/30 V, 28/30 D at 500) and
+    # FourRooms (1.00 cap, both arms saturate) qualify; the d_peak
+    # at these envs is dominated by 1-2 below-cap outlier seeds.
+    saturated_envs: set[str] = set()
+    for env in ENV_ORDER:
+        sub_e = df.filter(pl.col('env_name') == env)
+        peaks_all = sub_e[OUTCOME_PEAK_COL].drop_nulls().to_list()
+        if not peaks_all:
+            continue
+        env_cap = max(peaks_all)
+        sat_per_arm: list[float] = []
+        for arm in (BASELINE_ARM, TREATMENT_ARM):
+            arm_peaks = (
+                sub_e.filter(pl.col('arm_key') == arm)
+                [OUTCOME_PEAK_COL].drop_nulls().to_list()
+            )
+            if arm_peaks and env_cap > 0:  # only positive-cap envs saturate
+                sat_per_arm.append(
+                    sum(1 for v in arm_peaks if v >= 0.99 * env_cap)
+                    / len(arm_peaks)
+                )
+        if sat_per_arm and max(sat_per_arm) > 0.7:
+            saturated_envs.add(env)
+
     # Per-env rows, ordered by late-outcome d.
     by_id_late = {s.stratum_id[0]: s for s in late.per_stratum}
     by_id_peak = {s.stratum_id[0]: s for s in peak.per_stratum}
@@ -145,10 +172,27 @@ def main() -> None:
         ax.set_xlabel("Cohen's d (D − V)", fontsize=10)
         ax.set_title(title, fontsize=10.5)
         ax.grid(alpha=0.3, axis='x')
+    # Mark saturated envs on the y-tick labels with ⊥.
+    labels_marked = [
+        (lab + ' ⊥' if r[0] in saturated_envs else lab)
+        for lab, r in zip(labels, rows, strict=False)
+    ]
     axes[0].set_yticks(y_pos)
-    axes[0].set_yticklabels(labels)
+    axes[0].set_yticklabels(labels_marked)
     axes[0].invert_yaxis()
     axes[0].set_ylim(diamond_y + 0.8, -0.8)
+
+    # Footnote about saturation flag — anchor to FIGURE coords below
+    # the x-axis labels so it doesn't overlap.
+    if saturated_envs:
+        sat_list = ', '.join(env_label(e) for e in saturated_envs)
+        fig.text(
+            0.5, 0.01,
+            f'⊥ saturated peak — d_peak dominated by below-cap outlier '
+            f'seeds, not real treatment effect ({sat_list})',
+            ha='center', va='bottom', fontsize=8, style='italic',
+            color='#666',
+        )
 
     # Title with cross-env P(D > V)
     fig.suptitle(
