@@ -1487,3 +1487,160 @@ def test_stream_assemble_frames_single_frame_fast_path(
     result = _stream_assemble_frames([single], walk_root=tmp_path)
     assert result.height == 1
     assert result.columns == ['id', 'val']
+
+
+
+# ============ Row-group-OOM streaming compute ============
+
+
+@measurable(reads=('q_per_step',))
+def _stream_mean_q(record: Mapping[str, object]) -> float:
+    """Trace-reading measurable for the streaming-compute test: the
+    mean of a per-step list column. Mirrors the shape of the real
+    substrate per-step reductions (e.g. `online_max_q_per_step`)
+    that blow up RAM when the whole trace file is read at once."""
+    q = record.get('q_per_step')
+    if not isinstance(q, (list, tuple)) or not q:
+        raise KeyError('q_per_step missing or empty on this cell')
+    vals = [float(v) for v in q]
+    return sum(vals) / len(vals)
+
+
+def _write_single_row_group_traces(
+    path: 'Path', *, n_cells: int, steps_per_cell: int,
+) -> None:
+    """Write a traces.parquet whose ENTIRE content is one row group
+    — the pathological layout that defeats row-group streaming
+    (snake_g099_canonical_3M_ckpt: 60 cells in 1 RG). pyarrow's
+    `write_table(..., row_group_size=)` with a size >= row count
+    yields a single row group."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    ids = [f'cell-{i}' for i in range(n_cells)]
+    q_per_step = [
+        [float(i * 100 + s) for s in range(steps_per_cell)]
+        for i in range(n_cells)
+    ]
+    table = pa.table({'id': ids, 'q_per_step': q_per_step})
+    # row_group_size larger than the row count -> exactly 1 RG.
+    pq.write_table(table, str(path), row_group_size=n_cells + 1)
+
+
+def test_streaming_compute_single_row_group_takes_per_cell_fallback(
+    tmp_path: 'Path',
+    monkeypatch: 'pytest.MonkeyPatch',
+) -> None:
+    """A traces.parquet written as ONE huge row group must NOT be
+    read whole (that OOMs on real 30 GB files). The streaming
+    compute path detects the single-RG layout and drops to the
+    per-cell lazy-scan fallback — verified here by asserting the
+    fallback function is the one that ran AND that the per-step
+    reduction comes out correct.
+
+    Root cause this guards: row groups are the framework's streaming
+    unit, but a cloud sweep merger can emit a single row group
+    spanning every cell; iterating "by row group" then loads the
+    whole file at once."""
+    import pyarrow.parquet as pq
+
+    from corroborate.corpus import measurements as _m
+    from corroborate.corpus.measurements import (
+        compute_trace_measurables_streaming,
+    )
+
+    n_cells = 12
+    traces_path = tmp_path / 'traces.parquet'
+    _write_single_row_group_traces(
+        traces_path, n_cells=n_cells, steps_per_cell=8,
+    )
+    # Precondition: the writer really produced a single row group.
+    pf = pq.ParquetFile(str(traces_path))
+    assert pf.num_row_groups == 1
+    assert pf.metadata.num_rows == n_cells
+
+    runs_df = pl.DataFrame({'id': [f'cell-{i}' for i in range(n_cells)]})
+
+    # Spy on the per-cell fallback so we can assert it was the path
+    # taken (the OOM-safe branch), not the whole-RG read.
+    calls: list[int] = []
+    # Spying on the private fallback is the most direct assertion
+    # that the OOM-safe branch ran (matches this file's existing
+    # `_stream_assemble_frames` private-access convention).
+    original = _m._compute_trace_measurables_per_id  # pyright: ignore[reportPrivateUsage]
+
+    def _spy(*args: object, **kwargs: object) -> pl.DataFrame:
+        calls.append(1)
+        return original(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(
+        _m, '_compute_trace_measurables_per_id', _spy,
+    )
+
+    # `batch_size` smaller than the single RG's row count forces the
+    # fallback (max_rg_rows > n_per_rg).
+    out = compute_trace_measurables_streaming(
+        runs_df,
+        traces_path,
+        measurable_reads=frozenset({'q_per_step'}),
+        required=['_stream_mean_q'],
+        batch_size=4,
+    )
+
+    # The per-cell fallback was the path taken — NOT the whole-RG
+    # read that would OOM on a real 30 GB file.
+    assert calls == [1]
+
+    # Correctness: mean of [i*100, i*100+1, ..., i*100+7] = i*100 + 3.5.
+    out_sorted = out.sort('id')
+    got = dict(zip(
+        out_sorted['id'].to_list(),
+        out_sorted['_stream_mean_q'].to_list(),
+    ))
+    for i in range(n_cells):
+        assert got[f'cell-{i}'] == pytest.approx(i * 100 + 3.5)
+
+
+def test_build_measurements_streaming_persists_single_row_group(
+    tmp_path: 'Path',
+) -> None:
+    """`build_measurements_streaming` lands the trace-derived
+    measurable in `measurements.parquet` for a single-row-group
+    trace file — the full ingest contract for the snake_3M corpus
+    (cells enter the store ONLY through the build path, never a
+    hand-written `df.write_parquet`)."""
+    from corroborate.corpus.measurements import (
+        build_measurements_streaming,
+    )
+
+    n_cells = 10
+    corpus = tmp_path / 'corp'
+    corpus.mkdir()
+    traces_path = corpus / 'traces.parquet'
+    _write_single_row_group_traces(
+        traces_path, n_cells=n_cells, steps_per_cell=6,
+    )
+    runs_df = pl.DataFrame({'id': [f'cell-{i}' for i in range(n_cells)]})
+    runs_df.write_parquet(corpus / 'runs.parquet')
+
+    out_path = build_measurements_streaming(
+        corpus,
+        required=['_stream_mean_q'],
+        runs_df=runs_df,
+        traces_path=traces_path,
+        measurable_reads=frozenset({'q_per_step'}),
+    )
+    assert out_path.exists()
+
+    stored = load_measurements(corpus)
+    assert '_stream_mean_q' in stored.columns
+    assert stored.height == n_cells
+    stored_sorted = stored.sort('id')
+    vals = stored_sorted['_stream_mean_q'].to_list()
+    # mean of [i*100 .. i*100+5] = i*100 + 2.5.
+    for i, v in enumerate(vals):
+        assert v == pytest.approx(i * 100 + 2.5)
+    # The store carries id + measurable only — no per-step trace col
+    # leaked into the persisted measurements.parquet.
+    assert 'q_per_step' not in stored.columns
+

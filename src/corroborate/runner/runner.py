@@ -2166,6 +2166,11 @@ def _load_one_corpus(
     from corroborate.corpus.integrity import (
         TraceContaminationError, assert_traces_subset_of_runs,
     )
+    # Measurable trace reads to stream directly from traces.parquet
+    # (never materialised onto `df`). Stays empty in the CI8
+    # contamination branch -> trace-dependent measurables null, same
+    # as the pre-streaming behaviour.
+    streamed_trace_reads: frozenset[str] = frozenset()
     try:
         assert_traces_subset_of_runs(sub)
     except TraceContaminationError as e:
@@ -2198,9 +2203,31 @@ def _load_one_corpus(
         drifted = _drifted_or_missing_measurables(sub, required)
         drifted_reads = _required_record_keys(drifted)
         cols_for_join = frozenset(drifted_reads & trace_reads)
-        df = _join_required_traces(
-            df, sub / 'traces.parquet', cols_for_join,
-        )
+        # **Row-group-OOM root cause** (snake_g099_canonical_3M_ckpt:
+        # 60 cells in a SINGLE row group ~= 30 GB uncompressed):
+        # `_join_required_traces` does a full `pl.read_parquet` of
+        # the (per-step) trace columns the measurables read — that
+        # materialises the whole trace file at once and OOMs the
+        # worker regardless of the local file's row-group layout.
+        #
+        # Split the join into two paths:
+        #   - **Measurable** trace reads stream via
+        #     `build_measurements_streaming` (below) with bounded
+        #     RAM (row-group batching + per-cell lazy-scan fallback
+        #     for single-RG files). They are NOT joined onto `df`.
+        #   - **Analysis** trace reads (consumed directly off the
+        #     cell record by an analysis fn) still need to ride on
+        #     `df` to bridge-evaluate time, but those are per-burst
+        #     scalars in practice, not the per-step heavies — join
+        #     only that subset here.
+        analysis_cols_for_join = frozenset(cols_for_join & analysis_reads)
+        if analysis_cols_for_join:
+            df = _join_required_traces(
+                df, sub / 'traces.parquet', analysis_cols_for_join,
+            )
+        # Record-key set the measurable-side streaming path will
+        # read from `traces.parquet` directly (never onto `df`).
+        streamed_trace_reads = frozenset(cols_for_join - analysis_reads)
     # **Phase 2.1** (CACHE_BUILD.md): route per-cell measurable
     # computation through `build_measurements` so the per-corpus
     # `measurements.parquet` store is populated as a side effect.
@@ -2210,7 +2237,7 @@ def _load_one_corpus(
     # downstream shape (runs + traces + measurables) unchanged.
     if 'id' in df.columns:
         from corroborate.corpus.measurements import (
-            build_measurements,
+            build_measurements_streaming,
             load_measurements,
         )
         # **CACHE_ADDITIVITY.md fast-path** (cont.): when the sidecar
@@ -2239,7 +2266,26 @@ def _load_one_corpus(
             from corroborate.measurables.measurable import (
                 transitive_reads as _transitive_reads,
             )
-            df_cols = set(df.columns)
+            # Availability for the satisfiability gate is `df.columns`
+            # PLUS the measurable trace reads we will stream directly
+            # from `traces.parquet` (those never land on `df`, but
+            # they ARE available to the streaming compute path).
+            # Intersect with the trace schema so a measurable reading
+            # a column the trace doesn't carry is still flagged
+            # unsatisfiable (metadata-only scan, no data read).
+            streamable_available: set[str] = set()
+            traces_for_stream = sub / 'traces.parquet'
+            if streamed_trace_reads and traces_for_stream.exists():
+                try:
+                    _tschema = pl.scan_parquet(
+                        traces_for_stream,
+                    ).collect_schema()
+                    streamable_available = set(
+                        streamed_trace_reads & set(_tschema.names()),
+                    )
+                except pl.exceptions.ComputeError:
+                    streamable_available = set()
+            df_cols = set(df.columns) | streamable_available
             satisfiable_required: list[str] = []
             unsatisfiable_skipped: list[str] = []
             for name in required:
@@ -2270,8 +2316,21 @@ def _load_one_corpus(
                     f'`corroborate restore`): '
                     f'{", ".join(sorted(unsatisfiable_skipped))}',
                 )
-            build_measurements(
-                sub, required=satisfiable_required, runs_df=df,
+            # Stream the measurable trace reads (bounded RAM)
+            # instead of joining them onto `df` first. For
+            # single-row-group trace files (the snake_3M OOM case)
+            # the streaming primitive drops to a per-cell lazy scan
+            # so peak RAM is one cell's trace footprint, not the
+            # whole file.
+            build_measurements_streaming(
+                sub,
+                required=satisfiable_required,
+                runs_df=df,
+                traces_path=(
+                    traces_for_stream
+                    if traces_for_stream.exists() else None
+                ),
+                measurable_reads=streamed_trace_reads,
                 measurable_signature_fn=_measurable_signature,
             )
         loaded = load_measurements(sub, columns=list(required))
