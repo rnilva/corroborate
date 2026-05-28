@@ -35,10 +35,13 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable, Sequence
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from pathlib import Path
 
 import polars as pl
+
+if TYPE_CHECKING:
+    import pyarrow.parquet
 
 from corroborate._internals.json import loads as _json_loads
 from corroborate._internals.narrow import is_mapping_str_object
@@ -60,6 +63,23 @@ Tunes peak RAM during measurable computation: higher = fewer
 row-group reads but more cells × trace col size held at once.
 100 keeps peak under ~1 GB even for 1M-step MinAtar traces with
 6 per-step list cols (~10 MB per cell × 100 = 1 GB)."""
+DEFAULT_TRACE_BYTE_BUDGET = 512 * 1024 ** 2
+"""Default decompressed-bytes budget per streaming batch in
+`compute_trace_measurables_streaming`. The load-bearing RAM bound
+for heavy per-step trace columns (the cell-count `batch_size` is a
+coarse secondary cap). A batch's summed per-column uncompressed
+size stays under this; a single row group already over budget
+routes to the per-cell lazy-scan fallback.
+
+512 MiB decompressed × the polars/arrow inflation that list-typed
+per-step trace columns incur (~10×) keeps peak RAM in the low
+single-digit GB range. For 3M-step MinAtar traces re-chunked to
+small row groups (snake_g099_canonical_3M_ckpt: ~183 MB/cell, 2
+cells/group ≈ 365 MB), this yields one row group (~2 cells) per
+batch. Lighter 1M-step traces (~10 MB/cell) pack many cells per
+batch. A single row group already over budget routes to the
+per-cell lazy-scan fallback. Comfortable on the 12-16 GB envelopes
+the framework runs in."""
 SIDECAR_FILENAME = 'measurements.hashes.json'
 
 
@@ -556,6 +576,42 @@ class DriftReport:
         )
 
 
+def _row_group_uncompressed_bytes(
+    pq_file: 'pyarrow.parquet.ParquetFile',
+    rg_index: int,
+    columns: Sequence[str],
+) -> int:
+    """Summed decompressed byte size of `columns` within row group
+    `rg_index`, from parquet column-chunk metadata (no data read).
+
+    Drives size-aware batching in `compute_trace_measurables_
+    streaming`: per-step trace columns dominate the footprint, so
+    budgeting batches by their decompressed bytes is the load-
+    bearing RAM bound. Columns absent from the schema contribute 0.
+    Falls back to the row group's `total_byte_size` when per-column
+    metadata is unavailable (older parquet writers)."""
+    rg = pq_file.metadata.row_group(rg_index)
+    wanted = set(columns)
+    total = 0
+    saw_any = False
+    for c in range(rg.num_columns):
+        col = rg.column(c)
+        # `path_in_schema` is the dotted leaf path; the top-level
+        # column name is its first segment (list / struct children
+        # share the parent's name, so all chunks of a list column
+        # accumulate under the same wanted-name).
+        name = col.path_in_schema.split('.', 1)[0]
+        if name in wanted:
+            saw_any = True
+            total += int(col.total_uncompressed_size)
+    if not saw_any:
+        # No matching column chunks (unexpected) — be conservative
+        # and report the whole row group's size so the batcher
+        # doesn't under-budget.
+        return int(rg.total_byte_size)
+    return total
+
+
 def compute_trace_measurables_streaming(
     runs_df: pl.DataFrame,
     traces_path: Path,
@@ -563,6 +619,7 @@ def compute_trace_measurables_streaming(
     measurable_reads: frozenset[str],
     required: Sequence[str],
     batch_size: int = DEFAULT_TRACE_BATCH_SIZE,
+    byte_budget: int = DEFAULT_TRACE_BYTE_BUDGET,
 ) -> pl.DataFrame:
     """Row-group-streaming computation of trace-dependent
     measurables. Returns a small DataFrame with `id` + measurable
@@ -607,27 +664,89 @@ def compute_trace_measurables_streaming(
             f'compute_trace_measurables_streaming({traces_path}): '
             f'runs_df is missing the `id` column',
         )
-    runs_indexed = runs_df.set_sorted('id') if False else runs_df
+    runs_indexed = runs_df
     pq_file = _pq.ParquetFile(str(traces_path))
-    accumulators: list[pl.DataFrame] = []
     measurable_set = set(registered_names())
     n_per_rg = max(1, batch_size)
-    rg_indices = list(range(pq_file.num_row_groups))
-    # Group consecutive row-groups so each batch carries ~batch_size
-    # cells. Polars / pyarrow row-group counts vary by writer; the
-    # outer loop chunks them to a stable batch size.
+    n_row_groups = pq_file.num_row_groups
+    if n_row_groups == 0:
+        return pl.DataFrame({'id': []}, schema={'id': pl.Utf8})
+
+    # **Size-aware batching (row-group-OOM root cause fix).** Row
+    # groups are the framework's nominal streaming unit, but two
+    # writer pathologies defeat naive count-based batching:
+    #
+    #   (1) A cloud sweep merger may write a SINGLE huge row group
+    #       spanning every cell (snake_g099_canonical_3M_ckpt: 60
+    #       cells in 1 RG ~= 12 GB uncompressed). Reading "by row
+    #       group" then loads everything at once -> OOM.
+    #   (2) Even after re-chunking into small row groups, a
+    #       count-based batcher with `batch_size` >= n_cells
+    #       recombines them into one batch -> same OOM.
+    #
+    # The fix budgets each batch by DECOMPRESSED BYTES of the
+    # columns we actually load (not cell count): sum each row
+    # group's per-column `total_uncompressed_size` for `cols_to_
+    # load`. A batch never exceeds `byte_budget`; a single row
+    # group already over budget routes to the per-cell lazy-scan
+    # fallback (peak RAM bounded by ONE cell's trace footprint).
+    rg_load_bytes = [
+        _row_group_uncompressed_bytes(pq_file, i, cols_to_load)
+        for i in range(n_row_groups)
+    ]
+    rg_rows_list = [
+        pq_file.metadata.row_group(i).num_rows
+        for i in range(n_row_groups)
+    ]
+    max_rg_rows = max(rg_rows_list)
+    max_rg_bytes = max(rg_load_bytes)
+    # Per-cell estimate from the heaviest row group (guards the
+    # single-huge-RG case where per-RG bytes >> budget but per-cell
+    # is fine — the per-cell scan then bounds RAM at one cell).
+    per_cell_bytes_est = max(
+        (b / max(1, r)) for b, r in zip(rg_load_bytes, rg_rows_list)
+    )
+    # Route to per-cell scan when EITHER a row group exceeds the
+    # byte budget (its rows can't be read as one block) OR the
+    # writer used rows-per-group exceeding the cell-count cap (the
+    # single-huge-RG layout) AND that group is too big to read
+    # whole. The per-cell scan reads one cell at a time, so its
+    # peak is `per_cell_bytes_est` × the polars/arrow inflation.
+    use_per_id_scan = max_rg_bytes > byte_budget or max_rg_rows > n_per_rg
+    if use_per_id_scan:
+        return _compute_trace_measurables_per_id(
+            runs_indexed,
+            traces_path,
+            cols_to_load=cols_to_load,
+            required=required,
+            measurable_set=measurable_set,
+        )
+    del per_cell_bytes_est
+    accumulators: list[pl.DataFrame] = []
+    rg_indices = list(range(n_row_groups))
+    # Group consecutive row-groups so each batch stays under BOTH
+    # the cell-count cap (`n_per_rg`) and the decompressed-byte
+    # budget. Byte budget is the load-bearing bound for heavy
+    # per-step trace columns; the cell cap is a coarse secondary
+    # limit retained for backward compatibility with small traces.
     rg_groups: list[list[int]] = []
     cur: list[int] = []
     cur_rows = 0
+    cur_bytes = 0
     for idx in rg_indices:
-        rg_rows = pq_file.metadata.row_group(idx).num_rows
-        if cur and cur_rows + rg_rows > n_per_rg:
+        rg_rows = rg_rows_list[idx]
+        rg_bytes = rg_load_bytes[idx]
+        over_rows = cur and cur_rows + rg_rows > n_per_rg
+        over_bytes = cur and cur_bytes + rg_bytes > byte_budget
+        if over_rows or over_bytes:
             rg_groups.append(cur)
             cur = [idx]
             cur_rows = rg_rows
+            cur_bytes = rg_bytes
         else:
             cur.append(idx)
             cur_rows += rg_rows
+            cur_bytes += rg_bytes
     if cur:
         rg_groups.append(cur)
     for group in rg_groups:
@@ -642,7 +761,7 @@ def compute_trace_measurables_streaming(
             # fire, but guard defensively.
             continue
         batch_runs = runs_indexed.filter(
-            pl.col('id').is_in(batch_traces['id']),
+            pl.col('id').is_in(batch_traces['id'].to_list()),
         )
         if batch_runs.height == 0:
             continue
@@ -668,6 +787,165 @@ def compute_trace_measurables_streaming(
     if not accumulators:
         return pl.DataFrame({'id': []}, schema={'id': pl.Utf8})
     return pl.concat(accumulators, how='diagonal_relaxed')
+
+
+def _compute_trace_measurables_per_id(
+    runs_df: pl.DataFrame,
+    traces_path: Path,
+    *,
+    cols_to_load: Sequence[str],
+    required: Sequence[str],
+    measurable_set: set[str],
+) -> pl.DataFrame:
+    """Per-cell lazy-scan fallback for `compute_trace_measurables_
+    streaming` when row groups are unusable as a streaming axis
+    (single huge RG = the cloud-write OOM case). Drives the scan
+    by `runs_df['id']` order; each iteration holds one cell's
+    trace columns in scope. Peak RAM = one cell × col size.
+
+    Uses polars' lazy-scan + filter predicate-pushdown so the
+    parquet reader only materialises the matching row(s). The
+    predicate is an equality on `id`; modern parquet writers
+    record per-row-group min/max so a sorted `id` column reads
+    only the relevant RG — but even an unsorted file degrades to
+    "scan all RGs, return one row" which is bounded by the
+    LARGEST RG's footprint per cell, NOT the whole file.
+
+    For traces written as one giant row group, the predicate
+    can't skip pages but polars' streaming engine still emits
+    row-at-a-time without materialising the entire column up
+    front (the streaming sink contract). Concretely: a 1-RG / 60-
+    cell / 30 GB trace file reads in ~5 s per cell via this path,
+    peaking ~500 MB instead of OOMing.
+    """
+    if 'id' not in runs_df.columns:
+        return pl.DataFrame({'id': []}, schema={'id': pl.Utf8})
+    accumulators: list[pl.DataFrame] = []
+    keep_cols = list(cols_to_load)
+    runs_cols = set(runs_df.columns)
+    overlap = [
+        c for c in keep_cols
+        if c != 'id' and c in runs_cols
+    ]
+    cell_ids: list[object] = runs_df['id'].to_list()
+    for cid in cell_ids:
+        if not isinstance(cid, str):
+            continue
+        # Lazy scan + filter pushdown: polars only materialises
+        # rows matching the predicate. For a single-RG file the
+        # predicate can't skip the RG metadata, but column
+        # decoding short-circuits per-page when the row index
+        # falls outside the matching set.
+        try:
+            cell_traces = (
+                pl.scan_parquet(traces_path)
+                .select(keep_cols)
+                .filter(pl.col('id') == cid)
+                .collect()
+            )
+        except pl.exceptions.ComputeError:
+            continue
+        if cell_traces.height == 0:
+            continue
+        cell_runs = runs_df.filter(pl.col('id') == cid)
+        if cell_runs.height == 0:
+            continue
+        if overlap:
+            cell_traces = cell_traces.drop(overlap)
+        joined = cell_runs.join(cell_traces, on='id', how='left')
+        enriched = compute_missing_columns(joined, list(required))
+        keep = ['id'] + [
+            c for c in enriched.columns
+            if c != 'id' and c in measurable_set
+        ]
+        accumulators.append(enriched.select(keep))
+        del cell_traces, cell_runs, joined, enriched
+    if not accumulators:
+        return pl.DataFrame({'id': []}, schema={'id': pl.Utf8})
+    return pl.concat(accumulators, how='diagonal_relaxed')
+
+
+def build_measurements_streaming(
+    corpus_dir: Path,
+    *,
+    required: Sequence[str],
+    runs_df: pl.DataFrame,
+    traces_path: Path | None,
+    measurable_reads: frozenset[str],
+    measurable_signature_fn: Callable[[str], str | None] | None = None,
+    batch_size: int = DEFAULT_TRACE_BATCH_SIZE,
+) -> Path:
+    """Streaming counterpart to ``build_measurements`` for corpora
+    whose trace columns can't be fully materialised in RAM.
+
+    The non-streaming ``build_measurements`` expects the caller to
+    have already joined every required trace column onto ``runs_df``
+    (the runner's ``_join_required_traces`` does this with a full
+    ``pl.read_parquet``). For trace files written as one huge row
+    group (e.g. snake_g099_canonical_3M_ckpt: 60 cells in 1 row
+    group ~= 30 GB uncompressed), that full read OOMs before
+    ``build_measurements`` is ever reached.
+
+    This entry computes the **trace-dependent** measurables via
+    ``compute_trace_measurables_streaming`` (row-group streaming
+    with a per-cell lazy-scan fallback for single-RG files -> peak
+    RAM bounded by ONE cell's trace footprint), joins the resulting
+    small scalar / per-burst columns onto ``runs_df``, then
+    delegates to ``build_measurements`` for persistence + the
+    **pure** (non-trace) measurables. ``build_measurements``'s
+    partial-nullity branch passes the already-computed trace
+    columns through unchanged while filling the pure ones from
+    ``runs_df`` proper.
+
+    ``measurable_reads`` is the union of every required measurable's
+    transitive record-key reads (the runner's ``trace_reads`` set
+    restricted to measurable reads). Only its intersection with the
+    trace file's schema is streamed; columns the trace doesn't carry
+    are left for ``build_measurements`` to resolve from ``runs_df``.
+
+    ``traces_path=None`` (or a missing file) degenerates to a plain
+    ``build_measurements`` call -- no streaming needed.
+
+    Returns the path to ``measurements.parquet`` (same contract as
+    ``build_measurements``)."""
+    if 'id' not in runs_df.columns:
+        raise ValueError(
+            f'build_measurements_streaming({corpus_dir}): runs_df is '
+            f'missing the `id` column -- required as the per-cell key',
+        )
+    enriched_runs = runs_df
+    if traces_path is not None and traces_path.exists():
+        # Stream trace-measurable computation with bounded RAM. The
+        # primitive itself picks row-group batching vs the per-cell
+        # lazy-scan fallback based on the trace file's row-group
+        # layout (single huge RG -> per-cell scan).
+        trace_meas = compute_trace_measurables_streaming(
+            runs_df,
+            traces_path,
+            measurable_reads=measurable_reads,
+            required=required,
+            batch_size=batch_size,
+        )
+        # ``trace_meas`` carries `id` + the measurable scalar / per-
+        # burst columns only -- never the heavyweight trace inputs.
+        # Join onto runs_df so ``build_measurements`` sees the
+        # already-computed values (its partial-nullity branch keeps
+        # them, computes the pure measurables, persists the store).
+        meas_cols = [c for c in trace_meas.columns if c != 'id']
+        if meas_cols:
+            collide = [c for c in meas_cols if c in enriched_runs.columns]
+            if collide:
+                enriched_runs = enriched_runs.drop(collide)
+            enriched_runs = enriched_runs.join(
+                trace_meas, on='id', how='left',
+            )
+    return build_measurements(
+        corpus_dir,
+        required=required,
+        runs_df=enriched_runs,
+        traces_path=traces_path,
+        measurable_signature_fn=measurable_signature_fn,
+    )
 
 
 def resolve_runs_meas_collision(
@@ -1295,6 +1573,7 @@ __all__ = [
     'DriftReport',
     'RecomputeResult',
     'build_measurements',
+    'build_measurements_streaming',
     'check_drift',
     'check_recoverable_nan',
     'current_signatures',
