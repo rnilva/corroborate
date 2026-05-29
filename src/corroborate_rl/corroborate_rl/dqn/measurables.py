@@ -3340,6 +3340,9 @@ def env_disc_raw_alignment(
     interchangeable; below that, the bridge must commit to one
     semantics and justify it. Companion to `env_reward_polarity`
     (the REACH/SURVIVE moderator)."""
+    mc_return_raw_episodes = np.asarray(
+        mc_return_raw_episodes, dtype=np.float64,
+    )
     if mc_return_raw_episodes.size == 0:
         return float('nan')
     try:
@@ -4084,6 +4087,9 @@ def _mc_return_raw_per_burst_mean(
     mc_return_raw_episodes: npt.NDArray[np.floating],  # injected
 ) -> npt.NDArray[np.floating]:
     del record
+    mc_return_raw_episodes = np.asarray(
+        mc_return_raw_episodes, dtype=np.float64,
+    )
     if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return np.full((0,), float('nan'), dtype=np.float64)
     return mc_return_raw_episodes.mean(axis=1)
@@ -4811,6 +4817,9 @@ def eval_best_burst_raw_mean(
     closure-hash auto-invalidates when the reconstruction logic
     changes."""
     del record
+    mc_return_raw_episodes = np.asarray(
+        mc_return_raw_episodes, dtype=np.float64,
+    )
     if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return float('nan')
     return float(mc_return_raw_episodes.mean(axis=1).max())
@@ -4854,6 +4863,9 @@ def eval_final_raw_mean(
     intermediate γ. The raw version is the natural game-score
     metric."""
     del record
+    mc_return_raw_episodes = np.asarray(
+        mc_return_raw_episodes, dtype=np.float64,
+    )
     if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return float('nan')
     return float(mc_return_raw_episodes[-1, :].mean())
@@ -4868,6 +4880,9 @@ def eval_full_auc_raw_mean(
     `mean(mc_return_raw)` over all bursts × episodes. γ-invariant
     integrated AUC for cross-γ / cross-env comparisons."""
     del record
+    mc_return_raw_episodes = np.asarray(
+        mc_return_raw_episodes, dtype=np.float64,
+    )
     if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return float('nan')
     return float(mc_return_raw_episodes.mean())
@@ -4904,6 +4919,9 @@ def eval_late_burst_raw_mean(
     last-30%-bursts mean of `mc_return_raw`. γ-invariant
     convergence-region policy quality."""
     del record
+    mc_return_raw_episodes = np.asarray(
+        mc_return_raw_episodes, dtype=np.float64,
+    )
     if mc_return_raw_episodes.ndim != 2 or mc_return_raw_episodes.size == 0:
         return float('nan')
     n_bursts = mc_return_raw_episodes.shape[0]
