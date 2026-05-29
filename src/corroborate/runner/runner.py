@@ -84,6 +84,7 @@ from corroborate.measurables import (
     compute_missing_columns,
     get_registered,
     registered_names,
+    registry_source_modules,
     transitive_reads,
 )
 
@@ -1853,7 +1854,16 @@ def _estimate_max_workers(
     Falls back to 1 when available disk can't fit even one
     worker's largest trace (e.g. minatar 1M shards exceed the
     overlay size). The user can override via env var
-    CORROBORATE_CACHE_WORKERS to force a specific value."""
+    CORROBORATE_CACHE_WORKERS to force a specific value.
+
+    RAM caveat (forkserver): the parallel path runs workers under
+    `forkserver`, so each re-imports the substrate (incl. JAX)
+    independently rather than sharing the parent's pages via
+    fork-COW. K workers therefore hold K JAX runtimes; this budget
+    is disk-only, so on a large-disk / small-RAM host the
+    `hard_cap=4` ceiling — not this estimate — is what bounds RAM
+    over-subscription. Add a RAM term here if that ceiling proves
+    too generous on a memory-constrained host."""
     import os
     import shutil
     forced = os.environ.get('CORROBORATE_CACHE_WORKERS')
@@ -2046,6 +2056,34 @@ def _corpus_stamp(sub: Path) -> str:
     if (sub.parent / 'runs.parquet').exists():
         return f'{sub.parent.name}/{sub.name}'
     return sub.name
+
+
+def _reestablish_registry(initializer_modules: tuple[str, ...]) -> None:
+    """ProcessPoolExecutor `initializer` for the parallel ingest
+    path. Runs ONCE per fresh worker (before any `_load_one_corpus`
+    task) and re-imports the substrate modules whose `@measurable`
+    decorators populate the registry.
+
+    Load-bearing for the `forkserver` / `spawn` start methods: a
+    worker started that way begins with an EMPTY interpreter — no
+    inheritance of the parent's measurable registry. Without this
+    re-import every `_load_one_corpus` call would compute against a
+    registry missing the substrate's measurables and silently
+    null-pad them (CACHE_BUILD.md: a measurable absent from the
+    registry is skipped, not errored). `fork` formerly side-stepped
+    this via copy-on-write inheritance — but fork-after-threading
+    (numpy/OpenBLAS, JAX, boto3 sessions all hold internal mutexes
+    in parent threads that don't exist in the child) deadlocks the
+    child's first such call in `futex_wait`. `forkserver` +
+    re-import is the deadlock-free equivalent.
+
+    `importlib.import_module` is idempotent on already-loaded
+    modules; the forkserver server process may have some of these
+    cached, in which case the re-import is a dict lookup. Import
+    failures propagate — a worker that can't re-establish the
+    registry must fail loudly, not run with a degraded one."""
+    for mod in initializer_modules:
+        importlib.import_module(mod)
 
 
 def _load_one_corpus(
@@ -2446,6 +2484,7 @@ def _load_directory(
     bridges: tuple[Bridge, ...],
     corpus_dirs: Sequence[Path] | None = None,
     force_recompute: frozenset[str] = frozenset(),
+    initializer_modules: tuple[str, ...] | None = None,
 ) -> pl.DataFrame:
     """Walk subdirs of `root`; for each subdir's `runs.parquet`,
     load it, join the trace columns required by:
@@ -2469,7 +2508,16 @@ def _load_directory(
     only those named corpus dirs instead of `root.iterdir()`. CI1
     fires per-corpus rather than across the root. The
     disk-budget calculation still uses `root` as the volume
-    reference (the named dirs share a filesystem)."""
+    reference (the named dirs share a filesystem).
+
+    `initializer_modules`: the substrate modules each parallel
+    worker re-imports to re-establish the `@measurable` registry
+    (the multi-corpus path runs under `forkserver`, NOT `fork` —
+    fork-after-threading deadlocks; see `_reestablish_registry`).
+    Defaults to `registry_source_modules()` (every currently-
+    registered measurable's defining module) — substrate-agnostic,
+    no CLI plumbing. The single-worker sequential path never forks
+    and ignores this entirely."""
     # CORPUS_INTEGRITY.md CI1: refuse nested corpora at ingest
     # rather than silently drop the inner ones (the runner walks
     # one level deep). Caller fixes the layout, then retries.
@@ -2567,18 +2615,57 @@ def _load_directory(
             for line in results[-1][1]:
                 print(line, file=sys.stderr, flush=True)
     else:
-        # Parallel path — `fork` start method on Linux inherits the
-        # parent's measurable registry via copy-on-write; no
-        # per-worker re-import needed. Each worker is one
-        # ProcessPoolExecutor task per subdir.
+        # Parallel path — one ProcessPoolExecutor task per subdir.
+        #
+        # **Start method: `forkserver`, NOT `fork`.** The measurable
+        # registry is populated by importing substrate modules that
+        # transitively import fork-UNSAFE libraries (numpy/OpenBLAS
+        # thread pools, JAX's import-time thread pool, boto3/fsspec
+        # sessions for cloud restore). The CLI imports the hypothesis
+        # module — and thus those libraries — in the PARENT before
+        # this point. `fork()` then clones a process whose child
+        # inherits those libraries' internal mutexes locked by parent
+        # threads that don't exist in the child; the child's first
+        # numpy/JAX/boto call blocks forever in `futex_wait`
+        # (observed: parent + 3 workers at 0% CPU, `futex_wait_queue`,
+        # for >1h). JAX itself emits a RuntimeWarning that os.fork()
+        # will likely deadlock.
+        #
+        # `forkserver` forks workers from a clean server process that
+        # has NOT imported those libraries, so no locked mutex is
+        # inherited. The trade-off — a forkserver worker starts with
+        # an EMPTY registry (no COW inheritance) — is paid by the
+        # `initializer=_reestablish_registry`, which re-imports the
+        # substrate modules in each fresh worker. `spawn` is the
+        # fallback where `forkserver` is unavailable (non-POSIX);
+        # both are fork-safe.
+        #
+        # Because each worker re-imports the substrate, each re-imports
+        # JAX. The CLI stamps `JAX_PLATFORMS=cpu` before the pool (see
+        # `cli/hypothesis.py`) and workers inherit `os.environ`, so they
+        # init JAX CPU-only — no GPU probe. A LIBRARY caller of
+        # `_load_directory` that leaves `JAX_PLATFORMS` unset (or `gpu`)
+        # would have K workers each probe the GPU → contention / OOM;
+        # such callers must stamp the device env var themselves.
         import concurrent.futures as _cf
         import multiprocessing as _mp
-        ctx = _mp.get_context('fork')
+        init_modules = (
+            registry_source_modules()
+            if initializer_modules is None
+            else initializer_modules
+        )
+        available = _mp.get_all_start_methods()
+        start_method = (
+            'forkserver' if 'forkserver' in available else 'spawn'
+        )
+        ctx = _mp.get_context(start_method)
         results = [
             (None, []) for _ in sub_dirs
         ]
         with _cf.ProcessPoolExecutor(
             max_workers=max_workers, mp_context=ctx,
+            initializer=_reestablish_registry,
+            initargs=(init_modules,),
         ) as pool:
             futures: dict[_cf.Future[
                 tuple[pl.DataFrame | None, list[str]]

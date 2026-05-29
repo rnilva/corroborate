@@ -28,6 +28,7 @@ from corroborate.measurables.measurable import (
     register,
     register_as,
     registered_names,
+    registry_source_modules,
     transitive_measurables,
     transitive_reads,
 )
@@ -67,6 +68,7 @@ __all__ = [
     'register',
     'register_as',
     'registered_names',
+    'registry_source_modules',
     'slice_axis',
     'transitive_measurables',
     'transitive_reads',

@@ -280,6 +280,16 @@ class Measurable[R: Mapping[str, object], T]:
 _REGISTRY: Registry[Measurable[Mapping[str, object], object]] = Registry()
 
 
+# Modules that registered a measurable whose `fn.__module__` does NOT
+# name the registering site. `register_as` aliases carry the factory's
+# module (`reductions`), not the substrate that aliased them — recorded
+# here at alias time so `registry_source_modules()` (the forkserver /
+# spawn worker re-import set) re-runs the aliasing module. Without it a
+# `register_as`-only module is silently absent from a fresh worker's
+# registry and its aliases null-pad.
+_EXTRA_SOURCE_MODULES: set[str] = set()
+
+
 def get_registered(
     name: str,
 ) -> Measurable[Mapping[str, object], object] | None:
@@ -371,6 +381,20 @@ def register_as[R: Mapping[str, object], T](
         reads=reads if reads is not None else m.reads,
         compose_of=m.compose_of,
     )
+    # `aliased.fn.__module__` points at the factory that minted `m`
+    # (e.g. `corroborate.measurables.reductions`), NOT the substrate
+    # module calling `register_as` here. Record the caller's module so
+    # the forkserver / spawn re-import set (`registry_source_modules`)
+    # re-runs it — a `register_as`-only module (no plain `@measurable`)
+    # is otherwise absent from a fresh worker and its aliases null-pad.
+    # `inspect.getmodule(frame)` resolves via the frame's code file →
+    # typed `ModuleType | None`, no `Any` leak.
+    _frame = inspect.currentframe()
+    _caller_mod = (
+        inspect.getmodule(_frame.f_back) if _frame is not None else None
+    )
+    if _caller_mod is not None and _caller_mod.__name__ != '__main__':
+        _EXTRA_SOURCE_MODULES.add(_caller_mod.__name__)
     register(aliased)
     return aliased
 
@@ -379,6 +403,49 @@ def registered_names() -> tuple[str, ...]:
     """Sorted tuple of all currently-registered measurable names.
     Useful for debug / diagnostic output."""
     return _REGISTRY.names()
+
+
+def registry_source_modules() -> tuple[str, ...]:
+    """Sorted distinct `fn.__module__` of every registered
+    measurable — the import set that, re-executed in a fresh
+    interpreter, re-runs the `@measurable` decorators that
+    populated the registry.
+
+    The substrate-agnostic recovery surface for fork-unsafe
+    parallel workers (`runner._load_directory`). A worker spawned
+    under `forkserver` / `spawn` starts with an EMPTY registry;
+    re-importing exactly these modules re-establishes it without
+    any per-substrate CLI plumbing.
+
+    Modules whose name can't be re-imported by string are
+    excluded:
+    - `__main__` — a worker re-importing `__main__` would re-run
+      the parent's entry script, not the registration site.
+    - dunder-only / empty names — defensive against synthetic
+      functions with a stripped `__module__`.
+
+    Factory-composed measurables (`from_key`, `reduce_axis`, …)
+    carry `fn.__module__ == 'corroborate.measurables.reductions'`
+    rather than the substrate module that composed them. When such a
+    composition is bound to a stable name via `register_as`, that call
+    records its *caller's* module in `_EXTRA_SOURCE_MODULES` (unioned
+    in below) — so a `register_as`-only module (one with no plain
+    `@measurable`, e.g. `corroborate_rl.dqn.trace_reductions`) is still
+    re-imported in a fresh worker. Without that record its aliases
+    would be silently absent from the worker registry and come back
+    all-null."""
+    mods: set[str] = set()
+    for name in _REGISTRY.names():
+        m = _REGISTRY.get(name)
+        if m is None:
+            continue
+        mod = m.fn.__module__
+        if mod and mod != '__main__':
+            mods.add(mod)
+    # `register_as` aliases carry the factory's module, not the
+    # aliasing substrate's; that module is recorded at alias time.
+    mods.update(_EXTRA_SOURCE_MODULES)
+    return tuple(sorted(mods))
 
 
 def transitive_measurables(name: str) -> frozenset[str]:
