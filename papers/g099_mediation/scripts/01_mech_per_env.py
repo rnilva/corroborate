@@ -115,9 +115,17 @@ def main() -> None:
     ds = [r[3] for r in rows]
     ses = [r[4] for r in rows]
     labels = [env_label(r[0]) for r in rows]
+    # Colour by SIGNIFICANCE (95% CI excludes zero), NOT by the point
+    # estimate — so a dot's colour agrees with its error bar. Colouring
+    # by `d < -0.2` alone painted PacMan / Acrobot / LunarLander green
+    # ("DDQN reduces bias") while their CIs cross zero (inconclusive) —
+    # a green dot with whiskers straddling 0. CI-aware colouring makes
+    # those grey; only CI-excludes-zero envs get green/red.
     colors = [
-        COLOR_HELPS if d < -0.2 else COLOR_HARMS if d > 0.2 else COLOR_NULL
-        for d in ds
+        COLOR_HELPS if d + 1.96 * se < 0
+        else COLOR_HARMS if d - 1.96 * se > 0
+        else COLOR_NULL
+        for d, se in zip(ds, ses)
     ]
 
     # 95% CIs
