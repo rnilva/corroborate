@@ -93,13 +93,52 @@ def main() -> None:
             s.n_seeds_baseline, s.n_seeds_treatment,
         ))
 
+    # ─── robust (median + IQR) companion to the mean-based Cohen's d ───
+    # Δ_med = (median_D − median_V) / pooled_IQR — median numerator, IQR
+    # scale → scale-free + cross-env comparable (parallels Cohen's d =
+    # Δmean/pooled_SD) but ROBUST to the heavy tails that make the MEAN
+    # misleading. Snake is the canonical divergence: mean Cohen's d=+0.18
+    # (4/30 D seeds Q-explode → heavy tail) yet median Δ<0 (typical seed:
+    # DDQN reduces bias). Bootstrap 95% CI: independent per-arm resample,
+    # B=2000, seed 0 (reproducible).
+    rng = np.random.default_rng(0)
+
+    def _robust_d(vv: np.ndarray, dd: np.ndarray) -> float:
+        iqr_v = float(np.subtract(*np.percentile(vv, [75, 25])))
+        iqr_d = float(np.subtract(*np.percentile(dd, [75, 25])))
+        pooled = 0.5 * (iqr_v + iqr_d)
+        if pooled <= 0:  # degenerate (identical values) — undefined scale
+            return float('nan')
+        return float((np.median(dd) - np.median(vv)) / pooled)
+
+    # med_rows aligns 1:1 with `rows`: (median_V, median_D, robust_d, lo, hi)
+    med_rows: list[tuple[float, float, float, float, float]] = []
+    for r in rows:
+        sub = df.filter(pl.col('env_name') == r[0])
+        v = sub.filter(pl.col('arm_key') == BASELINE_ARM)[MECH_BIAS_COL].to_numpy()
+        d = sub.filter(pl.col('arm_key') == TREATMENT_ARM)[MECH_BIAS_COL].to_numpy()
+        v = v[np.isfinite(v)]
+        d = d[np.isfinite(d)]
+        rd = _robust_d(v, d)
+        boot = np.array([
+            _robust_d(rng.choice(v, v.size, replace=True),
+                      rng.choice(d, d.size, replace=True))
+            for _ in range(2000)
+        ])
+        boot = boot[np.isfinite(boot)]
+        lo = float(np.percentile(boot, 2.5)) if boot.size else float('nan')
+        hi = float(np.percentile(boot, 97.5)) if boot.size else float('nan')
+        med_rows.append((float(np.median(v)), float(np.median(d)), rd, lo, hi))
+
     # ─── CSV ───
     with OUT_CSV.open('w') as f:
-        f.write('env,V_mean_jens,D_mean_jens,cohen_d,cohen_se,n_V,n_D\n')
-        for r in rows:
+        f.write('env,V_mean_jens,D_mean_jens,cohen_d,cohen_se,n_V,n_D,'
+                'V_median_jens,D_median_jens,robust_d,robust_ci_lo,robust_ci_hi\n')
+        for r, m in zip(rows, med_rows):
             f.write(f'{env_label(r[0])},{r[1]:.4f},{r[2]:.4f},'
-                    f'{r[3]:+.3f},{r[4]:.3f},{r[5]},{r[6]}\n')
-        f.write(f'\n# DL pool: d={res.pooled_d:+.3f} '
+                    f'{r[3]:+.3f},{r[4]:.3f},{r[5]},{r[6]},'
+                    f'{m[0]:.4f},{m[1]:.4f},{m[2]:+.3f},{m[3]:+.3f},{m[4]:+.3f}\n')
+        f.write(f'\n# DL pool (mean): d={res.pooled_d:+.3f} '
                 f'SE={res.pooled_se:.3f} τ²={res.pooled.tau2:.3f} '
                 f'I²={res.pooled.I2:.2f}\n')
         f.write(f'# PI: [{res.pooled.pi_lo:+.3f}, {res.pooled.pi_hi:+.3f}]\n')
@@ -108,95 +147,90 @@ def main() -> None:
                 f'{bridge.n_signed_predicted}/{bridge.n_strata_above_floor} '
                 f'envs in direction (of {bridge.n_strata_total} total), '
                 f'p={bridge.p_value:.4f}\n')
+        f.write('# robust_d = (median_D - median_V)/pooled_IQR; '
+                'robust CI = bootstrap 2.5/97.5 (B=2000, per-arm resample)\n')
 
-    # ─── figure: forest plot ───
-    fig, ax = plt.subplots(figsize=(8.5, 6.5))
-    y_pos = np.arange(len(rows))
-    ds = [r[3] for r in rows]
-    ses = [r[4] for r in rows]
-    labels = [env_label(r[0]) for r in rows]
-    # Colour by SIGNIFICANCE (95% CI excludes zero), NOT by the point
-    # estimate — so a dot's colour agrees with its error bar. Colouring
-    # by `d < -0.2` alone painted PacMan / Acrobot / LunarLander green
-    # ("DDQN reduces bias") while their CIs cross zero (inconclusive) —
-    # a green dot with whiskers straddling 0. CI-aware colouring makes
-    # those grey; only CI-excludes-zero envs get green/red.
-    colors = [
-        COLOR_HELPS if d + 1.96 * se < 0
-        else COLOR_HARMS if d - 1.96 * se > 0
-        else COLOR_NULL
-        for d, se in zip(ds, ses)
-    ]
-
-    # 95% CIs
-    ax.errorbar(ds, y_pos, xerr=[1.96 * se for se in ses],
-                fmt='o', color='black', ecolor='gray', capsize=3,
-                markersize=0, linewidth=0.8)
-    ax.scatter(ds, y_pos, c=colors, s=70, edgecolor='black',
-               linewidth=0.6, zorder=3)
-    ax.axvline(0, color='black', linewidth=0.5)
-    # Predicted direction shading
-    ax.axvspan(-3.5, 0, alpha=0.05, color=COLOR_HELPS)
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels)
-    ax.invert_yaxis()
-    ax.set_xlabel("Cohen's d (D − V) on jensen_gap "
-                  "— negative = DDQN reduces bias", fontsize=10)
-    ax.set_title("Layer 1 (MECH): per-env bias reduction at γ=0.99 canonical",
-                  fontsize=11, pad=8)
-
-    # DL pool diamond
     pooled_d = res.pooled_d
-    pooled_pi = (res.pooled.pi_lo, res.pooled.pi_hi)
-    diamond_y = len(rows) + 0.5
-    ax.plot([pooled_pi[0], pooled_d, pooled_pi[1], pooled_d, pooled_pi[0]],
-            [diamond_y, diamond_y - 0.3, diamond_y, diamond_y + 0.3, diamond_y],
-            color='black', linewidth=1.2)
-    ax.fill([pooled_pi[0], pooled_d, pooled_pi[1], pooled_d],
-            [diamond_y, diamond_y - 0.3, diamond_y, diamond_y + 0.3],
-            color='steelblue', alpha=0.6)
-    ax.text(pooled_pi[1] + 0.05, diamond_y,
-            f'DL pool d={pooled_d:+.2f} I²={res.pooled.I2:.2f}',
-            va='center', fontsize=9, style='italic')
-
-    ax.set_ylim(diamond_y + 0.8, -0.8)
-    ax.grid(alpha=0.3, axis='x')
-
-    # ─── bridge-verdict + dormancy box ───
     bridge_verdict = (
         'HELD' if bridge.p_value <= 0.05
         else 'POWER_INSUFFICIENT' if bridge.p_value <= 0.15
         else 'NO_EFFECT'
     )
-    bridge_color = (
-        '#1a8536' if bridge_verdict == 'HELD'
-        else '#d4ad28' if bridge_verdict == 'POWER_INSUFFICIENT'
-        else '#a23'
+
+    # ─── figure: two-panel forest — MEAN+CI (left) vs MEDIAN+IQR (right) ───
+    # Colour by SIGNIFICANCE (95% CI excludes 0) so each dot's colour
+    # agrees with its error bar; grey = CI straddles 0 (inconclusive).
+    def _ci_color(lo: float, hi: float) -> str:
+        if hi < 0:
+            return COLOR_HELPS
+        if lo > 0:
+            return COLOR_HARMS
+        return COLOR_NULL
+
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(13.5, 6.6), sharey=True)
+    y_pos = np.arange(len(rows))
+    labels = [env_label(r[0]) for r in rows]
+
+    # LEFT — mean-based Cohen's d ± 95% CI
+    ds = [r[3] for r in rows]
+    ses = [r[4] for r in rows]
+    colL = [_ci_color(d - 1.96 * se, d + 1.96 * se) for d, se in zip(ds, ses)]
+    axL.errorbar(ds, y_pos, xerr=[1.96 * se for se in ses], fmt='o',
+                 color='black', ecolor='gray', capsize=3, markersize=0,
+                 linewidth=0.8)
+    axL.scatter(ds, y_pos, c=colL, s=70, edgecolor='black', linewidth=0.6,
+                zorder=3)
+    axL.axvline(0, color='black', linewidth=0.5)
+    axL.axvspan(min(ds) - 1, 0, alpha=0.05, color=COLOR_HELPS)
+    axL.set_yticks(y_pos)
+    axL.set_yticklabels(labels)
+    axL.invert_yaxis()
+    axL.set_xlabel("Cohen's d (D − V) ± 95% CI", fontsize=9)
+    axL.set_title("MEAN + CI  (outlier-sensitive)", fontsize=10)
+    axL.grid(alpha=0.3, axis='x')
+
+    # RIGHT — robust median effect Δmed/pooled-IQR ± bootstrap 95% CI
+    rds = [m[2] for m in med_rows]
+    rlo = [m[3] for m in med_rows]
+    rhi = [m[4] for m in med_rows]
+    colR = [_ci_color(lo, hi) for lo, hi in zip(rlo, rhi)]
+    xerrR = [
+        [rd - lo for rd, lo in zip(rds, rlo)],
+        [hi - rd for rd, hi in zip(rds, rhi)],
+    ]
+    axR.errorbar(rds, y_pos, xerr=xerrR, fmt='o', color='black',
+                 ecolor='gray', capsize=3, markersize=0, linewidth=0.8)
+    axR.scatter(rds, y_pos, c=colR, s=70, edgecolor='black', linewidth=0.6,
+                zorder=3)
+    axR.axvline(0, color='black', linewidth=0.5)
+    axR.axvspan(min(rlo) - 0.2, 0, alpha=0.05, color=COLOR_HELPS)
+    axR.set_xlabel("Δmedian / pooled-IQR ± bootstrap 95% CI", fontsize=9)
+    axR.set_title("MEDIAN + IQR  (robust to tails)", fontsize=10)
+    axR.grid(alpha=0.3, axis='x')
+
+    fig.suptitle(
+        'Layer 1 (MECH): per-env DDQN bias effect at γ=0.99 canonical — '
+        'mean vs robust median\n'
+        '(negative = DDQN reduces bias; green = 95% CI excludes 0, '
+        'grey = inconclusive)',
+        fontsize=11.5,
     )
-    bridge_text = (
-        f'Bridge verdict (cross_env_consistency_binomial):\n'
-        f'  {bridge.n_signed_predicted}/{bridge.n_strata_above_floor} envs in '
-        f'predicted direction (of {bridge.n_strata_total} total)\n'
-        f'  binomial sign-test p = {bridge.p_value:.4f} → {bridge_verdict}\n\n'
-        f'DL pool diagnostic:  d={pooled_d:+.2f}, I²={res.pooled.I2:.2f}, '
-        f'PI=[{pooled_pi[0]:+.2f},{pooled_pi[1]:+.2f}] → {res.verdict.name}\n'
-        f'  (PI-honest NO_EFFECT: env heterogeneity is too high for a\n'
-        f'   generalisable cross-env point estimate. The binomial sign-\n'
-        f'   test is the right test for "DDQN reduces bias broadly".)\n\n'
-        f'Dormancy filter (PREMISE_ACTIVE_PER_STRATUM): no-op at γ=0.99\n'
-        f'  Verified directly from restored traces: V\'s observed bias\n'
-        f'  is ~50-70× the Jensen structural floor σ_Q × √(2 log K).\n'
-        f'    LL:   σ_late=0.41  floor=0.68  obs_bias=45.6  dormancy=0\n'
-        f'    CP:   σ_late=1.69  floor=1.99  obs_bias=121   dormancy=0\n'
-        f'  Premise is overwhelmingly active everywhere; no env dormant.\n'
-        f'  Cached `jensen_dormancy_premise_active=power_insufficient` is\n'
-        f'  STALE (computed before traces were available). At γ=0.999 the\n'
-        f'  longer effective horizon flips this for some envs.'
+
+    note = (
+        f'Bridge (cross_env_consistency_binomial): '
+        f'{bridge.n_signed_predicted}/{bridge.n_strata_total} envs reduce bias, '
+        f'sign-test p={bridge.p_value:.4f} → {bridge_verdict}.    '
+        f'DL mean-pool d={pooled_d:+.2f}, I²={res.pooled.I2:.2f}, '
+        f'PI=[{res.pooled.pi_lo:+.2f},{res.pooled.pi_hi:+.2f}] → {res.verdict.name} '
+        f'(env heterogeneity too high for one point estimate).\n'
+        f'Snake = the mean↔median divergence: mean d=+0.18 (4/30 D seeds '
+        f'Q-explode → heavy tail) but median Δ<0 (typical seed: DDQN reduces '
+        f'bias). Dormancy filter no-op at γ=0.99 (premise active everywhere).'
     )
-    ax.text(0.02, 0.02, bridge_text, transform=ax.transAxes,
-            va='bottom', fontsize=7.5, family='monospace',
-            bbox=dict(boxstyle='round,pad=0.4', facecolor='#fffaf0',
-                      edgecolor=bridge_color, linewidth=1.2))
+    fig.text(0.5, -0.03, note, ha='center', va='top', fontsize=8,
+             family='monospace',
+             bbox=dict(boxstyle='round,pad=0.4', facecolor='#fffaf0',
+                       edgecolor='#1a8536', linewidth=1.0))
 
     plt.tight_layout()
     plt.savefig(OUT_PNG, dpi=120, bbox_inches='tight')
