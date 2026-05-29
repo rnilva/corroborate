@@ -1111,9 +1111,18 @@ class _EvalCache:
         # append its own `.npz` to the name — then atomic-rename. Passing
         # a path like `cell000.npz.tmp` would make np.savez emit
         # `cell000.npz.tmp.npz`, breaking the rename.
+        #
+        # COMPRESSED: greedy-eval per-step arrays (predicted_q_per_step,
+        # mc_return_from_step, active_per_step — each (n_bursts, K,
+        # episode_cap)) are mostly smooth or zero-padded past the episode
+        # length, so zlib gets ~20× (snake 3M: 2.1 GB → ~100 MB/cell).
+        # Uncompressed, a 4-cell cache (~8.4 GB) plus the 9.5 GB output
+        # trace write would overflow a ~17 GB disk; compressed keeps the
+        # whole cache to a few hundred MB so the disk budget is the
+        # output traces alone.
         tmp = self.cell_path(cell_idx).with_suffix('.npz.tmp')
         with tmp.open('wb') as f:
-            np.savez(f, **flat)
+            np.savez_compressed(f, **flat)
         tmp.replace(self.cell_path(cell_idx))
 
     def load_all(self) -> dict[str, dict[str, np.ndarray]]:
