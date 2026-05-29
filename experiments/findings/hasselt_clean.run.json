@@ -18,9 +18,9 @@
       "blocked_by": null,
       "bridge_name": "hasselt_floor_predicts_observed_bias__vanilla",
       "direction": "inverse",
-      "extent_hash": 6993268640139381738,
+      "extent_hash": -7730999819121069701,
       "n_cells_in_scope": 325,
-      "n_cells_pre_scope": 770,
+      "n_cells_pre_scope": 710,
       "pair_by": [
         "seed"
       ],
@@ -61,9 +61,9 @@
       "blocked_by": null,
       "bridge_name": "bias_predicts_worse_outcome__vanilla",
       "direction": "inverse",
-      "extent_hash": 6993268640139381738,
+      "extent_hash": -7730999819121069701,
       "n_cells_in_scope": 325,
-      "n_cells_pre_scope": 770,
+      "n_cells_pre_scope": 710,
       "pair_by": [
         "seed"
       ],
@@ -104,9 +104,9 @@
       "blocked_by": null,
       "bridge_name": "bias_predicts_worse_outcome__vanilla__late30",
       "direction": "inverse",
-      "extent_hash": 6993268640139381738,
+      "extent_hash": -7730999819121069701,
       "n_cells_in_scope": 325,
-      "n_cells_pre_scope": 770,
+      "n_cells_pre_scope": 710,
       "pair_by": [
         "seed"
       ],
@@ -209,9 +209,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_reduces_bias__consistently_cross_env",
       "direction": "inverse",
-      "extent_hash": 4708503049511779440,
+      "extent_hash": 3618329852472222694,
       "n_cells_in_scope": 650,
-      "n_cells_pre_scope": 770,
+      "n_cells_pre_scope": 710,
       "pair_by": [
         "seed"
       ],
@@ -241,14 +241,14 @@
       "analysis_results": {
         "cross_env_probability_of_improvement": {
           "baseline_arm": "baseline",
-          "ci_bootstrap_hi": 0.633273,
-          "ci_bootstrap_lo": 0.526517,
+          "ci_bootstrap_hi": 0.628209,
+          "ci_bootstrap_lo": 0.540089,
           "measurable": "eval_best_burst_raw_mean",
           "n_bootstrap_effective": 2000,
-          "n_permutation_effective": 256,
-          "n_strata": 8,
-          "p_permutation": 0.0273438,
-          "p_xy_mean": 0.582014,
+          "n_permutation_effective": 4096,
+          "n_strata": 12,
+          "p_permutation": 0.00390625,
+          "p_xy_mean": 0.585602,
           "per_stratum": [
             {
               "n_baseline": 30,
@@ -256,6 +256,24 @@
               "p_xy": 0.514444,
               "stratum_id": [
                 "Acrobot-v1",
+                0.99
+              ]
+            },
+            {
+              "n_baseline": 15,
+              "n_treatment": 15,
+              "p_xy": 0.742222,
+              "stratum_id": [
+                "Asterix-MinAtar",
+                0.99
+              ]
+            },
+            {
+              "n_baseline": 30,
+              "n_treatment": 30,
+              "p_xy": 0.525556,
+              "stratum_id": [
+                "Breakout-MinAtar",
                 0.99
               ]
             },
@@ -274,6 +292,15 @@
               "p_xy": 0.482222,
               "stratum_id": [
                 "FourRooms-misc",
+                0.99
+              ]
+            },
+            {
+              "n_baseline": 30,
+              "n_treatment": 30,
+              "p_xy": 0.605556,
+              "stratum_id": [
+                "Freeway-MinAtar",
                 0.99
               ]
             },
@@ -316,6 +343,15 @@
             {
               "n_baseline": 30,
               "n_treatment": 30,
+              "p_xy": 0.497778,
+              "stratum_id": [
+                "Snake-jumanji",
+                0.99
+              ]
+            },
+            {
+              "n_baseline": 30,
+              "n_treatment": 30,
               "p_xy": 0.778889,
               "stratum_id": [
                 "SpaceInvaders-MinAtar",
@@ -335,9 +371,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome__consistently_cross_env",
       "direction": "direct",
-      "extent_hash": 5124410443259218858,
-      "n_cells_in_scope": 440,
-      "n_cells_pre_scope": 770,
+      "extent_hash": 3618329852472222694,
+      "n_cells_in_scope": 650,
+      "n_cells_pre_scope": 710,
       "pair_by": [
         "seed"
       ],
@@ -367,14 +403,14 @@
       "analysis_results": {
         "cross_env_probability_of_improvement": {
           "baseline_arm": "baseline",
-          "ci_bootstrap_hi": 0.63125,
-          "ci_bootstrap_lo": 0.52208,
+          "ci_bootstrap_hi": 0.636205,
+          "ci_bootstrap_lo": 0.54703,
           "measurable": "eval_late_burst_raw_mean",
           "n_bootstrap_effective": 2000,
-          "n_permutation_effective": 256,
-          "n_strata": 8,
-          "p_permutation": 0.09375,
-          "p_xy_mean": 0.577569,
+          "n_permutation_effective": 4096,
+          "n_strata": 12,
+          "p_permutation": 0.0361328,
+          "p_xy_mean": 0.592176,
           "per_stratum": [
             {
               "n_baseline": 30,
@@ -382,6 +418,24 @@
               "p_xy": 0.414444,
               "stratum_id": [
                 "Acrobot-v1",
+                0.99
+              ]
+            },
+            {
+              "n_baseline": 15,
+              "n_treatment": 15,
+              "p_xy": 0.92,
+              "stratum_id": [
+                "Asterix-MinAtar",
+                0.99
+              ]
+            },
+            {
+              "n_baseline": 30,
+              "n_treatment": 30,
+              "p_xy": 0.443333,
+              "stratum_id": [
+                "Breakout-MinAtar",
                 0.99
               ]
             },
@@ -400,6 +454,15 @@
               "p_xy": 0.807778,
               "stratum_id": [
                 "FourRooms-misc",
+                0.99
+              ]
+            },
+            {
+              "n_baseline": 30,
+              "n_treatment": 30,
+              "p_xy": 0.635556,
+              "stratum_id": [
+                "Freeway-MinAtar",
                 0.99
               ]
             },
@@ -442,6 +505,15 @@
             {
               "n_baseline": 30,
               "n_treatment": 30,
+              "p_xy": 0.486667,
+              "stratum_id": [
+                "Snake-jumanji",
+                0.99
+              ]
+            },
+            {
+              "n_baseline": 30,
+              "n_treatment": 30,
               "p_xy": 0.43,
               "stratum_id": [
                 "SpaceInvaders-MinAtar",
@@ -461,9 +533,9 @@
       "blocked_by": null,
       "bridge_name": "ddqn_helps_outcome__consistently_cross_env__late30",
       "direction": "direct",
-      "extent_hash": 5124410443259218858,
-      "n_cells_in_scope": 440,
-      "n_cells_pre_scope": 770,
+      "extent_hash": 3618329852472222694,
+      "n_cells_in_scope": 650,
+      "n_cells_pre_scope": 710,
       "pair_by": [
         "seed"
       ],
@@ -486,7 +558,7 @@
       "source_name": "do(baseline|bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify))",
       "target_name": "eval_late_burst_raw_mean",
       "tier": "interventional",
-      "verdict": "power_insufficient",
+      "verdict": "held",
       "warnings": []
     },
     {
@@ -725,9 +797,9 @@
       "blocked_by": null,
       "bridge_name": "intervention_reduces_bias__pool_inadequate",
       "direction": "inverse",
-      "extent_hash": 4708503049511779440,
+      "extent_hash": 3618329852472222694,
       "n_cells_in_scope": 650,
-      "n_cells_pre_scope": 770,
+      "n_cells_pre_scope": 710,
       "pair_by": [
         "seed"
       ],
@@ -754,9 +826,9 @@
         "stratified_arm_diff_pooled": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "i_squared": 0.423646,
+          "i_squared": 0.318323,
           "measurable": "eval_best_burst_raw_mean",
-          "n_strata": 8,
+          "n_strata": 12,
           "per_stratum": [
             {
               "arm_mean_baseline": -77.6984,
@@ -771,6 +843,38 @@
               "n_seeds_treatment": 30,
               "stratum_id": [
                 "Acrobot-v1",
+                0.99
+              ]
+            },
+            {
+              "arm_mean_baseline": 27.6734,
+              "arm_mean_treatment": 32.5534,
+              "arm_sd_baseline": 5.41862,
+              "arm_sd_treatment": 4.95946,
+              "baseline_predictor": 12.7067,
+              "cohen_d": 0.939525,
+              "cohen_se": 0.386129,
+              "mean_diff": 4.88,
+              "n_seeds_baseline": 15,
+              "n_seeds_treatment": 15,
+              "stratum_id": [
+                "Asterix-MinAtar",
+                0.99
+              ]
+            },
+            {
+              "arm_mean_baseline": 79.3067,
+              "arm_mean_treatment": 80.6484,
+              "arm_sd_baseline": 11.8,
+              "arm_sd_treatment": 12.309,
+              "baseline_predictor": 4.9186,
+              "cohen_d": 0.111276,
+              "cohen_se": 0.258406,
+              "mean_diff": 1.34167,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Breakout-MinAtar",
                 0.99
               ]
             },
@@ -803,6 +907,22 @@
               "n_seeds_treatment": 30,
               "stratum_id": [
                 "FourRooms-misc",
+                0.99
+              ]
+            },
+            {
+              "arm_mean_baseline": 45.8084,
+              "arm_mean_treatment": 47.0,
+              "arm_sd_baseline": 4.23025,
+              "arm_sd_treatment": 5.67443,
+              "baseline_predictor": 0.267281,
+              "cohen_d": 0.238109,
+              "cohen_se": 0.259144,
+              "mean_diff": 1.19167,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Freeway-MinAtar",
                 0.99
               ]
             },
@@ -871,6 +991,22 @@
               ]
             },
             {
+              "arm_mean_baseline": 15.9733,
+              "arm_mean_treatment": 17.0667,
+              "arm_sd_baseline": 14.9952,
+              "arm_sd_treatment": 14.6291,
+              "baseline_predictor": 4.74241,
+              "cohen_d": 0.0738076,
+              "cohen_se": 0.25829,
+              "mean_diff": 1.09333,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Snake-jumanji",
+                0.99
+              ]
+            },
+            {
               "arm_mean_baseline": 139.133,
               "arm_mean_treatment": 142.3,
               "arm_sd_baseline": 3.43143,
@@ -888,31 +1024,31 @@
             }
           ],
           "pooled": {
-            "I2": 0.423646,
-            "Q": 12.1453,
+            "I2": 0.318323,
+            "Q": 16.1367,
             "assumption_violations": [],
-            "empirical_max_g": 0.909081,
+            "empirical_max_g": 0.939525,
             "empirical_min_g": -0.203479,
-            "n_cells": 8,
-            "pi_hi": 0.874295,
-            "pi_lo": -0.43436,
-            "pooled_g": 0.219967,
-            "se_pooled": 0.128379,
-            "tau2": 0.0550267
+            "n_cells": 12,
+            "pi_hi": 0.703857,
+            "pi_lo": -0.238925,
+            "pooled_g": 0.232466,
+            "se_pooled": 0.0968701,
+            "tau2": 0.0353749
           },
-          "pooled_ci_hi": 0.47159,
-          "pooled_ci_lo": -0.0316556,
-          "pooled_d": 0.219967,
-          "pooled_p_value": 0.0866351,
-          "pooled_se": 0.128379,
-          "q_statistic": 12.1453,
+          "pooled_ci_hi": 0.422331,
+          "pooled_ci_lo": 0.0426003,
+          "pooled_d": 0.232466,
+          "pooled_p_value": 0.0164055,
+          "pooled_se": 0.0968701,
+          "q_statistic": 16.1367,
           "refutation": "null_effect",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
             "env_name",
             "gamma"
           ],
-          "tau2": 0.0550267,
+          "tau2": 0.0353749,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
           "verdict": "no_effect"
         }
@@ -921,9 +1057,9 @@
       "blocked_by": null,
       "bridge_name": "intervention_helps_outcome__pool_inadequate",
       "direction": "direct",
-      "extent_hash": 5124410443259218858,
-      "n_cells_in_scope": 440,
-      "n_cells_pre_scope": 770,
+      "extent_hash": 3618329852472222694,
+      "n_cells_in_scope": 650,
+      "n_cells_pre_scope": 710,
       "pair_by": [
         "seed"
       ],
@@ -950,9 +1086,9 @@
         "stratified_arm_diff_pooled": {
           "arm_field": "arm_key",
           "baseline_arm": "baseline",
-          "i_squared": 0.731403,
+          "i_squared": 0.762102,
           "measurable": "eval_late_burst_raw_mean",
-          "n_strata": 8,
+          "n_strata": 12,
           "per_stratum": [
             {
               "arm_mean_baseline": -90.8502,
@@ -967,6 +1103,38 @@
               "n_seeds_treatment": 30,
               "stratum_id": [
                 "Acrobot-v1",
+                0.99
+              ]
+            },
+            {
+              "arm_mean_baseline": 16.0557,
+              "arm_mean_treatment": 21.4724,
+              "arm_sd_baseline": 2.50159,
+              "arm_sd_treatment": 2.81484,
+              "baseline_predictor": 12.7067,
+              "cohen_d": 2.03418,
+              "cohen_se": 0.455219,
+              "mean_diff": 5.41667,
+              "n_seeds_baseline": 15,
+              "n_seeds_treatment": 15,
+              "stratum_id": [
+                "Asterix-MinAtar",
+                0.99
+              ]
+            },
+            {
+              "arm_mean_baseline": 49.5314,
+              "arm_mean_treatment": 47.5877,
+              "arm_sd_baseline": 8.06756,
+              "arm_sd_treatment": 6.5455,
+              "baseline_predictor": 4.9186,
+              "cohen_d": -0.264595,
+              "cohen_se": 0.259365,
+              "mean_diff": -1.94373,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Breakout-MinAtar",
                 0.99
               ]
             },
@@ -999,6 +1167,22 @@
               "n_seeds_treatment": 30,
               "stratum_id": [
                 "FourRooms-misc",
+                0.99
+              ]
+            },
+            {
+              "arm_mean_baseline": 37.947,
+              "arm_mean_treatment": 39.6149,
+              "arm_sd_baseline": 6.70875,
+              "arm_sd_treatment": 8.84837,
+              "baseline_predictor": 0.267281,
+              "cohen_d": 0.212429,
+              "cohen_se": 0.258951,
+              "mean_diff": 1.66794,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Freeway-MinAtar",
                 0.99
               ]
             },
@@ -1067,6 +1251,22 @@
               ]
             },
             {
+              "arm_mean_baseline": 10.2256,
+              "arm_mean_treatment": 10.2964,
+              "arm_sd_baseline": 11.4017,
+              "arm_sd_treatment": 10.9962,
+              "baseline_predictor": 4.74241,
+              "cohen_d": 0.00632099,
+              "cohen_se": 0.2582,
+              "mean_diff": 0.0708001,
+              "n_seeds_baseline": 30,
+              "n_seeds_treatment": 30,
+              "stratum_id": [
+                "Snake-jumanji",
+                0.99
+              ]
+            },
+            {
               "arm_mean_baseline": 98.7922,
               "arm_mean_treatment": 96.7158,
               "arm_sd_baseline": 12.631,
@@ -1084,31 +1284,31 @@
             }
           ],
           "pooled": {
-            "I2": 0.731403,
-            "Q": 26.0614,
+            "I2": 0.762102,
+            "Q": 46.2384,
             "assumption_violations": [],
-            "empirical_max_g": 1.25034,
+            "empirical_max_g": 2.03418,
             "empirical_min_g": -0.283381,
-            "n_cells": 8,
-            "pi_hi": 1.50083,
-            "pi_lo": -0.917211,
-            "pooled_g": 0.291809,
-            "se_pooled": 0.190275,
-            "tau2": 0.207931
+            "n_cells": 12,
+            "pi_hi": 1.49183,
+            "pi_lo": -0.85486,
+            "pooled_g": 0.318487,
+            "se_pooled": 0.167136,
+            "tau2": 0.249378
           },
-          "pooled_ci_hi": 0.664748,
-          "pooled_ci_lo": -0.081129,
-          "pooled_d": 0.291809,
-          "pooled_p_value": 0.125123,
-          "pooled_se": 0.190275,
-          "q_statistic": 26.0614,
+          "pooled_ci_hi": 0.646073,
+          "pooled_ci_lo": -0.00909857,
+          "pooled_d": 0.318487,
+          "pooled_p_value": 0.0567071,
+          "pooled_se": 0.167136,
+          "q_statistic": 46.2384,
           "refutation": "null_effect",
           "scope_predictor": "jensen_gap",
           "stratify_by": [
             "env_name",
             "gamma"
           ],
-          "tau2": 0.207931,
+          "tau2": 0.249378,
           "treatment_arm": "bootstrap=partial(Claim:bootstrap;greedification=Claim:double_greedify)",
           "verdict": "no_effect"
         }
@@ -1117,9 +1317,9 @@
       "blocked_by": null,
       "bridge_name": "intervention_helps_outcome__pool_inadequate__late30",
       "direction": "direct",
-      "extent_hash": 5124410443259218858,
-      "n_cells_in_scope": 440,
-      "n_cells_pre_scope": 770,
+      "extent_hash": 3618329852472222694,
+      "n_cells_in_scope": 650,
+      "n_cells_pre_scope": 710,
       "pair_by": [
         "seed"
       ],
@@ -1144,7 +1344,7 @@
   ],
   "cache_path": "experiments/data/cache/hasselt_clean.parquet",
   "errored_bridges": [],
-  "git_commit": "9bc0eb445956",
+  "git_commit": "218077106bb1",
   "hypothesis_module": "experiments.findings.hasselt_clean",
   "measurable_signatures": {
     "bootstrap_fraction": "3f8a1be44bf6bf37",
@@ -1154,6 +1354,6 @@
     "jensen_gap": "950342c492febd27",
     "mc_return_raw_episodes": "ab2099e618fe4e5f"
   },
-  "n_cells_total": 770,
-  "timestamp_utc": "2026-05-29T03:58:35+00:00"
+  "n_cells_total": 710,
+  "timestamp_utc": "2026-05-29T06:09:12+00:00"
 }
