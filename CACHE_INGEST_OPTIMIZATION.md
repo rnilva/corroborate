@@ -87,6 +87,46 @@ in `7ae09d0`), ingests, and evicts the projected traces. Turns a
 5-step manual dance into one reproducible command — directly serves
 the "reproducible, extensible" cache goal.
 
+## CORRECTION (2026-05-29): parallelism granularity + the thread-pool misfire
+
+Empirical A/B on the real ingest path (60-cell breakout, full streaming
+compute) settled the parallelism question:
+
+```
+workers=1: 409.4s   workers=8: 424.4s   speedup 1.0x
+same shape: True (60,96)   scalar-col mismatches: 0
+```
+
+The within-corpus **thread pool** (#1, committed `2fe504d`) is correct
+(0 mismatches) but gives **1.0×** — `compute_missing_columns` is
+GIL-bound *Python* (per-cell `to_dicts()` loop + `_resolve_one`
+recursion over 73 measurables), not GIL-released numpy. Threads can't
+parallelise it. **→ revert `2fe504d`.**
+
+The RIGHT parallelism is **per-corpus across processes**, and it
+**already exists**: `runner._load_directory` runs a fork-based
+`ProcessPoolExecutor` over corpora (line ~2580), bounded by disk via
+`_estimate_max_workers`. `fork` inherits the `@measurable` registry by
+copy-on-write — no per-worker re-import, no registry pickling. It fires
+for BOTH `--ingest a,b,c` (via `_load_data` → `_load_directory(
+corpus_dirs=...)`) and `--ingest-all <root>`. So a multi-corpus ingest
+is already GIL-free-parallel; the thread pool was both the wrong
+primitive (threads vs processes) and the wrong granularity (within- vs
+across-corpus).
+
+**Residual gap**: a SINGLE large corpus ingested alone runs in one
+process → single-threaded compute (the Asterix ~5 min case). The
+across-corpus pool has only one task then. Closing it needs a
+within-corpus **fork ProcessPool** over cell-batches (fork already
+solves the registry problem; only the small per-batch result frames
+cross back). Secondary — multi-corpus ingests sidestep it by
+parallelising across corpora. Profile compute-bound vs I/O-bound
+before building it.
+
+Levers #1b (vectorise hot reductions) and #2 (compute only not-current
+measurables) reduce the per-process Python WORK and stack with the
+existing process parallelism — those are the durable wins.
+
 ## What already exists (don't reinvent the DAG)
 
 `compute_missing_columns` (`corpus/measurables/measurable.py` ~718)
