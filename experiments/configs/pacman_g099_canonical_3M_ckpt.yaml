@@ -1,0 +1,74 @@
+name: pacman_g099_canonical_3M_ckpt
+out_dir: experiments/data/pacman_g099_canonical_3M_ckpt
+env_binding: shared
+archive_remote: s3://corroborate-archive/pacman_g099_canonical_3M_ckpt
+deterministic: false
+
+# PacMan-jumanji γ=0.99 canonical at 3M steps with full Q traces +
+# per-burst Q checkpoints + per-action online/target Q.
+#
+# Same repro setup as snake_g099_canonical_3M_ckpt: `deterministic:
+# false` skips `--xla_gpu_deterministic_ops=true` (prohibitive on
+# Jumanji's tiny-op step), and the runner reads XLA_FLAGS for the
+# `--xla_gpu_enable_command_buffer=` empty-string disable signal.
+# Both knobs stamped per-RunRow.
+#
+# Canonical Jumanji HPs from prior g0999_panel_extension_jumanji
+# (capacity=50000, channels=[8,16], hidden=[64]) at γ=0.99 instead
+# of 0.999 and 3× total_steps.
+#
+# Memory: PacMan obs (31×28×5) is ~6× Snake's (12×12×5). The
+# per-burst Q accumulator + replay buffer + jit_transpose scratch
+# all scale with chunk_size; at chunk=10 the HLO scheduler reported
+# 49 GiB of input/output args vs the 30.3 GiB base limit (OOM on
+# every cell). chunk=5 halves that → ~25 GiB HLO, comfortable on
+# the 32 GiB RTX 5090. The existing `g0999_panel_extension_pacman_
+# only` canonical corpus used chunk=2 at γ=0.999 1M; chunk=5 is the
+# balanced choice for γ=0.99 3M (more vmap parallelism per chunk).
+#
+# Cells: 2 arms × 6 chunks of 5 seeds = 12 batched cells. Bundle
+# layout: 12 cell{NNN}.msgpack files per arm dir.
+
+keep_q_checkpoint_per_burst: true
+keep_q_checkpoint_final: true
+keep_q_per_action: true
+
+envs:
+  - {name: PacMan-jumanji, n_seeds: 30, chunk_size: 5}
+
+defaults:
+  total_steps: 3000000
+  eval_every:  20000
+  n_episodes:  5
+  gamma:       0.99
+  sync_period: 1000
+  n_step:      1
+  replay:
+    class: Replay
+    capacity: 50000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: CNN
+    obs_shape: [31, 28, 5]
+    channels: [8, 16]
+    kernel_size: 3
+    hidden: [64]
+
+interventions:
+  - name: canonical_g099_3M
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
