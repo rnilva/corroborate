@@ -174,12 +174,16 @@ def build_measurements(
     a no-op (no parquet rewrite). Drift detection drops drifted
     columns + recomputes them.
 
-    `force`: names recomputed unconditionally — dropped from the
-    existing store so they rebuild from `runs_df` even when their
-    closure hash is sidecar-current (the input traces changed but
-    the formula didn't — e.g. a re-eval at a new n_episodes). The
-    caller must guarantee the forced names' reads are on `runs_df`,
-    else the rebuild null-pads.
+    `force`: names recomputed unconditionally — dropped from BOTH
+    the existing store AND any matching `runs_df` stamp so they
+    rebuild from the caller-joined reads even when their closure
+    hash is sidecar-current (the input traces changed but the
+    formula didn't — e.g. a re-eval at a new n_episodes). Dropping
+    only the existing store is insufficient: a measurable the
+    substrate stamped into `runs.parquet` survives on `runs_df` and
+    `compute_missing_columns` skips it (present-and-non-null), so
+    the stale stamp wins. The caller must guarantee the forced
+    names' reads are on `runs_df`, else the rebuild null-pads.
 
     Returns the path to `measurements.parquet`.
     """
@@ -200,6 +204,26 @@ def build_measurements(
             f'build_measurements({corpus_dir}): runs_df is missing '
             f'the `id` column — required as the per-cell key',
         )
+    # Force-recompute, runs_df side. The existing-store force-drop
+    # (drift loop below) handles `measurements.parquet`; this handles
+    # a forced measurable the substrate STAMPED into `runs.parquet`
+    # (`RunRow.measurements`). Such a stamp lands on `runs_df` →
+    # `joined`, and `compute_missing_columns` SKIPS any column already
+    # present-and-non-null in its input frame. So without this drop a
+    # stale runs.parquet scalar (e.g. a re-eval at a new n_episodes:
+    # the trace `mc_return` changed but the old `eval_best_burst_mean`
+    # stamp didn't) silently wins over the caller-joined fresh trace
+    # reads — `force` would be a no-op exactly as it was for the
+    # existing-store side before this. Forced names are registered
+    # measurables; their own reads (trace cols / config leaves) are
+    # distinct column names and remain on `runs_df`, so the rebuild
+    # recomputes from the fresh reads rather than null-padding.
+    if force:
+        runs_force_stamps = [
+            c for c in runs_df.columns if c != 'id' and c in force
+        ]
+        if runs_force_stamps:
+            runs_df = runs_df.drop(runs_force_stamps)
     # Defend against id-duplicate corruption: each `id` should
     # appear exactly once in the per-corpus store. A stale store
     # with duplicate ids (legacy from pre-Phase-1 cache builds, or

@@ -913,6 +913,50 @@ def test_recompute_force_recomputes_sidecar_current_measurable(
         )
 
 
+def test_recompute_force_overrides_stale_runs_stamped_measurable(
+    tmp_path: Path,
+) -> None:
+    """`force=` must recompute a measurable the substrate STAMPED
+    into `runs.parquet` (`RunRow.measurements`) with a stale value —
+    not just one living in the existing measurements store. Sibling
+    regression to the sidecar-current case above, exercising the
+    OTHER store: `build_measurements`'s force-drop only touched
+    `measurements.parquet`, so a stale `runs.parquet` scalar
+    survived on `runs_df` → `joined`, and `compute_missing_columns`
+    SKIPS any column already present-and-non-null in its input
+    frame. The stale stamp then won over the (caller-joined) fresh
+    reads — exactly the snake n=20 re-eval pathology: the trace
+    `x` changed but the old `double_x` stamp didn't.
+
+    Closed form: stamp a deliberately-wrong `double_x = 99` into
+    runs.parquet alongside `x = [0, 1, 2]`. The true measurable is
+    `2·x = [0, 2, 4]`. Force-recompute MUST yield `[0, 2, 4]` (read
+    from `x`), NOT the stale `99` (which is what survives if the
+    runs-side stamp is not dropped)."""
+    corpus = tmp_path / 'corp'
+    # runs.parquet carries x + a STALE substrate-stamped double_x.
+    # No prior build_measurements call: the stale value lives ONLY
+    # in runs.parquet, modelling a RunRow.measurements scalar stamp.
+    runs = _runs_df_with_traces(3).with_columns(
+        pl.lit(99.0).alias('double_x'),
+    )
+    _write_corpus(corpus, runs)
+
+    result = recompute_corpus_measurables(
+        corpus, required=['double_x'], force=frozenset({'double_x'}),
+    )
+    assert 'double_x' in result.forced_recompute, (
+        f'double_x was not force-recomputed (runs-stamp force no-op?): '
+        f'{result}'
+    )
+    new = pl.read_parquet(corpus / MEASUREMENTS_FILENAME).sort('id')
+    got = new['double_x'].to_list()
+    assert got == [0.0, 2.0, 4.0], (
+        f'force did not recompute from x; stale runs.parquet stamp '
+        f'survived: got {got}, closed form 2·x expects [0.0, 2.0, 4.0]'
+    )
+
+
 def test_recompute_classifies_unsatisfiable_measurable(
     tmp_path: Path,
 ) -> None:
