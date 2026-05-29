@@ -1762,7 +1762,16 @@ def _estimate_max_workers(
     Falls back to 1 when available disk can't fit even one
     worker's largest trace (e.g. minatar 1M shards exceed the
     overlay size). The user can override via env var
-    CORROBORATE_CACHE_WORKERS to force a specific value."""
+    CORROBORATE_CACHE_WORKERS to force a specific value.
+
+    RAM caveat (forkserver): the parallel path runs workers under
+    `forkserver`, so each re-imports the substrate (incl. JAX)
+    independently rather than sharing the parent's pages via
+    fork-COW. K workers therefore hold K JAX runtimes; this budget
+    is disk-only, so on a large-disk / small-RAM host the
+    `hard_cap=4` ceiling — not this estimate — is what bounds RAM
+    over-subscription. Add a RAM term here if that ceiling proves
+    too generous on a memory-constrained host."""
     import os
     import shutil
     forced = os.environ.get('CORROBORATE_CACHE_WORKERS')
@@ -2421,6 +2430,14 @@ def _load_directory(
         # substrate modules in each fresh worker. `spawn` is the
         # fallback where `forkserver` is unavailable (non-POSIX);
         # both are fork-safe.
+        #
+        # Because each worker re-imports the substrate, each re-imports
+        # JAX. The CLI stamps `JAX_PLATFORMS=cpu` before the pool (see
+        # `cli/hypothesis.py`) and workers inherit `os.environ`, so they
+        # init JAX CPU-only — no GPU probe. A LIBRARY caller of
+        # `_load_directory` that leaves `JAX_PLATFORMS` unset (or `gpu`)
+        # would have K workers each probe the GPU → contention / OOM;
+        # such callers must stamp the device env var themselves.
         import concurrent.futures as _cf
         import multiprocessing as _mp
         init_modules = (

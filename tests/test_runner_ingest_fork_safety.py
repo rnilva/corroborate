@@ -51,7 +51,11 @@ from tests import _ingest_fork_fixture as fix
 #: Wall-clock budget for a 2-corpus parallel ingest. The real
 #: compute is microseconds (sum of a 4-element list); anything
 #: approaching this means a forked worker is wedged in futex_wait.
-_DEADLOCK_TIMEOUT_S = 120.0
+# A genuine deadlock hangs forever, so any finite bound detects it;
+# 60s is comfortably above the ~5s a healthy run takes (with headroom
+# for CPU contention from concurrent work) yet half the original 120s,
+# so a slow-but-not-hung regression still trips it.
+_DEADLOCK_TIMEOUT_S = 60.0
 
 #: Per-cell signal arrays. Distinct values per cell so the
 #: measurable output discriminates cells (a null-out bug can't
@@ -438,4 +442,44 @@ def test_worker_initializer_reestablishes_registry(tmp_path: Path) -> None:
         f'{fix.MEASURABLE_NAME} NOT registered after '
         f'_reestablish_registry in a fresh interpreter — the '
         f'initializer failed to re-establish the registry'
+    )
+
+
+# ----------------------------------------------------------------------
+# Guard 5: `register_as`-only modules are in the re-import set.
+# ----------------------------------------------------------------------
+def test_register_as_only_module_in_source_modules() -> None:
+    """A module registering measurables ONLY via `register_as` (no
+    plain `@measurable`) must appear in `registry_source_modules()` —
+    the substrate-agnostic re-import set a `forkserver` / `spawn`
+    worker runs to rebuild its (initially empty) registry.
+
+    A `register_as` alias carries the *factory's* `fn.__module__`
+    (`corroborate.measurables.reductions`), not the aliasing module,
+    so a `fn.__module__`-only scan omits it; a fresh worker would then
+    silently fail to re-register the alias and its column null-pads —
+    the exact silent-corruption class the fork-safe path exists to
+    prevent. The plain-`@measurable` fixture used by guards 1-4 is
+    captured via `fn.__module__` and does NOT exercise this path; this
+    one (mirroring `trace_reductions.py`) does. Red against the pre-fix
+    code, which only scanned `fn.__module__`.
+
+    Substrate-grounded: real `register_as` → real registry → real
+    `registry_source_modules()`; the assertion is on the framework's
+    module-capture transform, not a stamped read-back."""
+    import tests._register_as_only_fixture as ra_fix
+    from corroborate.measurables import (
+        registered_names,
+        registry_source_modules,
+    )
+
+    # Importing the fixture registered its alias as a side effect.
+    assert ra_fix.ALIAS_NAME in registered_names(), (
+        'register_as fixture did not register its alias'
+    )
+    mods = registry_source_modules()
+    assert ra_fix.__name__ in mods, (
+        f'register_as-only module {ra_fix.__name__!r} absent from the '
+        f'forkserver re-import set — its alias would null-pad in a '
+        f'fresh worker. Set: {mods}'
     )

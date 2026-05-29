@@ -280,6 +280,16 @@ class Measurable[R: Mapping[str, object], T]:
 _REGISTRY: Registry[Measurable[Mapping[str, object], object]] = Registry()
 
 
+# Modules that registered a measurable whose `fn.__module__` does NOT
+# name the registering site. `register_as` aliases carry the factory's
+# module (`reductions`), not the substrate that aliased them — recorded
+# here at alias time so `registry_source_modules()` (the forkserver /
+# spawn worker re-import set) re-runs the aliasing module. Without it a
+# `register_as`-only module is silently absent from a fresh worker's
+# registry and its aliases null-pad.
+_EXTRA_SOURCE_MODULES: set[str] = set()
+
+
 def get_registered(
     name: str,
 ) -> Measurable[Mapping[str, object], object] | None:
@@ -371,6 +381,20 @@ def register_as[R: Mapping[str, object], T](
         reads=reads if reads is not None else m.reads,
         compose_of=m.compose_of,
     )
+    # `aliased.fn.__module__` points at the factory that minted `m`
+    # (e.g. `corroborate.measurables.reductions`), NOT the substrate
+    # module calling `register_as` here. Record the caller's module so
+    # the forkserver / spawn re-import set (`registry_source_modules`)
+    # re-runs it — a `register_as`-only module (no plain `@measurable`)
+    # is otherwise absent from a fresh worker and its aliases null-pad.
+    # `inspect.getmodule(frame)` resolves via the frame's code file →
+    # typed `ModuleType | None`, no `Any` leak.
+    _frame = inspect.currentframe()
+    _caller_mod = (
+        inspect.getmodule(_frame.f_back) if _frame is not None else None
+    )
+    if _caller_mod is not None and _caller_mod.__name__ != '__main__':
+        _EXTRA_SOURCE_MODULES.add(_caller_mod.__name__)
     register(aliased)
     return aliased
 
@@ -402,12 +426,14 @@ def registry_source_modules() -> tuple[str, ...]:
 
     Factory-composed measurables (`from_key`, `reduce_axis`, …)
     carry `fn.__module__ == 'corroborate.measurables.reductions'`
-    rather than the findings module that composed them; that's
-    fine — re-importing `reductions` is a harmless no-op, and the
-    findings module that registered the composition is imported
-    by the CLI in the parent before the pool spins up (the
-    `initializer_modules` default in `_load_directory` folds the
-    hypothesis module in on top of this set)."""
+    rather than the substrate module that composed them. When such a
+    composition is bound to a stable name via `register_as`, that call
+    records its *caller's* module in `_EXTRA_SOURCE_MODULES` (unioned
+    in below) — so a `register_as`-only module (one with no plain
+    `@measurable`, e.g. `corroborate_rl.dqn.trace_reductions`) is still
+    re-imported in a fresh worker. Without that record its aliases
+    would be silently absent from the worker registry and come back
+    all-null."""
     mods: set[str] = set()
     for name in _REGISTRY.names():
         m = _REGISTRY.get(name)
@@ -416,6 +442,9 @@ def registry_source_modules() -> tuple[str, ...]:
         mod = m.fn.__module__
         if mod and mod != '__main__':
             mods.add(mod)
+    # `register_as` aliases carry the factory's module, not the
+    # aliasing substrate's; that module is recorded at alias time.
+    mods.update(_EXTRA_SOURCE_MODULES)
     return tuple(sorted(mods))
 
 
