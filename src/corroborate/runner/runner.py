@@ -2220,6 +2220,10 @@ def _load_one_corpus(
         #     `df` to bridge-evaluate time, but those are per-burst
         #     scalars in practice, not the per-step heavies — join
         #     only that subset here.
+        #
+        # The analysis-join keeps the drifted-narrowing (its OOM
+        # guard is genuine — a full `pl.read_parquet` of those
+        # columns materialises them whole onto `df`).
         analysis_cols_for_join = frozenset(cols_for_join & analysis_reads)
         if analysis_cols_for_join:
             df = _join_required_traces(
@@ -2227,7 +2231,44 @@ def _load_one_corpus(
             )
         # Record-key set the measurable-side streaming path will
         # read from `traces.parquet` directly (never onto `df`).
-        streamed_trace_reads = frozenset(cols_for_join - analysis_reads)
+        #
+        # **Streaming read-selection correctness** (row-group-OOM
+        # fix follow-up): the streaming branch must NOT inherit the
+        # drifted-only narrowing. `compute_trace_measurables_
+        # streaming` computes EVERY measurable in `satisfiable_
+        # required` (it has no per-column sidecar skip — it always
+        # evaluates the full list on the loaded batch), but only
+        # loads the trace columns named in `measurable_reads`. If a
+        # measurable is in `satisfiable_required` while its read
+        # isn't in `measurable_reads`, `compute_missing_columns`
+        # KeyErrors on every cell → an all-null column whose null +
+        # "current" closure-hash then self-perpetuate across re-
+        # ingests (the sidecar says "computed", so the value is
+        # never retried).
+        #
+        # This bit `mc_return__mean_axis_-1` (the per-burst outcome,
+        # load-bearing for the L5/L3b mediation panels) and
+        # `pearson_r_online_target`: when ONLY a Q-reading measurable
+        # drifted, `drifted_reads` carried `online_max_q_per_step`
+        # but NOT `mc_return` / `pearson_stats`, yet those readers
+        # (held "current") still rode `satisfiable_required` into
+        # the streaming compute and nulled out.
+        #
+        # The streaming path has no OOM reason to narrow: streamed
+        # columns never land on `df`, and the primitive batches by
+        # decompressed-byte budget (`DEFAULT_TRACE_BYTE_BUDGET`) with
+        # a per-cell lazy-scan fallback for single-RG files. So load
+        # the FULL measurable trace-read set — generosity is bounded
+        # by size-aware batching, and correctness (no null from a
+        # missing read) outranks the recompute-skip optimisation.
+        #
+        # INVARIANT: `streamed_trace_reads ⊇ (reads of every
+        # measurable that will be computed) ∩ trace schema`. Since
+        # `satisfiable_required ⊆ required`, taking the full
+        # measurable-side `trace_reads` (`measurable_reads` minus
+        # the analysis-direct reads) satisfies it for any subset the
+        # satisfiability gate downstream admits.
+        streamed_trace_reads = frozenset(trace_reads - analysis_reads)
     # **Phase 2.1** (CACHE_BUILD.md): route per-cell measurable
     # computation through `build_measurements` so the per-corpus
     # `measurements.parquet` store is populated as a side effect.

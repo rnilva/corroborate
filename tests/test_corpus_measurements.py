@@ -1644,3 +1644,189 @@ def test_build_measurements_streaming_persists_single_row_group(
     # leaked into the persisted measurements.parquet.
     assert 'q_per_step' not in stored.columns
 
+
+# ============ Streaming read-selection correctness ============
+#
+# Regression for the row-group-OOM-fix follow-up bug: the runner's
+# streaming ingest narrowed the streamed trace-read set to the
+# DRIFTED measurables' reads only, but `compute_trace_measurables_
+# streaming` computes EVERY measurable in `satisfiable_required`
+# (no per-column sidecar skip — it always evaluates the full list
+# on the loaded batch). A measurable held "current" (so its read
+# isn't in the drifted set) but still riding `satisfiable_required`
+# then had its read unloaded → KeyError on every cell → all-null
+# column whose null + "current" closure-hash self-perpetuated.
+#
+# Hit `mc_return__mean_axis_-1` (the per-burst outcome) and
+# `pearson_r_online_target` on the canonical γ=0.99 corpora: when
+# ONLY a Q-reading measurable drifted, `mc_return` / `pearson_stats`
+# were never streamed even though their (held-current) readers were
+# in the compute list.
+
+
+@measurable(name='_mc_burst_mean', reads=('mc_return',))
+def _mc_burst_mean(record: Mapping[str, object]) -> object:
+    """Axis-derived per-burst mean of the (n_bursts, n_episodes)
+    `mc_return` trace col — mirrors the production
+    `mc_return__mean_axis_-1` measurable's shape (list-typed
+    per-burst output reading a trace column). Returns the per-burst
+    mean over the episode axis."""
+    mc = record.get('mc_return')
+    if mc is None:
+        raise KeyError('mc_return missing on this cell')
+    import numpy as _np
+    arr = _np.asarray(mc, dtype=float)
+    if arr.ndim != 2 or arr.size == 0:
+        raise ValueError('mc_return is not a (n_bursts, n_episodes) array')
+    return arr.mean(axis=1).tolist()
+
+
+@measurable(name='_q_burst_mean_drifts', reads=('online_max_q_per_step',))
+def _q_burst_mean_drifts(record: Mapping[str, object]) -> float:
+    """A Q-reading scalar measurable — the one that DRIFTS in the
+    regression scenario (its closure-hash mismatch flags it
+    drifted, while `_mc_burst_mean` is held current). Reads a
+    DIFFERENT trace col (`online_max_q_per_step`) so the drifted
+    read-set deliberately excludes `mc_return`."""
+    q = record.get('online_max_q_per_step')
+    if not isinstance(q, (list, tuple)) or not q:
+        raise KeyError('online_max_q_per_step missing or empty')
+    vals = [float(v) for v in q]
+    return sum(vals) / len(vals)
+
+
+def _write_outcome_corpus(corpus: Path) -> None:
+    """A corpus carrying `mc_return` (per-burst×episode) and
+    `online_max_q_per_step` (per-step) trace cols + a runs.parquet
+    with the `id` key. Three cells; the per-burst mean of
+    `mc_return` is deterministic per cell."""
+    corpus.mkdir(parents=True, exist_ok=True)
+    runs = pl.DataFrame({
+        'id': ['c0', 'c1', 'c2'],
+        'arm_key': ['baseline', 'ddqn', 'baseline'],
+    })
+    runs.write_parquet(corpus / 'runs.parquet')
+    traces = pl.DataFrame({
+        'id': ['c0', 'c1', 'c2'],
+        # (n_bursts=2, n_episodes=2) per cell. Per-burst mean:
+        #   c0 -> [2.0, 3.0]; c1 -> [5.0, 6.0]; c2 -> [8.0, 9.0].
+        'mc_return': [
+            [[1.0, 3.0], [2.0, 4.0]],
+            [[5.0, 5.0], [6.0, 6.0]],
+            [[7.0, 9.0], [8.0, 10.0]],
+        ],
+        'online_max_q_per_step': [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+    })
+    traces.write_parquet(corpus / 'traces.parquet')
+
+
+def test_streaming_ingest_streams_reads_of_current_measurable(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """**Regression**: when only a Q-reading measurable is drifted,
+    the streaming ingest must STILL stream `mc_return` so the
+    held-current per-burst-mean measurable computes finite rather
+    than KeyError-ing on every cell.
+
+    Pre-state: build the store with BOTH measurables current (full
+    build, all trace cols joined), so `_mc_burst_mean` lands finite.
+    Then re-register `_q_burst_mean_drifts` with a changed closure
+    → it alone is drifted; `_mc_burst_mean` stays current. Its read
+    `mc_return` is therefore ABSENT from the drifted read-set.
+
+    On the buggy code path `streamed_trace_reads` = drifted reads
+    only = `{online_max_q_per_step}`, so the streaming compute (which
+    evaluates the full `satisfiable_required` list, `_mc_burst_mean`
+    included) KeyErrors on `mc_return` for every cell and emits the
+    all-null warning. The fix streams the full measurable trace-read
+    set, so no warning fires and the value stays finite.
+    """
+    from corroborate.runner.runner import (
+        _drifted_or_missing_measurables,  # pyright: ignore[reportPrivateUsage]
+        _load_one_corpus,  # pyright: ignore[reportPrivateUsage]
+        _measurable_signature,  # pyright: ignore[reportPrivateUsage]
+        _required_record_keys,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    corpus = tmp_path / 'corp'
+    _write_outcome_corpus(corpus)
+    required = ['_mc_burst_mean', '_q_burst_mean_drifts']
+
+    # Build the store with BOTH current (trace cols joined onto runs).
+    runs = pl.read_parquet(corpus / 'runs.parquet')
+    traces = pl.read_parquet(corpus / 'traces.parquet')
+    runs_with_traces = runs.join(traces, on='id', how='left')
+    build_measurements(
+        corpus,
+        required=required,
+        runs_df=runs_with_traces,
+        traces_path=corpus / 'traces.parquet',
+        measurable_signature_fn=_measurable_signature,
+    )
+    seeded = load_measurements(corpus)
+    assert seeded.sort('id')['_mc_burst_mean'].to_list() == [
+        [2.0, 3.0], [5.0, 6.0], [8.0, 9.0],
+    ]
+
+    # Drift ONLY the Q-reading measurable by re-registering it with a
+    # changed closure body (different hash). `_mc_burst_mean` stays
+    # current.
+    @measurable(name='_q_burst_mean_drifts', reads=('online_max_q_per_step',))
+    def _q_burst_mean_drifts_v2(record: Mapping[str, object]) -> float:
+        q = record.get('online_max_q_per_step')
+        if not isinstance(q, (list, tuple)) or not q:
+            raise KeyError('online_max_q_per_step missing or empty')
+        vals = [float(v) for v in q]
+        return sum(vals) / len(vals) + 1e-9   # body changed → drift
+    del _q_burst_mean_drifts_v2
+
+    drifted = _drifted_or_missing_measurables(corpus, required)
+    assert drifted == ('_q_burst_mean_drifts',), (
+        f'expected only the Q measurable drifted; got {drifted}'
+    )
+    drifted_reads = _required_record_keys(drifted)
+    # The bug's precondition: `mc_return` is NOT in the drifted reads
+    # (its reader is held current), so the buggy drifted-only
+    # streaming selection would never load it.
+    assert 'mc_return' not in drifted_reads
+    assert 'online_max_q_per_step' in drifted_reads
+
+    # Re-ingest via the runner streaming path; traces present locally,
+    # no cloud restore. `trace_reads` is the union of both measurables'
+    # reads (what the runner computes at the call site).
+    capsys.readouterr()   # clear any prior captured output
+    df, _logs = _load_one_corpus(
+        corpus,
+        i=0,
+        n_total=1,
+        digit_width=1,
+        restore_from_cloud=False,
+        required=required,
+        trace_reads=frozenset({'mc_return', 'online_max_q_per_step'}),
+        analysis_reads=frozenset(),
+    )
+    captured = capsys.readouterr()
+
+    # **Invariant**: the all-null warning for the current per-burst
+    # measurable must NOT fire — its read was streamed despite not
+    # being in the drifted set.
+    assert '_mc_burst_mean' not in captured.err, (
+        'streaming ingest KeyErrored on a held-current measurable '
+        f'whose read was not streamed; stderr was:\n{captured.err}'
+    )
+    assert 'raised KeyError on ALL' not in captured.err
+
+    # The per-burst outcome stays FINITE (non-null, correct values)
+    # in the persisted store after the re-ingest.
+    stored = load_measurements(corpus)
+    assert '_mc_burst_mean' in stored.columns
+    assert stored['_mc_burst_mean'].null_count() == 0
+    assert stored.sort('id')['_mc_burst_mean'].to_list() == [
+        [2.0, 3.0], [5.0, 6.0], [8.0, 9.0],
+    ]
+    # And the returned df carries it finite too (the bridge-consumed
+    # surface).
+    assert df is not None
+    assert df['_mc_burst_mean'].null_count() == 0
+
