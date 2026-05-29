@@ -1686,6 +1686,54 @@ def test_streaming_compute_single_row_group_takes_per_cell_fallback(
         assert got[f'cell-{i}'] == pytest.approx(i * 100 + 3.5)
 
 
+def test_streaming_compute_overrides_stale_runs_stamp(
+    tmp_path: 'Path',
+) -> None:
+    """`compute_trace_measurables_streaming` must compute `required`
+    FRESH from traces even when `runs_df` carries a stale stamp for
+    that measurable (a substrate `RunRow.measurements` value, e.g.
+    an eval-derived measurable carried forward from a re-eval at an
+    OLD n_episodes). The per-batch `compute_missing_columns` SKIPS a
+    column already present-and-non-null in its input frame, so
+    without dropping `required` from `runs_df` the stale stamp
+    shadows the trace recompute — the exact pathology that left
+    snake's eval measurables stuck at n=5 on the streaming path.
+
+    Exercises the ROW-GROUP path (batch_size > n_cells). Closed
+    form: `_stream_mean_q = mean(q_per_step)`; the stale stamp is
+    999.0, the true per-cell mean for cell-i is i*100 + 3.5."""
+    from corroborate.corpus.measurements import (
+        compute_trace_measurables_streaming,
+    )
+    n_cells = 6
+    traces_path = tmp_path / 'traces.parquet'
+    _write_single_row_group_traces(
+        traces_path, n_cells=n_cells, steps_per_cell=8,
+    )
+    # runs_df carries a STALE stamp for the measurable we recompute.
+    runs_df = pl.DataFrame({
+        'id': [f'cell-{i}' for i in range(n_cells)],
+        '_stream_mean_q': [999.0] * n_cells,
+    })
+    out = compute_trace_measurables_streaming(
+        runs_df,
+        traces_path,
+        measurable_reads=frozenset({'q_per_step'}),
+        required=['_stream_mean_q'],
+        batch_size=n_cells + 4,   # > n_cells -> row-group path, not fallback
+    )
+    out_sorted = out.sort('id')
+    got = dict(zip(
+        out_sorted['id'].to_list(),
+        out_sorted['_stream_mean_q'].to_list(),
+    ))
+    for i in range(n_cells):
+        assert got[f'cell-{i}'] == pytest.approx(i * 100 + 3.5), (
+            f'stale runs stamp 999.0 shadowed the trace recompute for '
+            f'cell-{i}: got {got[f"cell-{i}"]} (closed form {i * 100 + 3.5})'
+        )
+
+
 def test_build_measurements_streaming_persists_single_row_group(
     tmp_path: 'Path',
 ) -> None:

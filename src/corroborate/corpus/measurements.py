@@ -709,7 +709,25 @@ def compute_trace_measurables_streaming(
             f'compute_trace_measurables_streaming({traces_path}): '
             f'runs_df is missing the `id` column',
         )
+    # Drop any `required` measurable the substrate STAMPED into
+    # runs.parquet (RunRow.measurements). The per-batch
+    # `compute_missing_columns` below SKIPS a column already
+    # present-and-non-null in its input frame, so a stale stamp
+    # (e.g. an eval-derived measurable carried forward from a
+    # re-eval at an OLD n_episodes) would shadow the fresh
+    # trace-based recompute this function exists to perform. This
+    # function's contract is "compute `required` FROM
+    # `traces_path`" — the runs.parquet stamp is never
+    # authoritative here. Mirrors the `build_measurements` force
+    # path's runs_df drop; covers both the row-group loop and the
+    # `_compute_trace_measurables_per_id` fallback (both consume
+    # `runs_indexed`).
     runs_indexed = runs_df
+    _required_stamped = [
+        c for c in runs_indexed.columns if c != 'id' and c in set(required)
+    ]
+    if _required_stamped:
+        runs_indexed = runs_indexed.drop(_required_stamped)
     pq_file = _pq.ParquetFile(str(traces_path))
     measurable_set = set(registered_names())
     n_per_rg = max(1, batch_size)
