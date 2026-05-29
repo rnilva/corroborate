@@ -46,6 +46,16 @@ OUT_PNG = SCRIPT_DIR.parent / 'figures' / '02b_learning_curves.png'
 
 LATE_WINDOW_FRAC = 0.30
 
+# Per-env y-axis floor (keyed by env_name). LunarLander and Acrobot
+# have large-negative early returns (LL crash penalties; Acrobot's
+# −500-ish until it first reaches the goal) that auto-scaling lets
+# dominate the axis, compressing the informative late-training range.
+# Clamp the bottom; top stays auto.
+Y_MIN_FLOOR: dict[str, float] = {
+    'LunarLander-v2-jax': -200.0,
+    'Acrobot-v1': -200.0,
+}
+
 
 def _per_burst_raw_mean(mc_raw_eps_list) -> np.ndarray:
     """Convert `mc_return_raw_episodes` (per-burst K eps) into a
@@ -217,6 +227,9 @@ def main() -> None:
         ax.legend(fontsize=7, loc='best')
         ax.tick_params(labelsize=7)
         ax.grid(alpha=0.3)
+        floor = Y_MIN_FLOOR.get(env)
+        if floor is not None:
+            ax.set_ylim(bottom=floor)
 
     for j in range(n, len(axes_flat)):
         axes_flat[j].set_axis_off()
