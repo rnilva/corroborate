@@ -64,7 +64,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Literal, TypeIs
+from typing import TYPE_CHECKING, Final, Literal, Protocol, TypeIs, runtime_checkable
 
 import jax
 import jax.numpy as jnp
@@ -72,7 +72,13 @@ import numpy as np
 import polars as pl
 from gymnax import EnvParams
 
-from corroborate.corpus.cloud import RemoteFile, RemoteManifest, load_manifest
+from corroborate.corpus.cloud import (
+    RemoteFile,
+    RemoteManifest,
+    load_manifest,
+    purge as cloud_purge,
+    restore as cloud_restore,
+)
 from corroborate.corpus.persistence import atomic_write_parquet, atomic_write_text
 from corroborate_rl.dqn.claims.q_network import CNN, MLP, Params, QFunction
 from corroborate_rl.dqn.eval import EvalBurstOut, eval_burst
@@ -139,6 +145,130 @@ def eval_key(
     return jax.random.fold_in(
         jax.random.PRNGKey(eval_seed_base), seed * _SEED_STRIDE + burst,
     )
+
+
+# ============ Disk-bounded checkpoint restore (streaming) ============
+
+@runtime_checkable
+class CheckpointRestorer(Protocol):
+    """Per-cell checkpoint restore / release for the disk-bounded
+    streaming re-eval path.
+
+    `reeval_corpus` assumes every checkpoint is already local — fine
+    for the small per-file Breakout / Freeway n_eps1 corpora
+    (~MB-scale cells). The bundle-layout 3M corpora are different:
+    each cell's bundle is multi-GB (snake_g099_canonical_3M_ckpt:
+    ~2.7 GB × 4 cells = ~11 GB) and restoring all of them at once can
+    overflow a tight local disk. `reeval_corpus_streaming` restores
+    ONE bundle, re-evals the runs it covers, then releases it before
+    restoring the next — peak ckpt disk = one cell's bundle.
+
+    The Protocol keeps the streaming core cloud-agnostic (and unit-
+    testable with a local no-op restorer): the driver only needs
+    "make cell N's checkpoint present" / "free cell N's checkpoint".
+    `relpaths()` exposes the bundle file relpaths the driver discovers
+    cells from (so it needn't pre-download anything to enumerate the
+    work)."""
+
+    def relpaths(self) -> tuple[str, ...]:
+        """The `q_checkpoints/.../cell{NNN}.msgpack` relpaths (relative
+        to the corpus dir) this restorer can materialise — the cell
+        enumeration source."""
+        ...
+
+    def restore(self, relpath: str) -> None:
+        """Make `relpath` present locally (download if evicted; no-op
+        if already present with the right bytes)."""
+        ...
+
+    def release(self, relpath: str) -> None:
+        """Free the local copy of `relpath` (it stays cloud-restorable
+        via the manifest). Idempotent — a no-op if already absent."""
+        ...
+
+
+_BUNDLE_RELPATH_RE: Final[re.Pattern[str]] = re.compile(
+    r'(?:^|/)cell(\d+)\.msgpack$',
+)
+"""Matches a bundle-layout checkpoint relpath (`q_checkpoints/<sub>/
+cell{NNN}.msgpack`) and captures the cell index."""
+
+
+@dataclass(frozen=True, slots=True)
+class CloudCheckpointRestorer:
+    """`CheckpointRestorer` backed by a corpus's `_remote.json`
+    manifest: `restore` / `release` map to `cloud.restore` /
+    `cloud.purge` on the single bundle relpath.
+
+    `purge` (not `rm`) is used for release per CLAUDE.md's cloud
+    operator discipline — it validates the file is in the manifest
+    before deleting, preserving the manifest so the bundle stays
+    restorable for a subsequent run / the eventual cache build.
+
+    Built via `from_corpus`, which reads the manifest and selects the
+    bundle relpaths matching `q_checkpoints_subdir`. Raises if the
+    corpus has no manifest (the streaming path needs the cloud
+    address to fetch bundles one at a time) or no bundle entries
+    under the subdir."""
+    corpus_dir: Path
+    bundle_relpaths: tuple[str, ...]
+
+    @classmethod
+    def from_corpus(
+        cls, corpus_dir: Path, *, q_checkpoints_subdir: str = 'q_checkpoints',
+    ) -> CloudCheckpointRestorer:
+        manifest = load_manifest(corpus_dir)
+        if manifest is None:
+            raise FileNotFoundError(
+                f'reeval streaming: {corpus_dir} has no _remote.json — '
+                'the disk-bounded path restores checkpoint bundles one '
+                'at a time from cloud, which needs the manifest. Restore '
+                'the manifest first (corroborate.corpus.cloud.'
+                'recover_local_manifest) or use reeval_corpus with the '
+                'bundles already local.',
+            )
+        prefix = f'{q_checkpoints_subdir}/'
+        relpaths = tuple(
+            f.relpath for f in manifest.files
+            if f.relpath.startswith(prefix)
+            and _BUNDLE_RELPATH_RE.search(f.relpath) is not None
+        )
+        if not relpaths:
+            raise ValueError(
+                f'reeval streaming: manifest at {corpus_dir} lists no '
+                f'bundle-layout checkpoints under {prefix!r} '
+                '(cell{NNN}.msgpack). The streaming path is bundle-only; '
+                'per-file corpora are small enough for reeval_corpus.',
+            )
+        return cls(corpus_dir=corpus_dir, bundle_relpaths=relpaths)
+
+    def relpaths(self) -> tuple[str, ...]:
+        return self.bundle_relpaths
+
+    def restore(self, relpath: str) -> None:
+        # `cloud.restore` is idempotent: a local file whose sha256
+        # matches the manifest is skipped, so a re-run that crashed
+        # mid-corpus doesn't re-download completed bundles.
+        _ = cloud_restore(self.corpus_dir, files=[relpath])
+
+    def release(self, relpath: str) -> None:
+        # `purge` validates manifest membership before deleting and
+        # keeps the manifest intact (restore stays available). A bundle
+        # already absent locally is a no-op inside purge.
+        _ = cloud_purge(self.corpus_dir, files=[relpath])
+
+
+def _cell_idx_from_relpath(relpath: str) -> int:
+    """Extract the cell index from a bundle relpath. Raises on a
+    relpath that isn't bundle-shaped (the streaming enumeration only
+    ever passes matched relpaths, so a miss is a programming error)."""
+    m = _BUNDLE_RELPATH_RE.search(relpath)
+    if m is None:
+        raise ValueError(
+            f'reeval streaming: relpath {relpath!r} is not a bundle '
+            'cell{NNN}.msgpack path',
+        )
+    return int(m.group(1))
 
 
 # ============ Config → objects reconstruction ============
@@ -486,6 +616,132 @@ def _trace_predicted_q_at_bursts(
     return per_burst[np.asarray(bursts, dtype=np.intp)]
 
 
+@dataclass(frozen=True, slots=True)
+class _RowFingerprintMatcher:
+    """Resolves checkpoint (cell_idx, seed) → run_id by matching the
+    recomputed per-burst max-Q TRAJECTORY against the source trace's
+    `predicted_q_at_start[b, 0]`.
+
+    Built once (`build`) over the full runs + trace-Q projection; its
+    `match_cell` method is reused per checkpoint cell so the eager-
+    monolith path (`build_row_checkpoint_map`) and the per-bundle
+    streaming path (`reeval_corpus_streaming`) share ONE matching
+    implementation. Holding the jitted `_max_q` + env on the instance
+    keeps XLA compilation to once across every (cell, seed, burst)
+    probe.
+
+    The probe `bursts` are fixed at construction from `n_bursts` (the
+    spread that disambiguates arms — see `_probe_bursts`); every cell
+    must report the same `n_bursts`, asserted by the caller."""
+    env: Env
+    env_params: EnvParams
+    q_net: QFunction
+    bursts: tuple[int, ...]
+    _max_q: Callable[[Params, jax.Array], jax.Array]
+    # run_id → its source-trace Q-fingerprint at the probe bursts.
+    rows_by_seed: Mapping[int, tuple[tuple[str, np.ndarray], ...]]
+
+    @classmethod
+    def build(
+        cls, runs: pl.DataFrame, traces: pl.DataFrame, cfg: CellConfig,
+        *, n_bursts: int,
+    ) -> _RowFingerprintMatcher:
+        env, env_params = make_env(get_env_spec(cfg.env_name))
+        q_net = cfg.q_network
+        bursts = _probe_bursts(n_bursts)
+
+        # `max_a Q(params, obs)` jitted ONCE so XLA compiles a single
+        # executable reused across every (cell, seed, burst) probe —
+        # avoids the per-eager-call compilation churn that accumulated
+        # device memory on 50-burst corpora.
+        @jax.jit
+        def _max_q(params: Params, obs: jax.Array) -> jax.Array:
+            return jnp.max(q_net(params, obs))
+
+        rows_by_seed: dict[int, list[tuple[str, np.ndarray]]] = {}
+        for r in runs.iter_rows(named=True):
+            seed = _require_int(r, 'seed')
+            run_id = str(r['id'])
+            traj = _trace_predicted_q_at_bursts(traces, run_id, bursts)
+            rows_by_seed.setdefault(seed, []).append((run_id, traj))
+        return cls(
+            env=env, env_params=env_params, q_net=q_net,
+            bursts=bursts, _max_q=_max_q,
+            rows_by_seed={s: tuple(v) for s, v in rows_by_seed.items()},
+        )
+
+    def _recompute_trajectory(
+        self, cell: CellCheckpoints, seed: int,
+    ) -> np.ndarray:
+        # Recompute max_a Q(s_0^b) at the probe bursts under the
+        # burst-b params. The canonical burst-b reset uses the
+        # ORIGINAL eval key (how the source trace's value was
+        # produced); eval_burst splits then resets per episode, so
+        # episode 0's reset key is split(key, K)[0] → reset =
+        # split(., 2)[0].
+        out = np.empty(len(self.bursts), dtype=np.float64)
+        for i, burst in enumerate(self.bursts):
+            params = cell.online_params(seed=seed, burst=burst)
+            key_b = eval_key(
+                keying='original', eval_seed_base=0, seed=seed, burst=burst,
+            )
+            ep_keys = jax.random.split(key_b, 1)
+            reset_key, _run = jax.random.split(ep_keys[0])
+            obs0, _state = self.env.reset(reset_key, self.env_params)
+            out[i] = float(self._max_q(params, obs0))
+        return out
+
+    def match_cell(
+        self,
+        cell: CellCheckpoints,
+        seeds: Sequence[int],
+        *,
+        used_ids: set[str],
+        match_tol: float,
+    ) -> dict[str, tuple[int, int]]:
+        """Match each (cell.cell_idx, seed) to the NEAREST unused run
+        row (by L∞ over the per-burst Q-trajectory), within
+        `match_tol`. Mutates `used_ids` so subsequent cells (e.g. the
+        SAME seed under the other arm's bundle) bind the remaining
+        rows. Greedy nearest-match resolves ties harmlessly: identical
+        twins (pre-divergence params) yield identical re-eval output,
+        so which twin binds which doesn't matter — only the bijection.
+        A >tol residual (no run row reproduces the cell's trajectory)
+        is a real error and raises."""
+        resolved: dict[str, tuple[int, int]] = {}
+        for seed in seeds:
+            recomputed = self._recompute_trajectory(cell, seed)
+            best_id: str | None = None
+            best_dist = float('inf')
+            for (run_id, traj) in self.rows_by_seed.get(seed, ()):
+                if run_id in used_ids:
+                    continue
+                d = _l_inf(traj, recomputed)
+                if d < best_dist:
+                    best_dist, best_id = d, run_id
+            if best_id is None or best_dist > match_tol:
+                raise ValueError(
+                    f'reeval: cell {cell.cell_idx} seed {seed} has no '
+                    'unused run row whose per-burst predicted_q '
+                    f'trajectory matches within tol={match_tol} (best '
+                    f'L∞={best_dist:.6g}). The Q-trajectory fingerprint '
+                    'should identify the (arm, seed) of a checkpoint '
+                    'cell — a >tol residual means the checkpoints or '
+                    'the source traces are inconsistent.',
+                )
+            resolved[best_id] = (cell.cell_idx, seed)
+            used_ids.add(best_id)
+        return resolved
+
+
+def _l_inf(a: np.ndarray, b: np.ndarray) -> float:
+    """L∞ distance, treating shape mismatch as +inf (so a wrong-shape
+    fingerprint never spuriously matches)."""
+    if a.shape != b.shape:
+        return float('inf')
+    return float(np.max(np.abs(a - b)))
+
+
 def build_row_checkpoint_map(
     runs: pl.DataFrame,
     traces: pl.DataFrame,
@@ -509,89 +765,22 @@ def build_row_checkpoint_map(
     columns are never materialised for the mapping).
 
     Refuses to proceed if a (cell, seed) can't be matched to a run
-    row within `match_tol` — a silent mis-pair would scramble V/D."""
-    env, env_params = make_env(get_env_spec(cfg.env_name))
-    q_net = cfg.q_network
-    n_bursts = source.n_bursts
-    bursts = _probe_bursts(n_bursts)
+    row within `match_tol` — a silent mis-pair would scramble V/D.
 
-    # `max_a Q(params, obs)` jitted ONCE so XLA compiles a single
-    # executable reused across every (cell, seed, burst) probe —
-    # avoids the per-eager-call compilation churn that accumulated
-    # device memory on 50-burst corpora.
-    @jax.jit
-    def _max_q(params: Params, obs: jax.Array) -> jax.Array:
-        return jnp.max(q_net(params, obs))
-
-    # Index source rows + their Q-fingerprint at the probe bursts.
-    rows_by_seed: dict[int, list[tuple[str, str, np.ndarray]]] = {}
-    for r in runs.iter_rows(named=True):
-        seed = _require_int(r, 'seed')
-        run_id = str(r['id'])
-        arm_key = str(r['arm_key'])
-        traj = _trace_predicted_q_at_bursts(traces, run_id, bursts)
-        rows_by_seed.setdefault(seed, []).append((run_id, arm_key, traj))
-
-    def predicted_q_trajectory(cell: CellCheckpoints, seed: int) -> np.ndarray:
-        # Recompute max_a Q(s_0^b) at the probe bursts under the
-        # burst-b params. The canonical burst-b reset uses the
-        # ORIGINAL eval key (how the source trace's value was
-        # produced); eval_burst splits then resets per episode, so
-        # episode 0's reset key is split(key, K)[0] → reset =
-        # split(., 2)[0].
-        out = np.empty(len(bursts), dtype=np.float64)
-        for i, burst in enumerate(bursts):
-            params = cell.online_params(seed=seed, burst=burst)
-            key_b = eval_key(
-                keying='original', eval_seed_base=0, seed=seed, burst=burst,
-            )
-            ep_keys = jax.random.split(key_b, 1)
-            reset_key, _run = jax.random.split(ep_keys[0])
-            obs0, _state = env.reset(reset_key, env_params)
-            out[i] = float(_max_q(params, obs0))
-        return out
-
-    def l_inf(a: np.ndarray, b: np.ndarray) -> float:
-        if a.shape != b.shape:
-            return float('inf')
-        return float(np.max(np.abs(a - b)))
-
-    # Per-seed bipartite assignment: each (cell, seed) is matched to
-    # the NEAREST unused run-row (with that seed) by L∞ over the
-    # per-burst Q-trajectory, requiring the best match within
-    # `match_tol`. Greedy nearest-match resolves ties harmlessly:
-    # when two arms share an identical trajectory (e.g. before DDQN's
-    # clip diverges them) their checkpoint params are identical, so
-    # whichever run-row each cell binds to yields the SAME re-eval
-    # output — the bijection is what matters, not which identical
-    # twin gets which. Only a >tol residual (no run-row reproduces
-    # the cell's Q-trajectory) is a real error.
+    Eager-monolith path: every checkpoint cell must be present locally
+    (`source.load_cell` reads each bundle). The per-bundle streaming
+    path (`reeval_corpus_streaming`) reuses the same
+    `_RowFingerprintMatcher` but restores one bundle at a time."""
+    matcher = _RowFingerprintMatcher.build(
+        runs, traces, cfg, n_bursts=source.n_bursts,
+    )
     by_id: dict[str, tuple[int, int]] = {}
     used_ids: set[str] = set()
     for cell_idx, seeds in source.cell_seeds.items():
         cell = source.load_cell(cell_idx)
-        for seed in seeds:
-            recomputed = predicted_q_trajectory(cell, seed)
-            best_id: str | None = None
-            best_dist = float('inf')
-            for (run_id, _ak, traj) in rows_by_seed.get(seed, []):
-                if run_id in used_ids:
-                    continue
-                d = l_inf(traj, recomputed)
-                if d < best_dist:
-                    best_dist, best_id = d, run_id
-            if best_id is None or best_dist > match_tol:
-                raise ValueError(
-                    f'reeval: cell {cell_idx} seed {seed} has no unused '
-                    f'run row whose per-burst predicted_q trajectory '
-                    f'matches within tol={match_tol} (best L∞='
-                    f'{best_dist:.6g}). The Q-trajectory fingerprint '
-                    'should identify the (arm, seed) of a checkpoint '
-                    'cell — a >tol residual means the checkpoints or '
-                    'the source traces are inconsistent.',
-                )
-            by_id[best_id] = (cell_idx, seed)
-            used_ids.add(best_id)
+        by_id.update(matcher.match_cell(
+            cell, seeds, used_ids=used_ids, match_tol=match_tol,
+        ))
 
     missing = set(runs.get_column('id').to_list()) - set(by_id)
     if missing:
@@ -600,7 +789,7 @@ def build_row_checkpoint_map(
             f'(e.g. {sorted(missing)[:3]}). Checkpoint cells cover '
             f'seeds {sorted({s for ss in source.cell_seeds.values() for s in ss})}.',
         )
-    return RowCheckpointMap(by_id=by_id, n_bursts=n_bursts)
+    return RowCheckpointMap(by_id=by_id, n_bursts=source.n_bursts)
 
 
 # ============ Per-cell re-eval ============
@@ -799,6 +988,32 @@ def reeval_corpus(
         for col in EVAL_DERIVED_COLUMNS:
             new_eval[col][rid] = stacked[col]
 
+    _finalize_reeval_output(
+        corpus_dir=corpus_dir, out_dir=out_dir, runs=runs,
+        traces_path=traces_path, new_eval=new_eval,
+        ids_in_order=ids_in_order, n_episodes=n_episodes,
+    )
+    return out_dir
+
+
+def _finalize_reeval_output(
+    *,
+    corpus_dir: Path,
+    out_dir: Path,
+    runs: pl.DataFrame,
+    traces_path: Path,
+    new_eval: Mapping[str, Mapping[str, np.ndarray]],
+    ids_in_order: Sequence[str],
+    n_episodes: int,
+) -> None:
+    """Write the new corpus's traces + runs + manifest reference.
+
+    Shared by `reeval_corpus` (eager) and `reeval_corpus_streaming`
+    (disk-bounded): both assemble the six eval-derived arrays keyed by
+    id into `new_eval`, then this writes them out — training columns
+    streamed verbatim from `traces_path`, runs restamped to
+    `n_episodes`, and the source's q-checkpoint cloud references
+    mirrored so the new corpus stays restorable."""
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_reeval_traces(
         traces_path, out_dir / 'traces.parquet',
@@ -813,6 +1028,161 @@ def reeval_corpus(
     )
     atomic_write_parquet(new_runs, out_dir / 'runs.parquet')
     _mirror_manifest_reference(corpus_dir, out_dir, n_episodes=n_episodes)
+
+
+def reeval_corpus_streaming(
+    corpus_dir: Path,
+    *,
+    n_episodes: int,
+    out_dir: Path,
+    restorer: CheckpointRestorer,
+    eval_seed_base: int = 0,
+    eval_keying: EvalKeying = 'paired',
+) -> Path:
+    """Disk-bounded re-eval for bundle-layout corpora whose per-cell
+    checkpoints are too large to all fit locally at once.
+
+    Identical OUTPUT to `reeval_corpus` (same paired eval keying, same
+    eval-derived / training-derived split, same self-verifying arm
+    mapping) — but restores ONE checkpoint bundle at a time via
+    `restorer`, re-evals the runs that bundle covers, then RELEASES it
+    before restoring the next. Peak checkpoint disk = a single cell's
+    bundle (e.g. ~2.7 GB for snake_g099_canonical_3M_ckpt) instead of
+    the whole `q_checkpoints/` tree (~11 GB).
+
+    Per bundle:
+
+    1. `restorer.restore(relpath)` — download cell N's bundle.
+    2. `load_bundle` → its `seeds` + `n_bursts`. The first bundle pins
+       `n_bursts`; later bundles must agree (uniform source corpus).
+    3. Match the bundle's (cell, seed) entries to the still-unused run
+       rows by the per-burst predicted-Q TRAJECTORY fingerprint (the
+       SAME `_RowFingerprintMatcher` the eager path uses) — so the two
+       bundles covering one seed under different arms bind the correct
+       run rows.
+    4. Re-roll greedy `eval_burst` at `n_episodes` for every matched
+       (seed, burst); stash the six eval arrays in memory (tiny —
+       greedy-eval episode arrays compress to ~MB/cell).
+    5. `restorer.release(relpath)` — free the bundle.
+
+    After all bundles: every run row must be matched (else raise), and
+    the output is written exactly as `reeval_corpus` does. The eval
+    arrays for the WHOLE corpus live in memory simultaneously (they're
+    small); only the multi-GB CHECKPOINTS are streamed one at a time.
+
+    `restorer` is the disk-management injection point — typically
+    `CloudCheckpointRestorer.from_corpus(corpus_dir)` for production,
+    or a local no-op restorer in tests. Returns `out_dir`."""
+    if n_episodes < 1:
+        raise ValueError(f'reeval: n_episodes must be >= 1; got {n_episodes}')
+    runs_path = corpus_dir / 'runs.parquet'
+    traces_path = corpus_dir / 'traces.parquet'
+    if not runs_path.is_file():
+        raise FileNotFoundError(f'reeval: no runs.parquet at {runs_path}')
+    if not traces_path.is_file():
+        raise FileNotFoundError(
+            f'reeval: no traces.parquet at {traces_path} — restore the '
+            'source corpus traces from cloud first.',
+        )
+
+    runs = pl.read_parquet(runs_path)
+    cfg = _build_cell_config(runs)
+
+    # Eval-derived column presence guard (same as the eager path) —
+    # fail before any multi-GB bundle download if this isn't a re-eval
+    # target.
+    traces_schema = set(pl.scan_parquet(traces_path).collect_schema().names())
+    missing_eval_cols = EVAL_DERIVED_COLUMNS - traces_schema
+    if missing_eval_cols:
+        raise ValueError(
+            f'reeval: source traces missing eval-derived columns '
+            f'{sorted(missing_eval_cols)} — not a re-eval target.',
+        )
+    traces_q0 = pl.read_parquet(
+        traces_path, columns=['id', 'predicted_q_at_start'],
+    )
+    ids_in_order = [str(i) for i in traces_q0.get_column('id').to_list()]
+
+    bundle_relpaths = sorted(
+        restorer.relpaths(), key=_cell_idx_from_relpath,
+    )
+    if not bundle_relpaths:
+        raise ValueError(
+            'reeval streaming: restorer enumerated no checkpoint '
+            'bundles — nothing to re-eval.',
+        )
+
+    env, env_params = make_env(get_env_spec(cfg.env_name))
+    eval_fn = _make_eval_burst_fn(
+        env=env, env_params=env_params, q_net=cfg.q_network,
+        gamma=cfg.gamma, episode_cap=cfg.eval_episode_cap,
+        n_episodes=n_episodes,
+    )
+
+    new_eval: dict[str, dict[str, np.ndarray]] = {
+        col: {} for col in EVAL_DERIVED_COLUMNS
+    }
+    by_id: dict[str, tuple[int, int]] = {}
+    used_ids: set[str] = set()
+    matcher: _RowFingerprintMatcher | None = None
+    n_bursts: int | None = None
+
+    for relpath in bundle_relpaths:
+        cell_idx = _cell_idx_from_relpath(relpath)
+        restorer.restore(relpath)
+        try:
+            bundle = load_bundle(bundle_path(
+                corpus_dir / relpath.rsplit('/', 1)[0], cell_idx=cell_idx,
+            ))
+            if n_bursts is None:
+                n_bursts = bundle.n_bursts
+                matcher = _RowFingerprintMatcher.build(
+                    runs, traces_q0, cfg, n_bursts=n_bursts,
+                )
+            elif bundle.n_bursts != n_bursts:
+                raise ValueError(
+                    f'reeval streaming: bundle cell{cell_idx:03d} reports '
+                    f'n_bursts={bundle.n_bursts} but an earlier bundle '
+                    f'had {n_bursts} — non-uniform source corpus, '
+                    'unsupported.',
+                )
+            assert matcher is not None  # set in lockstep with n_bursts
+            cell = CellCheckpoints(
+                base_dir=corpus_dir / relpath.rsplit('/', 1)[0],
+                cell_idx=cell_idx, _bundle=bundle,
+            )
+            resolved = matcher.match_cell(
+                cell, bundle.seeds, used_ids=used_ids, match_tol=1e-3,
+            )
+            by_id.update(resolved)
+            for rid, (_ci, seed) in resolved.items():
+                stacked = _reeval_one_cell(
+                    cell=cell, eval_fn=eval_fn, seed=seed,
+                    n_bursts=n_bursts,
+                    eval_seed_base=eval_seed_base, keying=eval_keying,
+                )
+                for col in EVAL_DERIVED_COLUMNS:
+                    new_eval[col][rid] = stacked[col]
+        finally:
+            # Free the bundle's local copy whether or not it processed
+            # cleanly — the disk-bounded invariant (peak = one bundle)
+            # must hold even on a mid-corpus raise.
+            restorer.release(relpath)
+
+    missing = set(ids_in_order) - set(by_id)
+    if missing:
+        raise ValueError(
+            f'reeval streaming: {len(missing)} run rows had no checkpoint '
+            f'match (e.g. {sorted(missing)[:3]}). The bundles enumerated '
+            f'by the restorer ({bundle_relpaths}) do not cover every run '
+            'row — check the manifest / chunk coverage.',
+        )
+
+    _finalize_reeval_output(
+        corpus_dir=corpus_dir, out_dir=out_dir, runs=runs,
+        traces_path=traces_path, new_eval=new_eval,
+        ids_in_order=ids_in_order, n_episodes=n_episodes,
+    )
     return out_dir
 
 
@@ -916,7 +1286,9 @@ def _mirror_manifest_reference(
 __all__ = [
     'CellCheckpoints',
     'CellConfig',
+    'CheckpointRestorer',
     'CheckpointSource',
+    'CloudCheckpointRestorer',
     'EVAL_DERIVED_COLUMNS',
     'EvalKeying',
     'RowCheckpointMap',
@@ -924,4 +1296,5 @@ __all__ = [
     'discover_checkpoint_source',
     'eval_key',
     'reeval_corpus',
+    'reeval_corpus_streaming',
 ]

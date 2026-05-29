@@ -26,6 +26,7 @@ The fast cohort stays JAX-light; the slow tests carry a 60-step
 DQN compile (~a few s on CPU)."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
@@ -42,12 +43,16 @@ from corroborate_rl.dqn.q_checkpoint_bundle import QCheckpointBundle, save_bundl
 from corroborate_rl.dqn.reeval import (
     EVAL_DERIVED_COLUMNS,
     CellConfig,
+    CheckpointRestorer,
+    CloudCheckpointRestorer,
     _build_cell_config,
     _build_q_network,
+    _cell_idx_from_relpath,
     _parse_int_tuple,
     discover_checkpoint_source,
     eval_key,
     reeval_corpus,
+    reeval_corpus_streaming,
 )
 
 
@@ -511,3 +516,190 @@ def test_reeval_paired_arms_share_eval_instances(tmp_path: Path) -> None:
             )
     # n_episodes restamped in runs.
     assert set(runs.get_column('n_episodes').to_list()) == {20}
+
+
+# ============ Disk-bounded streaming re-eval ============
+
+
+def test_cell_idx_from_relpath_parses_bundle_paths() -> None:
+    """`_cell_idx_from_relpath` extracts the integer cell index from a
+    nested bundle relpath and rejects non-bundle relpaths."""
+    assert _cell_idx_from_relpath(
+        'q_checkpoints/canonical_g099_3M/cell003.msgpack',
+    ) == 3
+    assert _cell_idx_from_relpath('q_checkpoints/sub/cell000.msgpack') == 0
+    with pytest.raises(ValueError, match='not a bundle'):
+        _ = _cell_idx_from_relpath('q_checkpoints/sub/cell0_0_burst3.msgpack')
+
+
+def _write_manifest(corpus_dir: Path, *, relpaths: list[str]) -> None:
+    """Write a minimal `_remote.json` listing `relpaths` so
+    `CloudCheckpointRestorer.from_corpus` can parse it. Sizes / hashes
+    are placeholders — `from_corpus` only reads relpaths."""
+    import json
+    corpus_dir.mkdir(parents=True, exist_ok=True)
+    files = [
+        {
+            'relpath': r, 'size_bytes': 1, 'sha256': 'x' * 64,
+            'pushed_at': '2026-01-01T00:00:00+00:00',
+        }
+        for r in relpaths
+    ]
+    (corpus_dir / '_remote.json').write_text(json.dumps({
+        'remote_root': 's3://bucket/test_corpus', 'files': files,
+    }))
+
+
+def test_cloud_restorer_from_corpus_selects_bundle_relpaths(
+    tmp_path: Path,
+) -> None:
+    """`CloudCheckpointRestorer.from_corpus` reads the manifest and
+    keeps only the bundle-layout `q_checkpoints/.../cell{NNN}.msgpack`
+    entries (skipping runs/traces parquets and per-file checkpoints)."""
+    corpus = tmp_path / 'corpus'
+    _write_manifest(corpus, relpaths=[
+        'runs.parquet',
+        'traces.parquet',
+        'q_checkpoints/sub/cell000.msgpack',
+        'q_checkpoints/sub/cell001.msgpack',
+    ])
+    restorer = CloudCheckpointRestorer.from_corpus(corpus)
+    assert restorer.relpaths() == (
+        'q_checkpoints/sub/cell000.msgpack',
+        'q_checkpoints/sub/cell001.msgpack',
+    )
+    # Structurally satisfies the Protocol (runtime_checkable).
+    assert isinstance(restorer, CheckpointRestorer)
+
+
+def test_cloud_restorer_from_corpus_requires_manifest(tmp_path: Path) -> None:
+    """No `_remote.json` → the streaming restorer can't fetch bundles;
+    raise a FileNotFoundError naming the recovery path."""
+    corpus = tmp_path / 'corpus'
+    corpus.mkdir()
+    with pytest.raises(FileNotFoundError, match='_remote.json'):
+        _ = CloudCheckpointRestorer.from_corpus(corpus)
+
+
+def test_cloud_restorer_from_corpus_rejects_per_file_only(
+    tmp_path: Path,
+) -> None:
+    """A manifest with only per-file (non-bundle) checkpoints has no
+    `cell{NNN}.msgpack` entries — the streaming path is bundle-only;
+    raise."""
+    corpus = tmp_path / 'corpus'
+    _write_manifest(corpus, relpaths=[
+        'runs.parquet',
+        'q_checkpoints/sub/cell000_0_burst0.msgpack',
+    ])
+    with pytest.raises(ValueError, match='bundle-layout'):
+        _ = CloudCheckpointRestorer.from_corpus(corpus)
+
+
+@dataclass
+class _RecordingLocalRestorer:
+    """A `CheckpointRestorer` test double over already-local bundles.
+
+    `restore` / `release` are no-ops on the filesystem (the bundles
+    are local in the test corpus) but RECORD the call sequence so the
+    test can assert the per-bundle disk discipline: each bundle is
+    released before the next is restored (peak = one bundle), and
+    every restored bundle is eventually released."""
+    relpaths_: tuple[str, ...]
+    calls: list[tuple[str, str]]
+
+    def relpaths(self) -> tuple[str, ...]:
+        return self.relpaths_
+
+    def restore(self, relpath: str) -> None:
+        self.calls.append(('restore', relpath))
+
+    def release(self, relpath: str) -> None:
+        self.calls.append(('release', relpath))
+
+
+def _bundle_relpaths(corpus_dir: Path) -> tuple[str, ...]:
+    """Discover the local bundle relpaths under a built corpus's
+    `q_checkpoints/` tree."""
+    qc = corpus_dir / 'q_checkpoints'
+    return tuple(
+        sorted(
+            p.relative_to(corpus_dir).as_posix()
+            for p in qc.rglob('cell*.msgpack')
+        ),
+    )
+
+
+@_SLOW
+def test_reeval_streaming_matches_eager_output(tmp_path: Path) -> None:
+    """The disk-bounded streaming path produces output IDENTICAL to the
+    eager `reeval_corpus` — same eval-derived arrays per id, same
+    restamped runs. The streaming path restores ONE bundle at a time;
+    on this tiny corpus the bundles are local (no-op restorer), so the
+    only difference is control flow. Byte-identity of every eval column
+    is the strongest correctness guarantee that the per-bundle matcher
+    binds the same (cell, seed) → run_id mapping the eager bipartite
+    assignment does."""
+    src = tmp_path / 'src_corpus'
+    _build_source_ckpt_corpus(src)
+
+    eager_out = tmp_path / 'reeval_eager'
+    _ = reeval_corpus(src, n_episodes=20, out_dir=eager_out, eval_keying='paired')
+
+    relpaths = _bundle_relpaths(src)
+    assert len(relpaths) >= 2, (
+        f'expected >=2 bundles (one per arm); got {relpaths}'
+    )
+    restorer = _RecordingLocalRestorer(relpaths_=relpaths, calls=[])
+    stream_out = tmp_path / 'reeval_stream'
+    _ = reeval_corpus_streaming(
+        src, n_episodes=20, out_dir=stream_out,
+        restorer=restorer, eval_keying='paired',
+    )
+
+    eager_t = pl.read_parquet(eager_out / 'traces.parquet')
+    stream_t = pl.read_parquet(stream_out / 'traces.parquet')
+    ids = eager_t.get_column('id').to_list()
+    assert set(ids) == set(stream_t.get_column('id').to_list())
+    for rid in ids:
+        for col in EVAL_DERIVED_COLUMNS:
+            ev = _eval_col(eager_t, str(rid), col)
+            sv = _eval_col(stream_t, str(rid), col)
+            assert ev.shape == sv.shape, (
+                f'{col} shape differs for {rid}: {ev.shape} vs {sv.shape}'
+            )
+            np.testing.assert_array_equal(
+                sv, ev,
+                err_msg=(
+                    f'streaming {col} differs from eager for id={rid} — '
+                    'the per-bundle matcher must reproduce the eager '
+                    'arm→run mapping exactly'
+                ),
+            )
+
+    # n_episodes restamped identically.
+    eager_runs = pl.read_parquet(eager_out / 'runs.parquet')
+    stream_runs = pl.read_parquet(stream_out / 'runs.parquet')
+    assert set(stream_runs.get_column('n_episodes').to_list()) == {20}
+    assert eager_runs.height == stream_runs.height
+
+    # Per-bundle disk discipline: each bundle released before the next
+    # is restored, and every restore is paired with a release.
+    restores = [r for (op, r) in restorer.calls if op == 'restore']
+    releases = [r for (op, r) in restorer.calls if op == 'release']
+    assert restores == list(relpaths), 'bundles restored in cell order'
+    assert sorted(releases) == sorted(relpaths), 'every bundle released'
+    # No two bundles held simultaneously: between consecutive restores
+    # there must be a release of the prior bundle.
+    held: set[str] = set()
+    max_held = 0
+    for op, relpath in restorer.calls:
+        if op == 'restore':
+            held.add(relpath)
+        else:
+            held.discard(relpath)
+        max_held = max(max_held, len(held))
+    assert max_held == 1, (
+        f'streaming held {max_held} bundles at once — disk-bounded '
+        'invariant (peak = one bundle) violated'
+    )

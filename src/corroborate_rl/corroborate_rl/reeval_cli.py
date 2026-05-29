@@ -34,7 +34,7 @@ from pathlib import Path
 from collections.abc import Mapping
 
 from corroborate._internals.argparse import to_mapping
-from corroborate._internals.narrow import require_int, require_str
+from corroborate._internals.narrow import require_bool, require_int, require_str
 from corroborate_rl.dqn_sweep import Device, set_jax_env
 
 
@@ -79,6 +79,17 @@ def _build_parser() -> argparse.ArgumentParser:
              "(default 'q_checkpoints').",
     )
     _ = parser.add_argument(
+        '--stream-checkpoints', action='store_true',
+        help='Disk-bounded path: restore each per-cell checkpoint '
+             'bundle from cloud one at a time, re-eval the runs it '
+             'covers, then purge it before the next — peak ckpt disk = '
+             'one bundle. For bundle-layout corpora whose full '
+             'q_checkpoints/ tree (e.g. snake 3M ~11 GB) does not fit '
+             'locally. Requires a _remote.json manifest on the source '
+             'corpus. Default (off) assumes all checkpoints are already '
+             'local (small per-file corpora).',
+    )
+    _ = parser.add_argument(
         '--device', choices=['cpu', 'gpu'], default='cpu',
         help='JAX platform. CPU default; GPU for MinAtar CNN evals.',
     )
@@ -110,7 +121,12 @@ def main(argv: list[str] | None = None) -> int:
     set_jax_env(device)
 
     # Lazy import — JAX latches the backend here, after the env stamp.
-    from corroborate_rl.dqn.reeval import EvalKeying, reeval_corpus
+    from corroborate_rl.dqn.reeval import (
+        CloudCheckpointRestorer,
+        EvalKeying,
+        reeval_corpus,
+        reeval_corpus_streaming,
+    )
 
     keying_raw = require_str(args_map, 'eval_keying')
     keying: EvalKeying = 'paired' if keying_raw == 'paired' else 'original'
@@ -120,16 +136,33 @@ def main(argv: list[str] | None = None) -> int:
     n_episodes = require_int(args_map, 'n_episodes')
     eval_seed_base = require_int(args_map, 'eval_seed_base')
     subdir = require_str(args_map, 'q_checkpoints_subdir')
+    stream = require_bool(args_map, 'stream_checkpoints')
 
-    out = reeval_corpus(
-        corpus_dir,
-        n_episodes=n_episodes,
-        out_dir=out_dir,
-        eval_seed_base=eval_seed_base,
-        eval_keying=keying,
-        q_checkpoints_subdir=subdir,
+    if stream:
+        restorer = CloudCheckpointRestorer.from_corpus(
+            corpus_dir, q_checkpoints_subdir=subdir,
+        )
+        out = reeval_corpus_streaming(
+            corpus_dir,
+            n_episodes=n_episodes,
+            out_dir=out_dir,
+            restorer=restorer,
+            eval_seed_base=eval_seed_base,
+            eval_keying=keying,
+        )
+    else:
+        out = reeval_corpus(
+            corpus_dir,
+            n_episodes=n_episodes,
+            out_dir=out_dir,
+            eval_seed_base=eval_seed_base,
+            eval_keying=keying,
+            q_checkpoints_subdir=subdir,
+        )
+    print(
+        f'reeval: wrote {out} (n_episodes={n_episodes}, keying={keying}, '
+        f'stream={stream})',
     )
-    print(f'reeval: wrote {out} (n_episodes={n_episodes}, keying={keying})')
     return 0
 
 
