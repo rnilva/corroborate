@@ -775,3 +775,52 @@ def test_reeval_streaming_eval_cache_resumable(tmp_path: Path) -> None:
         )
     resumed_runs = pl.read_parquet(resumed_out / 'runs.parquet')
     assert set(resumed_runs.get_column('n_episodes').to_list()) == {20}
+
+
+def test_reeval_write_memory_bounded_across_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_write_reeval_traces` streams the source in row-batches, pinning
+    every batch to the FIRST batch's arrow schema. Forcing
+    `_REEVAL_WRITE_BATCH = 1` (one cell per batch → the cross-batch
+    `table.cast(out_schema)` path runs for every cell after the first)
+    must produce output IDENTICAL to the default single-batch pass.
+
+    Regression guard for the OOM fix: the prior write materialised ALL
+    cells' eval arrays at once (`[arr.tolist() for rid in ids_in_order]`)
+    and was SIGKILL'd on trace-heavy corpora (Snake n=20: 150 bursts ×
+    20 eps × long episodes × 60 cells). The per-batch re-roll bounds
+    peak memory to one batch; this proves it doesn't change the data."""
+    import corroborate_rl.dqn.reeval as reeval_mod
+
+    src = tmp_path / 'src_corpus'
+    _build_source_ckpt_corpus(src)
+
+    # Default batch (>= the 2-cell corpus → a single write batch).
+    single = tmp_path / 'reeval_single_batch'
+    _ = reeval_corpus(src, n_episodes=20, out_dir=single, eval_keying='paired')
+
+    # One cell per batch → multiple batches → exercises the cross-batch
+    # schema-pinning cast that the single-batch pass never reaches.
+    monkeypatch.setattr(reeval_mod, '_REEVAL_WRITE_BATCH', 1)
+    multi = tmp_path / 'reeval_multi_batch'
+    _ = reeval_corpus(src, n_episodes=20, out_dir=multi, eval_keying='paired')
+
+    single_t = pl.read_parquet(single / 'traces.parquet')
+    multi_t = pl.read_parquet(multi / 'traces.parquet')
+    assert single_t.schema == multi_t.schema, (
+        'multi-batch write produced a different schema than single-batch — '
+        'the incremental ParquetWriter schema must stay stable across batches'
+    )
+    ids = single_t.get_column('id').to_list()
+    assert set(ids) == set(multi_t.get_column('id').to_list())
+    for rid in ids:
+        for col in EVAL_DERIVED_COLUMNS:
+            np.testing.assert_array_equal(
+                _eval_col(multi_t, str(rid), col),
+                _eval_col(single_t, str(rid), col),
+                err_msg=(
+                    f'multi-batch {col} differs from single-batch for '
+                    f'id={rid} — per-batch re-roll must be data-identical'
+                ),
+            )

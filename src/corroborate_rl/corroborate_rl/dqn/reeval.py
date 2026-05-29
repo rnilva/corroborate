@@ -1450,6 +1450,14 @@ def reeval_corpus_streaming(
     return out_dir
 
 
+# Rows (cells) per streamed write batch in `_write_reeval_traces`.
+# Peak write memory ≈ this many cells' re-rolled eval + training arrays.
+# 4 stays well under RAM even for trace-heavy corpora (Snake n=20:
+# ~1-1.5 GB per cell of per-step eval arrays → ~5 GB peak); lower it if
+# a corpus has extreme per-cell trace volume.
+_REEVAL_WRITE_BATCH: Final[int] = 4
+
+
 def _write_reeval_traces(
     source_traces: Path,
     out_traces: Path,
@@ -1461,41 +1469,84 @@ def _write_reeval_traces(
     copied verbatim from `source_traces`, the six eval-derived
     columns replaced by the re-rolled arrays in `new_eval`.
 
-    Memory-bounded: the heavy training columns flow through a polars
-    LAZY scan joined to a small in-memory eval frame, streamed to
-    parquet via `sink_parquet`. The training columns are never
-    materialised as Python objects — they stay Arrow from disk to
-    disk. Only the six eval columns (re-rolled) are built in memory,
-    and only those are dropped + re-attached.
+    Memory-bounded for ANY n_episodes: the source is streamed in small
+    row batches (`_REEVAL_WRITE_BATCH` cells each); per batch the six
+    eval columns are re-rolled, the old eval columns dropped, the new
+    ones joined on `id`, and the batch written to the output via an
+    incremental `ParquetWriter`. Neither the heavy training columns NOR
+    the (at high n_episodes, heavier still) eval columns are ever fully
+    materialised — peak memory is one batch.
 
-    The join is on `id`; the original column ORDER is preserved by
-    selecting the source schema's column list (with the eval columns
-    sourced from the joined-in frame)."""
-    source_cols = pl.scan_parquet(source_traces).collect_schema().names()
-    # Build the small eval frame (id + 6 re-rolled columns). Each
-    # column is a list-of-arrays → polars infers the nested
-    # List/Array dtype matching the source schema's `large_list`.
-    eval_frame_data: dict[str, list[object]] = {'id': list(ids_in_order)}
-    for col in EVAL_DERIVED_COLUMNS:
-        eval_frame_data[col] = [
-            new_eval[col][rid].tolist() for rid in ids_in_order
-        ]
-    eval_df = pl.DataFrame(eval_frame_data)
-    # Lazy scan of the source with the OLD eval columns dropped, then
-    # join the re-rolled eval columns, then reselect the original
-    # column order. `sink_parquet` streams the heavy training columns
-    # straight through.
-    lazy = (
-        pl.scan_parquet(source_traces)
-        .drop(EVAL_DERIVED_COLUMNS)
-        .join(eval_df.lazy(), on='id', how='left')
-        .select(source_cols)
-    )
+    The earlier implementation built ONE in-memory eval frame for ALL
+    cells (`[arr.tolist() for rid in ids_in_order]`), which OOM-killed
+    on trace-heavy corpora (Snake n=20: 150 bursts × 20 eps × long
+    episodes × 60 cells → tens of GB of Python-list floats). The
+    per-batch re-roll bounds that.
+
+    Output column ORDER + dtypes are pinned to the source schema (the
+    re-rolled eval columns are cast to the source's eval dtypes) so the
+    `ParquetWriter` sees a stable schema across batches and the output
+    is dtype-compatible with the source. The `id` join matches per-cell
+    regardless of row order, so `ids_in_order` is unused (the source's
+    own order is authoritative)."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    del ids_in_order  # source row order is authoritative; join keys on id
+    schema = pl.scan_parquet(source_traces).collect_schema()
+    source_cols = schema.names()
+    eval_cols = sorted(EVAL_DERIVED_COLUMNS)
     tmp = out_traces.with_suffix(out_traces.suffix + '.partial')
+    src = pq.ParquetFile(source_traces)
+    writer: pq.ParquetWriter | None = None
+    out_schema: pa.Schema | None = None
     try:
-        lazy.sink_parquet(tmp)
+        for record_batch in src.iter_batches(batch_size=_REEVAL_WRITE_BATCH):
+            chunk = pl.from_arrow(pa.Table.from_batches([record_batch]))
+            if not isinstance(chunk, pl.DataFrame):  # pragma: no cover
+                chunk = chunk.to_frame()
+            ids = chunk.get_column('id').to_list()
+            # Re-roll only THIS batch's cells. `present` filters to ids
+            # the re-eval actually produced; any source id the re-eval
+            # skipped left-joins to null (matching the prior semantics).
+            #
+            # Do NOT cast to the SOURCE eval dtypes: those are fixed-size
+            # Array types baked to the OLD n_episodes, and the re-rolled
+            # arrays have different dims (cast → "width" ComputeError).
+            # Let polars infer the (variable) List dtype from the data —
+            # exactly what the prior whole-frame `.tolist()` path did —
+            # then pin every LATER batch to the FIRST batch's arrow schema
+            # so the incremental writer sees a stable schema.
+            present = [r for r in ids if r in new_eval[eval_cols[0]]]
+            eval_chunk = pl.DataFrame(
+                {
+                    'id': present,
+                    **{
+                        col: [new_eval[col][r].tolist() for r in present]
+                        for col in eval_cols
+                    },
+                }
+            )
+            out_chunk = (
+                chunk.drop(eval_cols)
+                .join(eval_chunk, on='id', how='left')
+                .select(source_cols)
+            )
+            table = out_chunk.to_arrow()
+            if out_schema is None:
+                out_schema = table.schema
+                writer = pq.ParquetWriter(tmp, out_schema)
+            else:
+                table = table.cast(out_schema)
+            assert writer is not None  # set in lockstep with out_schema
+            writer.write_table(table)
+        if writer is not None:
+            writer.close()
+            writer = None
         tmp.replace(out_traces)
     except BaseException:
+        if writer is not None:
+            writer.close()
         if tmp.exists():
             try:
                 tmp.unlink()
