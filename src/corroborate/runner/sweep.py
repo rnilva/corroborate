@@ -404,8 +404,22 @@ def run_intervention[R: Mapping[str, object]](
                 flush=True,
             )
             try:
+                # Inject the framework's cell_idx so the substrate can
+                # name per-cell sidecars consistently across runs that
+                # include skips (resume after a partial sweep). Without
+                # this, substrates that maintain their own call counter
+                # diverge from `cell_idx` here because skipped iterations
+                # don't bump their counter, leading to sidecar filename
+                # collisions on subsequent cells. The sentinel key
+                # `__framework_cell_idx__` is stripped from `unexpected`
+                # checks by the substrate runner; old substrates that
+                # ignore it keep their pre-fix behavior unchanged.
+                grid_point_with_cell_idx: dict[str, object] = {
+                    **grid_point,
+                    '__framework_cell_idx__': cell_idx,
+                }
                 cell_result = runner(
-                    claim, arm_key, measurables, grid_point,
+                    claim, arm_key, measurables, grid_point_with_cell_idx,
                 )
             except Exception as exc:  # noqa: BLE001
                 failures.append(CellFailure(
