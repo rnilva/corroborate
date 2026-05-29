@@ -13,10 +13,12 @@ archive_remote: s3://corroborate-archive/asterix_g0999_3M_ckpt
 # opportunity for the clip-induced policy drift that the per-burst
 # rollout exposed (canon-D loses ~30% peak→final at 1M).
 #
-# eval_every scaled 20k→60k so n_bursts stays 50 (matches canonical
-# burst resolution; q_checkpoint count stays 15 seeds × 51 × 2 arms).
+# eval_every kept at 20k → 150 bursts over 3M (3× the canonical
+# burst resolution) so the late-training drift trajectory is
+# finely resolved past the 1M mark — the whole point of the run.
 #
 # Cells: 1 intervention × 2 arms × 15 seeds = 30 cells.
+# Q-checkpoints: 150 bursts × 30 cells (bundled → 30 PUTs).
 
 keep_q_checkpoint_per_burst: true
 keep_q_checkpoint_final: true
@@ -26,7 +28,7 @@ envs:
 
 defaults:
   total_steps: 3000000
-  eval_every:  60000
+  eval_every:  20000
   n_episodes:  20
   gamma:       0.999
   sync_period: 1000
