@@ -24,7 +24,7 @@ keep_q_checkpoint_per_burst: true
 keep_q_checkpoint_final: true
 
 envs:
-  - {name: Asterix-MinAtar, n_seeds: 15, chunk_size: 15}
+  - {name: Asterix-MinAtar, n_seeds: 15, chunk_size: 5}
 
 defaults:
   total_steps: 3000000
