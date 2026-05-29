@@ -56,25 +56,11 @@ from corroborate.analyses.dynamic_mediation.pc_adjacency import (
 )
 
 
-# Script-local loader: prefers the rebuilt canonical
-# `hasselt_clean.parquet` (carries the broader 17-per-burst
-# candidate set from the post-2026-05-28 framework-fixes rebuild),
-# falls back to the pre-rebuild `_g099.parquet` slice (7 candidates,
-# 12 envs at the legacy corpus names) if the canonical isn't there.
+# Single source of truth: the shared canonical-panel loader (same
+# cache + scope as L1-L5), rather than a script-local reader.
 def _load_panel() -> pl.DataFrame:
-    from experiments.findings.hasselt_clean._scope import CANONICAL_G099_CORPORA
-    canonical = Path('experiments/data/cache/hasselt_clean.parquet')
-    sliced = Path('experiments/data/cache/hasselt_clean_g099.parquet')
-    if canonical.exists():
-        df = pl.read_parquet(canonical)
-    elif sliced.exists():
-        df = pl.read_parquet(sliced)
-    else:
-        raise SystemExit('no hasselt_clean cache found')
-    return df.filter(
-        (pl.col('gamma') == 0.99)
-        & pl.col('corpus').is_in(CANONICAL_G099_CORPORA)
-    )
+    from _common import load_g099_canonical_panel
+    return load_g099_canonical_panel()
 
 
 OUT_PNG = SCRIPT_DIR.parent / 'figures' / '05b_dynamic_best_mediator.png'
@@ -268,33 +254,40 @@ def main() -> None:
     n = len(envs)
     fig, ax = plt.subplots(figsize=(14, max(3.5, 0.45 * n)))
     y = np.arange(n)
-    max_bursts = max(per_env_records[e]['n_bursts'] for e in envs)
+    # X-axis is NORMALISED to fraction-of-training (burst b of N bursts
+    # → [b/N, (b+1)/N]) so envs with different burst counts (Snake 150,
+    # most 50, some 20) are directly comparable — each env's strip spans
+    # the full [0, 1] width regardless of its absolute burst count.
     for i, env in enumerate(envs):
         rec = per_env_records[env]
         winners = rec['winner_per_burst']
+        nb = rec['n_bursts']
+        w_frac = 1.0 / nb
         for b, w in enumerate(winners):
             fam = _candidate_family(w) if w else '(no winner)'
             color = FAMILY_COLOR[fam]
             ax.add_patch(plt.Rectangle(
-                (b, i - 0.35), 0.95, 0.7,
-                facecolor=color, edgecolor='white', linewidth=0.4,
+                (b * w_frac, i - 0.35), w_frac * 0.95, 0.7,
+                facecolor=color, edgecolor='white', linewidth=0.3,
                 alpha=0.85 if w else 0.2,
             ))
-    ax.set_xlim(0, max_bursts)
+    ax.set_xlim(0, 1)
     ax.set_ylim(-0.7, n - 0.3)
     ax.set_yticks(y)
     ax.set_yticklabels([
         f'{env_label(e)}  ({per_env_records[e]["n_winning_bursts"]}/'
         f'{per_env_records[e]["n_marg_bursts"]} winning, '
-        f'{per_env_records[e]["n_distinct_winners"]} distinct)'
+        f'{per_env_records[e]["n_distinct_winners"]} distinct, '
+        f'{per_env_records[e]["n_bursts"]}b)'
         for e in envs
     ])
     ax.invert_yaxis()
-    ax.set_xlabel('burst index', fontsize=10)
+    ax.set_xlabel('fraction of training  (burst index / n_bursts)', fontsize=10)
     ax.set_title(
         'Layer 5 companion: per-env, PER-BURST best mediator\n'
-        'Color = winning mediator family at each burst (cell = burst index)\n'
-        'White = no marginal edge or no candidate d-separates',
+        'Color = winning mediator family at each training-fraction bin '
+        '(x normalised across envs; total bursts in row label)\n'
+        'White = no marginal arm→outcome edge, or no candidate d-separates',
         fontsize=10.5,
     )
     # Family legend
@@ -302,9 +295,11 @@ def main() -> None:
         plt.Rectangle((0, 0), 1, 1, facecolor=c, label=f)
         for f, c in FAMILY_COLOR.items() if f != '(no winner)'
     ]
-    ax.legend(handles=handles, loc='lower left', fontsize=8.5,
-              bbox_to_anchor=(0, 1.02), ncol=5,
-              frameon=False)
+    # Legend below the plot (under the x-label) so it doesn't
+    # collide with the 3-line title.
+    ax.legend(handles=handles, loc='upper center', fontsize=9,
+              bbox_to_anchor=(0.5, -0.13), ncol=5, frameon=False)
+    ax.set_title(ax.get_title(), pad=12)
     plt.tight_layout()
     plt.savefig(OUT_PNG, dpi=120, bbox_inches='tight')
 
