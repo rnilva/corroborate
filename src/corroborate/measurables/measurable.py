@@ -381,6 +381,44 @@ def registered_names() -> tuple[str, ...]:
     return _REGISTRY.names()
 
 
+def registry_source_modules() -> tuple[str, ...]:
+    """Sorted distinct `fn.__module__` of every registered
+    measurable — the import set that, re-executed in a fresh
+    interpreter, re-runs the `@measurable` decorators that
+    populated the registry.
+
+    The substrate-agnostic recovery surface for fork-unsafe
+    parallel workers (`runner._load_directory`). A worker spawned
+    under `forkserver` / `spawn` starts with an EMPTY registry;
+    re-importing exactly these modules re-establishes it without
+    any per-substrate CLI plumbing.
+
+    Modules whose name can't be re-imported by string are
+    excluded:
+    - `__main__` — a worker re-importing `__main__` would re-run
+      the parent's entry script, not the registration site.
+    - dunder-only / empty names — defensive against synthetic
+      functions with a stripped `__module__`.
+
+    Factory-composed measurables (`from_key`, `reduce_axis`, …)
+    carry `fn.__module__ == 'corroborate.measurables.reductions'`
+    rather than the findings module that composed them; that's
+    fine — re-importing `reductions` is a harmless no-op, and the
+    findings module that registered the composition is imported
+    by the CLI in the parent before the pool spins up (the
+    `initializer_modules` default in `_load_directory` folds the
+    hypothesis module in on top of this set)."""
+    mods: set[str] = set()
+    for name in _REGISTRY.names():
+        m = _REGISTRY.get(name)
+        if m is None:
+            continue
+        mod = m.fn.__module__
+        if mod and mod != '__main__':
+            mods.add(mod)
+    return tuple(sorted(mods))
+
+
 def transitive_measurables(name: str) -> frozenset[str]:
     """All registered-measurable names reachable from `name` via
     the parameter-name dependency graph (inclusive of `name`).
