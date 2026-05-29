@@ -148,6 +148,7 @@ def build_measurements(
     runs_df: pl.DataFrame,
     traces_path: Path | None = None,
     measurable_signature_fn: Callable[[str], str | None] | None = None,
+    force: frozenset[str] = frozenset(),
 ) -> Path:
     """Compute missing + drifted measurables for `corpus_dir`,
     write `measurements.parquet` atomically, update sidecar.
@@ -172,6 +173,13 @@ def build_measurements(
     `measurements.parquet` with a matching closure hash, this is
     a no-op (no parquet rewrite). Drift detection drops drifted
     columns + recomputes them.
+
+    `force`: names recomputed unconditionally — dropped from the
+    existing store so they rebuild from `runs_df` even when their
+    closure hash is sidecar-current (the input traces changed but
+    the formula didn't — e.g. a re-eval at a new n_episodes). The
+    caller must guarantee the forced names' reads are on `runs_df`,
+    else the rebuild null-pads.
 
     Returns the path to `measurements.parquet`.
     """
@@ -252,6 +260,19 @@ def build_measurements(
                 continue
             if col not in required_set:
                 # Orphan: no longer required.
+                drop_cols.append(col)
+                continue
+            if col in force:
+                # Operator-forced recompute: drop so the value is
+                # rebuilt from the (caller-joined) trace columns,
+                # bypassing the sidecar-current check. Without this the
+                # sidecar-current branch below keeps the stale value
+                # even though the caller wants it recomputed (e.g. the
+                # source traces changed but the measurable's CLOSURE
+                # hash didn't — re-eval at a new n_episodes). The caller
+                # (`recompute_corpus_measurables`) only forces names
+                # whose reads it has verified are present, so the
+                # rebuild can't null-pad.
                 drop_cols.append(col)
                 continue
             current_hash = sig_fn(col)
@@ -1479,6 +1500,14 @@ def recompute_corpus_measurables(
         required=required,
         runs_df=runs_df,
         measurable_signature_fn=sig_fn,
+        # Force-recompute the SATISFIABLE forced names even when the
+        # sidecar says "current". `force` widened the gap (so their
+        # reads got joined into runs_df above), but build_measurements
+        # re-checks the sidecar — without passing force through it would
+        # keep the stale value (the force no-op bug). Restrict to
+        # `satisfiable` so unsatisfiable forced names stay PRESERVED
+        # (forcing them would null-pad — their reads aren't available).
+        force=frozenset(satisfiable) & force_set,
     )
 
     # Split recomputed into 3 disjoint audit slots:

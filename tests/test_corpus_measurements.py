@@ -872,6 +872,47 @@ def test_recompute_is_idempotent_no_op_on_current_corpus(
     )
 
 
+def test_recompute_force_recomputes_sidecar_current_measurable(
+    tmp_path: Path,
+) -> None:
+    """`force=` recomputes a measurable even when its closure hash is
+    sidecar-current — the case where the measurable's INPUT changed
+    but its formula did not (e.g. a re-eval feeding new eval traces at
+    a higher n_episodes). Regression for the force no-op: `recompute`'s
+    `force` widened the gap (so the reads got joined into runs_df), but
+    `build_measurements` re-checked the sidecar and KEPT the stale
+    value — so only hash-DRIFTED measurables updated. Closed form:
+    `double_x = 2·x`, so bumping `x` by +100 must move `double_x` by
+    exactly +200 once force recomputes it (and NOT move it at all if
+    force is ignored)."""
+    corpus = tmp_path / 'corp'
+    runs = _runs_df_with_traces(3)        # x = [0, 1, 2]
+    _write_corpus(corpus, runs)
+    build_measurements(corpus, required=['double_x'], runs_df=runs)
+    old = pl.read_parquet(corpus / MEASUREMENTS_FILENAME).sort('id')
+    old_dx = old['double_x'].to_list()
+
+    # Change the INPUT (x += 100); the formula — hence `double_x`'s
+    # closure hash — is unchanged, so the sidecar still reads "current".
+    # `_write_corpus` overwrites ONLY runs.parquet, leaving
+    # measurements.parquet + the sidecar in place.
+    runs2 = runs.with_columns((pl.col('x') + 100.0).alias('x'))
+    _write_corpus(corpus, runs2)
+
+    result = recompute_corpus_measurables(
+        corpus, required=['double_x'], force=frozenset({'double_x'}),
+    )
+    assert 'double_x' in result.forced_recompute, (
+        f'double_x was not force-recomputed (force no-op?): {result}'
+    )
+    new = pl.read_parquet(corpus / MEASUREMENTS_FILENAME).sort('id')
+    for o, n in zip(old_dx, new['double_x'].to_list()):
+        assert abs(n - (o + 200.0)) < 1e-9, (
+            f'force did not recompute double_x from the new x: '
+            f'{o} -> {n} (closed form expects {o + 200.0})'
+        )
+
+
 def test_recompute_classifies_unsatisfiable_measurable(
     tmp_path: Path,
 ) -> None:
