@@ -34,7 +34,12 @@ from pathlib import Path
 from collections.abc import Mapping
 
 from corroborate._internals.argparse import to_mapping
-from corroborate._internals.narrow import require_bool, require_int, require_str
+from corroborate._internals.narrow import (
+    require_bool,
+    require_float,
+    require_int,
+    require_str,
+)
 from corroborate_rl.dqn_sweep import Device, set_jax_env
 
 
@@ -90,8 +95,41 @@ def _build_parser() -> argparse.ArgumentParser:
              'local (small per-file corpora).',
     )
     _ = parser.add_argument(
+        '--match-tol', type=float, default=1e-3,
+        help='L∞ tolerance for the per-burst predicted-Q arm-fingerprint '
+             'match (streaming path only). Default 1e-3 suits ≤1M-step '
+             'corpora; relax (e.g. 5e-2) for deep / high-Q corpora '
+             '(snake 3M) where float32 drift between the original eval '
+             'and the recompute exceeds 1e-3 while the wrong arm sits '
+             '~1000× further away.',
+    )
+    _ = parser.add_argument(
         '--device', choices=['cpu', 'gpu'], default='cpu',
         help='JAX platform. CPU default; GPU for MinAtar CNN evals.',
+    )
+    _ = parser.add_argument(
+        '--no-deterministic', action='store_true',
+        help='Skip the --xla_gpu_deterministic_ops=true XLA flag. A '
+             're-eval is a MEASUREMENT (fixed eval key → deterministic '
+             'policy + rollout); only FP reduction ORDER varies (~1e-6), '
+             'negligible for eval statistics. Determinism BLOCKS CUDA '
+             'Graph capture on Jumanji-class envs (scatter-heavy '
+             'obs_extract), making them 10-30× slower (see set_jax_env '
+             "docs). Pass this for Snake / PacMan-jumanji re-evals; the "
+             'MinAtar-scale envs are unaffected either way.',
+    )
+    _ = parser.add_argument(
+        '--host-checkpoints-on-cpu', action='store_true',
+        help='Streaming path: hold each decoded checkpoint bundle on '
+             'the CPU device and migrate only the per-(seed, burst) '
+             'param SLICE to the GPU. ONLY for bundles too large to fit '
+             'GPU memory even with preallocation — it makes the '
+             'arm-fingerprint MATCH ~20× slower (per-probe CPU→GPU '
+             'transfers). The default streaming+GPU path keeps the '
+             'bundle on GPU under a preallocated pool (PREALLOCATE=true, '
+             'which avoids the on-demand fragmentation that OOMs the '
+             '~2.7 GB snake bundle) — fast match + fast slicing. Reach '
+             'for this flag only when a single bundle exceeds the GPU.',
     )
     return parser
 
@@ -112,13 +150,38 @@ def main(argv: list[str] | None = None) -> int:
     Argparse `choices=` validates `--device` / `--eval-keying` at
     parse time; the narrows below are the type-level dispatch (raw
     Namespace attribute access would erase to `Any`)."""
+    import os
+
     parser = _build_parser()
     args = parser.parse_args(argv)
     args_map = to_mapping(args)
     device = _require_device(args_map)
+    stream = require_bool(args_map, 'stream_checkpoints')
+    no_deterministic = require_bool(args_map, 'no_deterministic')
+    host_checkpoints_on_cpu = require_bool(args_map, 'host_checkpoints_on_cpu')
     # Stamp JAX env BEFORE the heavy import (mirrors dqn_sweep's
-    # pre_import_setup discipline).
-    set_jax_env(device)
+    # pre_import_setup discipline). `--no-deterministic` drops the
+    # CUDA-Graph-blocking deterministic XLA flag (10-30× faster on
+    # Jumanji-class envs; eval is a fixed-key measurement so FP-order
+    # nondeterminism is immaterial).
+    set_jax_env(device, deterministic=not no_deterministic)
+
+    if stream and device == 'gpu':
+        if host_checkpoints_on_cpu:
+            # Bundle too large for GPU even preallocated: host it on the
+            # CPU device, migrate per-burst slices to GPU. Needs the CPU
+            # backend ALONGSIDE CUDA (set_jax_env set JAX_PLATFORMS=cuda;
+            # append `,cpu` so CUDA stays the default compute device).
+            os.environ['JAX_PLATFORMS'] = 'cuda,cpu'
+        else:
+            # Default: keep the bundle on GPU but PREALLOCATE the memory
+            # pool. `set_jax_env` setdefault'd PREALLOCATE=false, whose
+            # on-demand allocator FRAGMENTS and OOMs decoding the ~2.7 GB
+            # snake bundle even though it fits in 16 GB. A preallocated
+            # pool fits the bundle (≈12 GB resident) AND keeps the
+            # arm-fingerprint match fast (GPU-resident slicing, no
+            # per-probe host↔device transfers). Override the setdefault.
+            os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'true'
 
     # Lazy import — JAX latches the backend here, after the env stamp.
     from corroborate_rl.dqn.reeval import (
@@ -136,9 +199,18 @@ def main(argv: list[str] | None = None) -> int:
     n_episodes = require_int(args_map, 'n_episodes')
     eval_seed_base = require_int(args_map, 'eval_seed_base')
     subdir = require_str(args_map, 'q_checkpoints_subdir')
-    stream = require_bool(args_map, 'stream_checkpoints')
+    match_tol = require_float(args_map, 'match_tol')
 
     if stream:
+        import sys
+
+        def _progress(msg: str) -> None:
+            # Flush so the operator sees per-bundle motion in real time
+            # on a long (multi-GB, multi-cell) streaming re-eval —
+            # Python block-buffers stdout when not a TTY.
+            _ = sys.stderr.write(f'reeval: {msg}\n')
+            sys.stderr.flush()
+
         restorer = CloudCheckpointRestorer.from_corpus(
             corpus_dir, q_checkpoints_subdir=subdir,
         )
@@ -149,6 +221,9 @@ def main(argv: list[str] | None = None) -> int:
             restorer=restorer,
             eval_seed_base=eval_seed_base,
             eval_keying=keying,
+            match_tol=match_tol,
+            host_checkpoints_on_cpu=host_checkpoints_on_cpu,
+            progress=_progress,
         )
     else:
         out = reeval_corpus(

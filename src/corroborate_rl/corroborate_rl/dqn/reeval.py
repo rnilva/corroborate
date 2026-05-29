@@ -672,6 +672,7 @@ class _RowFingerprintMatcher:
 
     def _recompute_trajectory(
         self, cell: CellCheckpoints, seed: int,
+        *, compute_device: jax.Device | None,
     ) -> np.ndarray:
         # Recompute max_a Q(s_0^b) at the probe bursts under the
         # burst-b params. The canonical burst-b reset uses the
@@ -682,6 +683,11 @@ class _RowFingerprintMatcher:
         out = np.empty(len(self.bursts), dtype=np.float64)
         for i, burst in enumerate(self.bursts):
             params = cell.online_params(seed=seed, burst=burst)
+            if compute_device is not None:
+                # The bundle may be CPU-hosted (host-on-CPU path); move
+                # the slice to the compute device so it co-locates with
+                # the GPU-resident `obs0` (mixed-device ops would error).
+                params = jax.device_put(params, compute_device)
             key_b = eval_key(
                 keying='original', eval_seed_base=0, seed=seed, burst=burst,
             )
@@ -698,6 +704,7 @@ class _RowFingerprintMatcher:
         *,
         used_ids: set[str],
         match_tol: float,
+        compute_device: jax.Device | None = None,
     ) -> dict[str, tuple[int, int]]:
         """Match each (cell.cell_idx, seed) to the NEAREST unused run
         row (by L∞ over the per-burst Q-trajectory), within
@@ -707,10 +714,17 @@ class _RowFingerprintMatcher:
         twins (pre-divergence params) yield identical re-eval output,
         so which twin binds which doesn't matter — only the bijection.
         A >tol residual (no run row reproduces the cell's trajectory)
-        is a real error and raises."""
+        is a real error and raises.
+
+        `compute_device`: when set, each probe's param slice is moved
+        there before the max-Q forward — co-locates a CPU-hosted
+        bundle's slice with the GPU-resident reset obs (host-on-CPU
+        streaming path)."""
         resolved: dict[str, tuple[int, int]] = {}
         for seed in seeds:
-            recomputed = self._recompute_trajectory(cell, seed)
+            recomputed = self._recompute_trajectory(
+                cell, seed, compute_device=compute_device,
+            )
             best_id: str | None = None
             best_dist = float('inf')
             for (run_id, traj) in self.rows_by_seed.get(seed, ()):
@@ -841,6 +855,7 @@ def _reeval_one_cell(
     n_bursts: int,
     eval_seed_base: int,
     keying: EvalKeying,
+    compute_device: jax.Device | None = None,
 ) -> dict[str, np.ndarray]:
     """Re-roll greedy eval for all bursts of one (cell, seed) and
     stack to `(n_bursts, n_episodes, ...)` per `EvalBurstOut` field
@@ -848,33 +863,54 @@ def _reeval_one_cell(
 
     `eval_fn` is the jit-once `(params, key) -> EvalBurstOut` closure
     from `_make_eval_burst_fn` — reused across every burst so the
-    eval kernel compiles exactly once for the whole corpus."""
-    per_burst: list[EvalBurstOut] = []
+    eval kernel compiles exactly once for the whole corpus.
+
+    **Device-memory discipline.** Each burst's `EvalBurstOut` is
+    pulled to HOST (numpy) IMMEDIATELY and its device arrays dropped
+    before the next burst's vmap runs — peak device residency is ONE
+    burst's `(K, episode_cap)` arrays, NOT all `n_bursts` of them. A
+    deep eval (large `episode_cap` × K, e.g. snake 4000×20 = 80k
+    floats/array × 3 arrays per burst) accumulated across 150 bursts
+    would otherwise pin ~1.4 GB+ of device memory and OOM mid-cell
+    (especially under deterministic XLA, whose non-atomic reductions
+    inflate the per-burst peak). Holding host numpy instead is free —
+    the six eval columns for the whole corpus are tens of MB.
+
+    `compute_device`: when set, each (seed, burst) param slice is
+    `device_put` here before the eval. The disk-bounded streaming path
+    holds the multi-GB bundle on the CPU device (so it doesn't pin
+    ~2.7 GB of GPU memory per cell — the bundle decode is the actual
+    OOM site, not the eval) and migrates only the small per-burst
+    param slice to the GPU. `None` (eager all-GPU path) leaves params
+    where the bundle already lives."""
+    # One host-numpy list per eval field; each burst appends its
+    # device→host copy. No `getattr` — NamedTuple fields are statically
+    # known (the typing discipline forbids attribute erasure).
+    cols: dict[str, list[np.ndarray]] = {col: [] for col in EVAL_DERIVED_COLUMNS}
     for burst in range(n_bursts):
         params = cell.online_params(seed=seed, burst=burst)
+        if compute_device is not None:
+            # Migrate the small (one snapshot) param slice from the
+            # CPU-hosted bundle to the GPU before the eval kernel runs.
+            params = jax.device_put(params, compute_device)
         key = eval_key(
             keying=keying, eval_seed_base=eval_seed_base,
             seed=seed, burst=burst,
         )
-        per_burst.append(eval_fn(params, key))
+        out = eval_fn(params, key)
+        cols['predicted_q_at_start'].append(np.asarray(out.predicted_q_at_start))
+        cols['mc_return'].append(np.asarray(out.mc_return))
+        cols['episode_length'].append(np.asarray(out.episode_length))
+        cols['predicted_q_per_step'].append(np.asarray(out.predicted_q_per_step))
+        cols['mc_return_from_step'].append(np.asarray(out.mc_return_from_step))
+        cols['active_per_step'].append(np.asarray(out.active_per_step))
+        # `out` (and its device buffers) goes out of scope at the next
+        # iteration; the np.asarray copies above are the durable host
+        # state. `del` makes the device-buffer release eager rather
+        # than waiting on the loop-variable rebind.
+        del out
 
-    # Stack per field explicitly — no `getattr` (NamedTuple fields are
-    # statically known; the typing discipline forbids attribute
-    # erasure). Each leaf gains the leading n_bursts axis.
-    def _stack(leaves: Sequence[jax.Array]) -> np.ndarray:
-        return np.stack([np.asarray(x) for x in leaves], axis=0)
-
-    return {
-        'predicted_q_at_start': _stack(
-            [b.predicted_q_at_start for b in per_burst]),
-        'mc_return': _stack([b.mc_return for b in per_burst]),
-        'episode_length': _stack([b.episode_length for b in per_burst]),
-        'predicted_q_per_step': _stack(
-            [b.predicted_q_per_step for b in per_burst]),
-        'mc_return_from_step': _stack(
-            [b.mc_return_from_step for b in per_burst]),
-        'active_per_step': _stack([b.active_per_step for b in per_burst]),
-    }
+    return {col: np.stack(leaves, axis=0) for col, leaves in cols.items()}
 
 
 def reeval_corpus(
@@ -1038,6 +1074,9 @@ def reeval_corpus_streaming(
     restorer: CheckpointRestorer,
     eval_seed_base: int = 0,
     eval_keying: EvalKeying = 'paired',
+    match_tol: float = 1e-3,
+    host_checkpoints_on_cpu: bool = False,
+    progress: Callable[[str], None] | None = None,
 ) -> Path:
     """Disk-bounded re-eval for bundle-layout corpora whose per-cell
     checkpoints are too large to all fit locally at once.
@@ -1072,7 +1111,41 @@ def reeval_corpus_streaming(
 
     `restorer` is the disk-management injection point — typically
     `CloudCheckpointRestorer.from_corpus(corpus_dir)` for production,
-    or a local no-op restorer in tests. Returns `out_dir`."""
+    or a local no-op restorer in tests.
+
+    `match_tol` is the L∞ tolerance for the per-burst predicted-Q
+    arm-fingerprint match. The default 1e-3 suits the smaller
+    (≤1M-step, lower-Q) per-file corpora. Deep / high-Q corpora
+    (e.g. snake_g099_canonical_3M_ckpt: Q ~8+, 4000-step greedy eval)
+    accumulate ~few×1e-3 of float32 drift between the original 3M-step
+    eval and the recompute, while the WRONG arm sits ~1e+0 away
+    (≈1000× the correct residual). Relax `match_tol` (e.g. 5e-2) for
+    such corpora — the correct/wrong separation is vast, so a looser
+    tol stays unambiguous while absorbing the float drift.
+
+    `host_checkpoints_on_cpu`: hold each decoded bundle on the CPU
+    device and migrate only the per-(seed, burst) param SLICE to the
+    compute (GPU) device for the eval. The full bundle is the actual
+    device-OOM site — decoding snake's ~2.7 GB bundle (both arms ×
+    15 seeds × 150 bursts × CNN params) straight onto a 16 GB GPU via
+    `load_bundle`'s `jnp.asarray` fails to allocate under on-demand
+    (PREALLOCATE=false) heap fragmentation. The active slice is one
+    snapshot (~0.6 MB), so GPU residency stays in the eval kernel's
+    working set. Requires the JAX CPU backend to exist alongside CUDA
+    (the CLI stamps `JAX_PLATFORMS=cuda,cpu` for the streaming+GPU
+    path); raises if `True` but no CPU device is available. `False`
+    (default) keeps the original all-default-device behavior — fine
+    for the small per-file corpora and the CPU smoke tests.
+
+    `progress` is an optional sink for per-bundle status lines (the
+    restore / match / re-eval / release lifecycle of each multi-GB
+    bundle). A long streaming re-eval is otherwise opaque between the
+    download and the trace write; the CLI wires this to a flushing
+    stderr writer so the operator sees forward motion. `None`
+    (default) is silent. Returns `out_dir`."""
+    def _emit(msg: str) -> None:
+        if progress is not None:
+            progress(msg)
     if n_episodes < 1:
         raise ValueError(f'reeval: n_episodes must be >= 1; got {n_episodes}')
     runs_path = corpus_dir / 'runs.parquet'
@@ -1119,6 +1192,24 @@ def reeval_corpus_streaming(
         n_episodes=n_episodes,
     )
 
+    # Resolve the CPU host + compute device for the host-on-CPU path.
+    # `compute_device` (the default device, GPU when JAX_PLATFORMS leads
+    # with cuda) receives only the small per-burst param slice;
+    # `host_device` (CPU) holds the multi-GB bundle.
+    host_device: jax.Device | None = None
+    compute_device: jax.Device | None = None
+    if host_checkpoints_on_cpu:
+        cpu_devices = jax.devices('cpu')
+        if not cpu_devices:
+            raise RuntimeError(
+                'reeval streaming: host_checkpoints_on_cpu=True needs the '
+                'JAX CPU backend, but jax.devices("cpu") is empty. Stamp '
+                'JAX_PLATFORMS=cuda,cpu (CUDA stays the default compute '
+                'device; CPU hosts the bundle) before importing jax.',
+            )
+        host_device = cpu_devices[0]
+        compute_device = jax.devices()[0]
+
     new_eval: dict[str, dict[str, np.ndarray]] = {
         col: {} for col in EVAL_DERIVED_COLUMNS
     }
@@ -1127,13 +1218,23 @@ def reeval_corpus_streaming(
     matcher: _RowFingerprintMatcher | None = None
     n_bursts: int | None = None
 
-    for relpath in bundle_relpaths:
+    n_bundles = len(bundle_relpaths)
+    for bi, relpath in enumerate(bundle_relpaths):
         cell_idx = _cell_idx_from_relpath(relpath)
+        _emit(f'[{bi + 1}/{n_bundles}] restoring {relpath} ...')
         restorer.restore(relpath)
         try:
-            bundle = load_bundle(bundle_path(
+            bpath = bundle_path(
                 corpus_dir / relpath.rsplit('/', 1)[0], cell_idx=cell_idx,
-            ))
+            )
+            if host_device is not None:
+                # Decode the multi-GB bundle onto the CPU device so it
+                # doesn't pin GPU memory; `_reeval_one_cell` migrates the
+                # small per-burst slice to `compute_device`.
+                with jax.default_device(host_device):
+                    bundle = load_bundle(bpath)
+            else:
+                bundle = load_bundle(bpath)
             if n_bursts is None:
                 n_bursts = bundle.n_bursts
                 matcher = _RowFingerprintMatcher.build(
@@ -1152,22 +1253,36 @@ def reeval_corpus_streaming(
                 cell_idx=cell_idx, _bundle=bundle,
             )
             resolved = matcher.match_cell(
-                cell, bundle.seeds, used_ids=used_ids, match_tol=1e-3,
+                cell, bundle.seeds, used_ids=used_ids, match_tol=match_tol,
+                compute_device=compute_device,
             )
             by_id.update(resolved)
-            for rid, (_ci, seed) in resolved.items():
+            _emit(
+                f'[{bi + 1}/{n_bundles}] cell{cell_idx:03d}: matched '
+                f'{len(resolved)} runs (seeds {bundle.seeds[0]}..'
+                f'{bundle.seeds[-1]}); re-evaling {n_bursts} bursts × K='
+                f'{n_episodes} ...',
+            )
+            for ri, (rid, (_ci, seed)) in enumerate(resolved.items()):
                 stacked = _reeval_one_cell(
                     cell=cell, eval_fn=eval_fn, seed=seed,
                     n_bursts=n_bursts,
                     eval_seed_base=eval_seed_base, keying=eval_keying,
+                    compute_device=compute_device,
                 )
                 for col in EVAL_DERIVED_COLUMNS:
                     new_eval[col][rid] = stacked[col]
+                _emit(
+                    f'[{bi + 1}/{n_bundles}] cell{cell_idx:03d}: '
+                    f'{ri + 1}/{len(resolved)} runs re-evaled '
+                    f'({len(by_id)}/{len(ids_in_order)} total)',
+                )
         finally:
             # Free the bundle's local copy whether or not it processed
             # cleanly — the disk-bounded invariant (peak = one bundle)
             # must hold even on a mid-corpus raise.
             restorer.release(relpath)
+            _emit(f'[{bi + 1}/{n_bundles}] released {relpath}')
 
     missing = set(ids_in_order) - set(by_id)
     if missing:
@@ -1178,11 +1293,16 @@ def reeval_corpus_streaming(
             'row — check the manifest / chunk coverage.',
         )
 
+    _emit(
+        f'all {n_bundles} bundles done; writing output traces '
+        '(streaming training columns verbatim) ...',
+    )
     _finalize_reeval_output(
         corpus_dir=corpus_dir, out_dir=out_dir, runs=runs,
         traces_path=traces_path, new_eval=new_eval,
         ids_in_order=ids_in_order, n_episodes=n_episodes,
     )
+    _emit(f'wrote {out_dir}')
     return out_dir
 
 

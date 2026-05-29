@@ -85,6 +85,16 @@ def require_int(d: Mapping[str, object], key: str) -> int:
     return v
 
 
+def require_float(d: Mapping[str, object], key: str) -> float:
+    v = d.get(key)
+    # Reject bool (a subclass of int, hence of the numeric tower) so
+    # True/False can't slip through as 1.0/0.0. Accept int → float
+    # (an integer-valued CLI float like `--match-tol 0` is fine).
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        raise TypeError(f'{key!r} must be float, got {type(v).__name__}')
+    return float(v)
+
+
 def optional_direction(
     d: Mapping[str, object], key: str,
 ) -> PredictedDirection | None:
