@@ -1,10 +1,10 @@
 env,V_mean_jens,D_mean_jens,cohen_d,cohen_se,n_V,n_D
-Asterix,12.7137,6.2037,-6.870,0.688,30,30
-Breakout,4.9120,1.8280,-7.235,0.720,30,30
-Freeway,0.2685,0.1422,-1.354,0.287,30,30
+Asterix,12.7067,6.1371,-8.539,1.198,15,15
+Breakout,4.9186,1.8378,-7.013,0.700,30,30
+Freeway,0.2673,0.1406,-1.106,0.278,30,30
 SpaceInvaders,6.9734,2.7797,-12.827,1.219,30,30
 PacMan,91.4517,57.5919,-0.858,0.470,10,10
-Snake,3.3652,2.2507,-1.118,0.278,30,30
+Snake,4.7424,6.3249,+0.179,0.259,30,30
 MetaMaze,5.1560,3.3784,-2.698,0.360,30,30
 FourRooms,0.8755,0.3321,-2.215,0.330,30,30
 CartPole,124.4450,126.6575,+0.092,0.258,30,30
@@ -12,7 +12,7 @@ Acrobot,7.3333,6.5310,-0.357,0.260,30,30
 MountainCar,14.9673,14.2390,-0.159,0.259,30,30
 LunarLander,46.2791,43.7872,-0.218,0.259,30,30
 
-# DL pool: d=-2.648 SE=0.533 τ²=3.162 I²=0.97
-# PI: [-6.784, +1.488]
+# DL pool: d=-2.507 SE=0.521 τ²=2.960 I²=0.96
+# PI: [-6.512, +1.498]
 # DL Verdict: NO_EFFECT
-# Bridge cross_env_consistency_binomial: 11/12 envs in direction (of 12 total), p=0.0032
+# Bridge cross_env_consistency_binomial: 10/12 envs in direction (of 12 total), p=0.0193

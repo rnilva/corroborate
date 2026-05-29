@@ -1,18 +1,18 @@
 env,rho_marginal,rho_partial,absorption_pct,regime
-Asterix,+0.731,+0.318,+56.5,high absorption
+Asterix,+0.728,+0.070,+90.4,high absorption
 FourRooms,+0.533,-0.222,+58.4,sign-flip
 MetaMaze,+0.393,+0.171,+56.4,high absorption
 PacMan,+0.277,+0.167,+39.9,high absorption
-Freeway,+0.217,-0.243,-11.8,sign-flip
+Freeway,+0.235,-0.172,+26.8,sign-flip
 LunarLander,+0.104,+0.096,+7.9,near-zero marg
 CartPole,+0.060,+0.052,+12.6,near-zero marg
 MountainCar,-0.022,-0.221,-898.6,near-zero marg
+Snake,-0.023,-0.228,-887.5,near-zero marg
+Breakout,-0.098,-0.040,+59.1,near-zero marg
 SpaceInvaders,-0.121,-0.265,-118.8,near-zero marg
-Breakout,-0.148,-0.042,+71.3,near-zero marg
 Acrobot,-0.148,-0.246,-65.9,near-zero marg
-Snake,-0.206,-0.454,-120.5,low absorption
 
 # POOLED cross-env (12 strata, 680 cells):
-# marginal ρ = +0.155, p = 0.0001
-# partial  ρ = -0.093, p = 0.0188
-# absorption = 40%
+# marginal ρ = +0.140, p = 0.0005
+# partial  ρ = -0.094, p = 0.0203
+# absorption = 33%
