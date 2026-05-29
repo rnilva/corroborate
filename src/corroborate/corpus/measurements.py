@@ -612,6 +612,28 @@ def _row_group_uncompressed_bytes(
     return total
 
 
+def _resolve_ingest_workers(n_batches: int) -> int:
+    """Thread-pool worker count for the per-batch measurable
+    compute. `CORROBORATE_INGEST_WORKERS` overrides (1 = the
+    deterministic sequential path, for debugging / repro); the
+    default is `cpu_count - 2`, capped at 12 and at `n_batches`
+    (no point spawning more threads than batches). Peak RAM scales
+    ≈ workers × per-batch byte budget, so the cap bounds memory on
+    trace-heavy corpora.
+
+    Returns ≥ 1 always; an unparseable env value falls back to 1
+    (fail safe to deterministic, not to max parallelism)."""
+    import os
+    env = os.environ.get('CORROBORATE_INGEST_WORKERS')
+    if env is not None:
+        try:
+            return max(1, min(int(env), max(1, n_batches)))
+        except ValueError:
+            return 1
+    auto = (os.cpu_count() or 2) - 2
+    return max(1, min(auto, 12, max(1, n_batches)))
+
+
 def compute_trace_measurables_streaming(
     runs_df: pl.DataFrame,
     traces_path: Path,
@@ -722,7 +744,6 @@ def compute_trace_measurables_streaming(
             measurable_set=measurable_set,
         )
     del per_cell_bytes_est
-    accumulators: list[pl.DataFrame] = []
     rg_indices = list(range(n_row_groups))
     # Group consecutive row-groups so each batch stays under BOTH
     # the cell-count cap (`n_per_rg`) and the decompressed-byte
@@ -749,22 +770,25 @@ def compute_trace_measurables_streaming(
             cur_bytes += rg_bytes
     if cur:
         rg_groups.append(cur)
-    for group in rg_groups:
-        # `read_row_groups(...)` reads multiple consecutive row
-        # groups in one pyarrow call, more efficient than per-rg
-        # reads when the writer used many small row groups.
-        table = pq_file.read_row_groups(group, columns=cols_to_load)
+    def _process_group(group: list[int]) -> pl.DataFrame | None:
+        # Read this batch's row groups, join the matching runs rows,
+        # compute the measurables, project to id + measurable cols.
+        # Opens its OWN ParquetFile handle: pyarrow handles are not
+        # safe to share across threads, so the parallel path below
+        # must not reuse the outer `pq_file`.
+        local_pq = _pq.ParquetFile(str(traces_path))
+        table = local_pq.read_row_groups(group, columns=cols_to_load)
         batch_traces = pl.from_arrow(table)
         if not isinstance(batch_traces, pl.DataFrame):
             # `from_arrow` can return a Series for 1-col inputs;
             # we have at least 'id' + N cols so this shouldn't
             # fire, but guard defensively.
-            continue
+            return None
         batch_runs = runs_indexed.filter(
             pl.col('id').is_in(batch_traces['id'].to_list()),
         )
         if batch_runs.height == 0:
-            continue
+            return None
         # Drop trace col duplicates from runs_df (e.g. `id`-only
         # overlap is fine; substantive overlap means runs.parquet
         # carried a trace col which polars' join would suffix).
@@ -782,8 +806,33 @@ def compute_trace_measurables_streaming(
             c for c in enriched.columns
             if c != 'id' and c in measurable_set
         ]
-        accumulators.append(enriched.select(keep))
-        del table, batch_traces, joined, enriched
+        return enriched.select(keep)
+
+    # Parallelise the per-batch compute. Each batch is independent
+    # (distinct cells), and the work is numpy array reductions that
+    # release the GIL — so a THREAD pool gives real parallelism
+    # without pickling multi-GB trace batches across a process
+    # boundary or re-importing the @measurable registry in workers
+    # (the registry is shared read-only across threads; so is
+    # `runs_indexed`). `compute_missing_columns` touches no shared
+    # mutable state. Single-RG-write corpora (snake/pacman 3M) hit
+    # this path too once `restore_columns` has re-chunked their row
+    # groups, so the heavy n_eps=20 / 3M ingests parallelise here.
+    #
+    # Worker count: `CORROBORATE_INGEST_WORKERS` overrides (set 1 to
+    # restore the deterministic sequential path for debugging);
+    # default = cpu-2 capped at 12 and at the batch count. Peak RAM
+    # ≈ n_workers × per-batch byte budget, so the cap bounds it.
+    n_workers = _resolve_ingest_workers(len(rg_groups))
+    if n_workers <= 1 or len(rg_groups) <= 1:
+        results: list[pl.DataFrame | None] = [
+            _process_group(g) for g in rg_groups
+        ]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            results = list(pool.map(_process_group, rg_groups))
+    accumulators = [r for r in results if r is not None]
     if not accumulators:
         return pl.DataFrame({'id': []}, schema={'id': pl.Utf8})
     return pl.concat(accumulators, how='diagonal_relaxed')
