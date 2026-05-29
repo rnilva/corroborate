@@ -110,19 +110,22 @@ CANONICAL_G099_CORPORA: tuple[str, ...] = (
                                              # (carries the broad mediator candidate set;
                                              # supersedes `g099_Asterix-MinAtar` which lacked Q-dynamics /
                                              # TD / policy / state-coverage scalars).
-    'g099_Breakout-MinAtar',
-    'g099_Freeway-MinAtar',
-    'g099_SpaceInvaders-MinAtar',            # MinAtar γ=0.99 v2 SI sibling — kept as a fallback alongside
-                                             # `si_g099_canonical_n_eps1_ckpt` for cache-ingest robustness.
-    'si_g099_canonical_n_eps1_ckpt',         # SpaceInvaders γ=0.99 (NEW: full-Q canonical_n_eps1_ckpt, n=30, 1M, sync=1000, supersedes g099_SpaceInvaders-MinAtar)
-    'snake_1M',                              # Snake γ=0.99 (n_episodes=3 — noisier than rest)
-    # NOTE: `snake_g099_canonical_3M_ckpt` exists on cloud (60 cells, 3M steps, 30 seeds,
-    # n_eps=5, 150 bursts) but its traces.parquet is 18 GB in a single 11.5 GB row group
-    # — both the runner's full-load path AND `compute_trace_measurables_streaming` OOM
-    # because there is no row-group boundary to chunk on. Blocked on a framework
-    # streaming-ingest fix (row-group rewrite during restore, or per-cell scan via
-    # lazy-predicate-pushdown integrated into the runner).
-    'pacman_1M_postfix',                     # PacMan γ=0.99 (n_episodes=3, 10 seeds/arm)
+    'breakout_g099_canonical_reeval_n20_ckpt',  # Breakout γ=0.99 — n_eps=1 ckpt RE-EVALUATED at n_eps=20
+                                             # via `dqn.reeval` (greedy, paired-arm eval seeding) from the
+                                             # saved per-burst Q-checkpoints. Stochastic MinAtar env →
+                                             # n=20 gives ~4.5× tighter per-burst eval SE without retrain.
+    'freeway_g099_canonical_reeval_n20_ckpt',   # Freeway γ=0.99 — same n_eps=1→20 ckpt re-eval as Breakout.
+    'si_g099_canonical_n_eps1_ckpt',         # SpaceInvaders γ=0.99 (full-Q canonical_n_eps1_ckpt, n=30, 1M).
+                                             # n_eps=1 is fine here: SI is DETERMINISTic → no eval variance
+                                             # to average out (no reeval needed).
+    'snake_g099_canonical_3M_ckpt',          # Snake γ=0.99 canonical_3M_ckpt (60 cells, 3M, 30 seeds,
+                                             # n_eps=5, 150 bursts; supersedes `snake_1M`).
+    # PacMan: HELD on legacy `pacman_1M_postfix` (n_eps=3). The
+    # `pacman_g099_canonical_3M_ckpt` cloud corpus is UNMERGED (only
+    # `canonical_g099_3M/tmp/` per-cell files, no merged runs/traces —
+    # its sweep's top-level merge never completed), so it can't be
+    # cleanly ingested. Deferred until the sweep is merged on cloud.
+    'pacman_1M_postfix',                     # PacMan γ=0.99 legacy (n_eps=3, 10 seeds/arm).
 )
 
 
