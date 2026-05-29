@@ -152,7 +152,12 @@ class DQNRunner:
         unexpected = (
             set(grid_point)
             - {'env_name', 'seeds', 'wrappers',
-               'init_online_params_batched', 'init_override_batched'}
+               'init_online_params_batched', 'init_override_batched',
+               # Framework-injected per-call cell_idx (sweep.py
+               # `run_intervention`). Lets the runner stay aligned
+               # with the framework's cell numbering across resumes
+               # — see __framework_cell_idx__ handling below.
+               '__framework_cell_idx__'}
         )
         if unexpected:
             raise ValueError(
@@ -192,7 +197,25 @@ class DQNRunner:
             )
         env_spec = self._envs[env_name]
 
-        cell_idx = self._call_count
+        # Prefer the framework's `cell_idx` when injected via
+        # `__framework_cell_idx__` (corroborate.runner.sweep
+        # `run_intervention` since 2026-05-29). The runner's own
+        # `_call_count` only increments on actual calls, so on a
+        # RESUME (some grid points skipped because their parquets
+        # were archived earlier) the local counter falls BEHIND the
+        # framework's `cell_idx` and per-cell sidecar filenames
+        # (e.g. `q_checkpoints/cell{NNN}.msgpack`) collide with
+        # earlier-written cells, silently overwriting their content.
+        # Falling back to `_call_count` keeps in-process callers that
+        # don't go through `run_intervention` (test fixtures, ad-hoc
+        # dispatch) working unchanged.
+        framework_cell_idx = grid_point.get('__framework_cell_idx__')
+        if isinstance(framework_cell_idx, int) and not isinstance(
+            framework_cell_idx, bool,
+        ):
+            cell_idx = framework_cell_idx
+        else:
+            cell_idx = self._call_count
         self._call_count += 1
         arm = run_dqn_arm(
             env_spec, seeds, claim, arm_key, measurables,
