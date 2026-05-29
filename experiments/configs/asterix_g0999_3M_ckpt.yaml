@@ -1,0 +1,62 @@
+name: asterix_g0999_3M_ckpt
+out_dir: experiments/data/asterix_g0999_3M_ckpt
+env_binding: shared
+archive_remote: s3://corroborate-archive/asterix_g0999_3M_ckpt
+
+# Asterix γ=0.999 canonical HPs but 3M steps (vs canonical 1M).
+# Curiosity probe: does the DDQN harm (canonical d_raw≈-0.68/-1.45)
+# worsen, persist, or resolve with 3× more training?
+#
+# anneal_steps stays 100k (faithful to canonical absolute exploration),
+# so 2.9M of the 3M steps are near-greedy (ε=0.05). Directly stresses
+# the late-training-drift framing: more near-greedy training → more
+# opportunity for the clip-induced policy drift that the per-burst
+# rollout exposed (canon-D loses ~30% peak→final at 1M).
+#
+# eval_every scaled 20k→60k so n_bursts stays 50 (matches canonical
+# burst resolution; q_checkpoint count stays 15 seeds × 51 × 2 arms).
+#
+# Cells: 1 intervention × 2 arms × 15 seeds = 30 cells.
+
+keep_q_checkpoint_per_burst: true
+keep_q_checkpoint_final: true
+
+envs:
+  - {name: Asterix-MinAtar, n_seeds: 15, chunk_size: 15}
+
+defaults:
+  total_steps: 3000000
+  eval_every:  60000
+  n_episodes:  20
+  gamma:       0.999
+  sync_period: 1000
+  n_step:      1
+  replay:
+    class: Replay
+    capacity: 100000
+    batch_size: 32
+  optimizer:
+    fn: warmed_update
+    inner: {fn: adam, lr: 0.0001}
+    warmup_steps: 100
+  action_select:
+    fn: epsilon_greedy
+    schedule:
+      fn: linear_epsilon
+      eps_init: 1.0
+      eps_final: 0.05
+      anneal_steps: 100000
+  q_network:
+    class: CNN
+    obs_shape: [10, 10, 4]
+    channels: [16]
+    kernel_size: 3
+    hidden: [128]
+
+interventions:
+  - name: canonical_3M
+    base: {}
+    arms:
+      - []
+      - - slot_path: bootstrap
+          replacement: {fn: bootstrap, greedification: {fn: double_greedify}}
