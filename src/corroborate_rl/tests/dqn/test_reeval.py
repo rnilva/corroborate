@@ -703,3 +703,75 @@ def test_reeval_streaming_matches_eager_output(tmp_path: Path) -> None:
         f'streaming held {max_held} bundles at once — disk-bounded '
         'invariant (peak = one bundle) violated'
     )
+
+
+@_SLOW
+def test_reeval_streaming_eval_cache_resumable(tmp_path: Path) -> None:
+    """The `eval_cache_dir` path is (a) output-equivalent to the no-cache
+    streaming path and (b) RESUMABLE: a second invocation against the
+    populated cache skips already-cached cells (no restore) and still
+    produces complete, identical output.
+
+    This is the resilience guarantee for the long snake 3M re-eval — a
+    process kill at the trace-write step (or mid-eval) only loses the
+    in-flight cell, and re-running picks up from the npz cache."""
+    src = tmp_path / 'src_corpus'
+    _build_source_ckpt_corpus(src)
+    relpaths = _bundle_relpaths(src)
+    assert len(relpaths) >= 2
+
+    # (a) Full run WITH cache.
+    cache_dir = tmp_path / 'eval_cache'
+    r1 = _RecordingLocalRestorer(relpaths_=relpaths, calls=[])
+    cached_out = tmp_path / 'reeval_cached'
+    _ = reeval_corpus_streaming(
+        src, n_episodes=20, out_dir=cached_out,
+        restorer=r1, eval_keying='paired', eval_cache_dir=cache_dir,
+    )
+    # One npz per checkpoint cell now exists.
+    npzs = sorted(cache_dir.glob('cell*.npz'))
+    assert len(npzs) == len(relpaths), (
+        f'expected one npz per cell ({len(relpaths)}); got {len(npzs)}'
+    )
+
+    # Cache output must match a fresh no-cache streaming run bit-for-bit.
+    r2 = _RecordingLocalRestorer(relpaths_=relpaths, calls=[])
+    nocache_out = tmp_path / 'reeval_nocache'
+    _ = reeval_corpus_streaming(
+        src, n_episodes=20, out_dir=nocache_out,
+        restorer=r2, eval_keying='paired',
+    )
+    cached_t = pl.read_parquet(cached_out / 'traces.parquet')
+    nocache_t = pl.read_parquet(nocache_out / 'traces.parquet')
+    ids = cached_t.get_column('id').to_list()
+    assert set(ids) == set(nocache_t.get_column('id').to_list())
+    for rid in ids:
+        for col in EVAL_DERIVED_COLUMNS:
+            np.testing.assert_array_equal(
+                _eval_col(cached_t, str(rid), col),
+                _eval_col(nocache_t, str(rid), col),
+                err_msg=f'cache vs no-cache {col} mismatch for {rid}',
+            )
+
+    # (b) Resume: a second run against the FULL cache must restore
+    # NOTHING (every cell cached) yet still write complete output.
+    r3 = _RecordingLocalRestorer(relpaths_=relpaths, calls=[])
+    resumed_out = tmp_path / 'reeval_resumed'
+    _ = reeval_corpus_streaming(
+        src, n_episodes=20, out_dir=resumed_out,
+        restorer=r3, eval_keying='paired', eval_cache_dir=cache_dir,
+    )
+    restores = [r for (op, r) in r3.calls if op == 'restore']
+    assert restores == [], (
+        f'fully-cached resume must restore no bundles; restored {restores}'
+    )
+    resumed_t = pl.read_parquet(resumed_out / 'traces.parquet')
+    assert set(resumed_t.get_column('id').to_list()) == set(ids)
+    for rid in ids:
+        np.testing.assert_array_equal(
+            _eval_col(resumed_t, str(rid), 'mc_return'),
+            _eval_col(cached_t, str(rid), 'mc_return'),
+            err_msg=f'resumed mc_return differs for {rid}',
+        )
+    resumed_runs = pl.read_parquet(resumed_out / 'runs.parquet')
+    assert set(resumed_runs.get_column('n_episodes').to_list()) == {20}

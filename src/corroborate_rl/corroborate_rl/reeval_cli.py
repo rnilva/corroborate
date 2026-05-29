@@ -84,6 +84,17 @@ def _build_parser() -> argparse.ArgumentParser:
              "(default 'q_checkpoints').",
     )
     _ = parser.add_argument(
+        '--eval-cache-dir', type=str, default=None,
+        help='Streaming path: persist each cell\'s re-evaled eval '
+             'arrays to <dir>/cell{NNN}.npz as the cell completes, and '
+             'skip cached cells on a re-run. Makes a long (~75-min) '
+             'streaming re-eval RESUMABLE (a kill loses only the '
+             'in-flight cell, not the whole eval) and LOW-RAM at the '
+             'trace write (streams arrays from the npz cache instead of '
+             'holding the corpus-wide ~9 GB in memory). Recommended for '
+             'the snake 3M re-eval.',
+    )
+    _ = parser.add_argument(
         '--stream-checkpoints', action='store_true',
         help='Disk-bounded path: restore each per-cell checkpoint '
              'bundle from cloud one at a time, re-eval the runs it '
@@ -200,6 +211,10 @@ def main(argv: list[str] | None = None) -> int:
     eval_seed_base = require_int(args_map, 'eval_seed_base')
     subdir = require_str(args_map, 'q_checkpoints_subdir')
     match_tol = require_float(args_map, 'match_tol')
+    eval_cache_raw = args_map.get('eval_cache_dir')
+    eval_cache_dir = (
+        Path(eval_cache_raw) if isinstance(eval_cache_raw, str) else None
+    )
 
     if stream:
         import sys
@@ -223,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
             eval_keying=keying,
             match_tol=match_tol,
             host_checkpoints_on_cpu=host_checkpoints_on_cpu,
+            eval_cache_dir=eval_cache_dir,
             progress=_progress,
         )
     else:

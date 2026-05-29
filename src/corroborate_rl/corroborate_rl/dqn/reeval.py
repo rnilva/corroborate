@@ -1066,6 +1066,83 @@ def _finalize_reeval_output(
     _mirror_manifest_reference(corpus_dir, out_dir, n_episodes=n_episodes)
 
 
+@dataclass(frozen=True, slots=True)
+class _EvalCache:
+    """Per-cell on-disk cache of re-evaled eval arrays, for resumable +
+    low-RAM streaming re-eval.
+
+    A long re-eval (snake 3M: ~75 min) holds the whole corpus's eval
+    arrays in host RAM until the final trace write; a process kill at
+    the write step loses ALL the expensive eval work, and the ~9 GB
+    in-RAM accumulation pressures the trace-write sink. Persisting each
+    cell's eval arrays to `cache_dir/cell{NNN}.npz` AS the cell
+    completes makes the run (a) resumable — a re-run skips cells whose
+    npz already exists — and (b) low-RAM — the final write streams
+    arrays back from disk per-id instead of holding all in memory.
+
+    One npz per checkpoint cell (not per run-id) keeps the file count
+    to the bundle count; each npz carries the cell's run-ids and the
+    six eval arrays stacked under `{rid}__{col}` keys."""
+    cache_dir: Path
+
+    def cell_path(self, cell_idx: int) -> Path:
+        return self.cache_dir / f'cell{cell_idx:03d}.npz'
+
+    def is_cell_done(self, cell_idx: int) -> bool:
+        return self.cell_path(cell_idx).is_file()
+
+    def save_cell(
+        self, cell_idx: int, cell_eval: Mapping[str, Mapping[str, np.ndarray]],
+    ) -> None:
+        """Persist one cell's eval arrays atomically. `cell_eval[col][rid]`
+        is the stacked `(n_bursts, K, ...)` array; flattened to
+        `{rid}__{col}` npz keys plus a `__rids__` index."""
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        rids = sorted({
+            rid for col in EVAL_DERIVED_COLUMNS for rid in cell_eval[col]
+        })
+        flat: dict[str, np.ndarray] = {
+            '__rids__': np.array(rids, dtype=object),
+        }
+        for col in EVAL_DERIVED_COLUMNS:
+            for rid in rids:
+                flat[f'{rid}__{col}'] = cell_eval[col][rid]
+        # Write to a tmp FILE HANDLE (not a path) so np.savez doesn't
+        # append its own `.npz` to the name — then atomic-rename. Passing
+        # a path like `cell000.npz.tmp` would make np.savez emit
+        # `cell000.npz.tmp.npz`, breaking the rename.
+        tmp = self.cell_path(cell_idx).with_suffix('.npz.tmp')
+        with tmp.open('wb') as f:
+            np.savez(f, **flat)
+        tmp.replace(self.cell_path(cell_idx))
+
+    def load_all(self) -> dict[str, dict[str, np.ndarray]]:
+        """Load every cached cell's eval arrays into the
+        `new_eval[col][rid]` shape the trace writer consumes. Only
+        called once, at finalize; the per-cell npz are read sequentially
+        so peak RAM is one cell, not the whole corpus, until the dict is
+        assembled (the dict itself is the eval columns — tens of MB)."""
+        out: dict[str, dict[str, np.ndarray]] = {
+            col: {} for col in EVAL_DERIVED_COLUMNS
+        }
+        for npz_path in sorted(self.cache_dir.glob('cell*.npz')):
+            with np.load(npz_path, allow_pickle=True) as data:
+                rids = [str(r) for r in data['__rids__']]
+                for rid in rids:
+                    for col in EVAL_DERIVED_COLUMNS:
+                        out[col][rid] = data[f'{rid}__{col}']
+        return out
+
+    def cached_run_ids(self) -> set[str]:
+        """Every run-id present across all cached cells (the resume
+        skip-set)."""
+        ids: set[str] = set()
+        for npz_path in sorted(self.cache_dir.glob('cell*.npz')):
+            with np.load(npz_path, allow_pickle=True) as data:
+                ids.update(str(r) for r in data['__rids__'])
+        return ids
+
+
 def reeval_corpus_streaming(
     corpus_dir: Path,
     *,
@@ -1076,6 +1153,7 @@ def reeval_corpus_streaming(
     eval_keying: EvalKeying = 'paired',
     match_tol: float = 1e-3,
     host_checkpoints_on_cpu: bool = False,
+    eval_cache_dir: Path | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> Path:
     """Disk-bounded re-eval for bundle-layout corpora whose per-cell
@@ -1136,6 +1214,18 @@ def reeval_corpus_streaming(
     path); raises if `True` but no CPU device is available. `False`
     (default) keeps the original all-default-device behavior — fine
     for the small per-file corpora and the CPU smoke tests.
+
+    `eval_cache_dir`: when set, persist each cell's re-evaled eval
+    arrays to `eval_cache_dir/cell{NNN}.npz` AS the cell completes, and
+    skip any bundle whose cell is already cached on a re-run. Makes the
+    long run RESUMABLE — a kill at the trace-write step (or mid-eval)
+    only loses the in-flight cell, not the whole ~75-min eval — and
+    LOW-RAM at write (the final trace write streams arrays back from the
+    npz cache per-id instead of holding the whole corpus's ~9 GB of
+    eval arrays in host RAM, which pressured the `sink_parquet` write).
+    A fully-cached resume skips the entire bundle loop and goes straight
+    to the trace write. `None` (default) keeps everything in RAM (fine
+    for the small corpora / tests).
 
     `progress` is an optional sink for per-bundle status lines (the
     restore / match / re-eval / release lifecycle of each multi-GB
@@ -1218,9 +1308,26 @@ def reeval_corpus_streaming(
     matcher: _RowFingerprintMatcher | None = None
     n_bursts: int | None = None
 
+    cache = _EvalCache(eval_cache_dir) if eval_cache_dir is not None else None
+    cached_ids = cache.cached_run_ids() if cache is not None else set()
+    if cached_ids:
+        _emit(
+            f'resume: {len(cached_ids)} run(s) already in eval cache '
+            f'{eval_cache_dir} — those cells will be skipped.',
+        )
+
     n_bundles = len(bundle_relpaths)
     for bi, relpath in enumerate(bundle_relpaths):
         cell_idx = _cell_idx_from_relpath(relpath)
+        # Resume fast-path: a cell whose npz is already cached needs no
+        # download / decode / re-eval. Its run-ids are already in
+        # `cached_ids`; the trace write reads its arrays from the cache.
+        if cache is not None and cache.is_cell_done(cell_idx):
+            _emit(
+                f'[{bi + 1}/{n_bundles}] cell{cell_idx:03d}: cached — '
+                'skipping restore + re-eval.',
+            )
+            continue
         _emit(f'[{bi + 1}/{n_bundles}] restoring {relpath} ...')
         restorer.restore(relpath)
         try:
@@ -1263,6 +1370,9 @@ def reeval_corpus_streaming(
                 f'{bundle.seeds[-1]}); re-evaling {n_bursts} bursts × K='
                 f'{n_episodes} ...',
             )
+            cell_eval: dict[str, dict[str, np.ndarray]] = {
+                col: {} for col in EVAL_DERIVED_COLUMNS
+            }
             for ri, (rid, (_ci, seed)) in enumerate(resolved.items()):
                 stacked = _reeval_one_cell(
                     cell=cell, eval_fn=eval_fn, seed=seed,
@@ -1271,11 +1381,28 @@ def reeval_corpus_streaming(
                     compute_device=compute_device,
                 )
                 for col in EVAL_DERIVED_COLUMNS:
-                    new_eval[col][rid] = stacked[col]
+                    cell_eval[col][rid] = stacked[col]
+                    # Hold in RAM only when NOT caching to disk; the
+                    # cache path streams from npz at write time so the
+                    # corpus-wide arrays never accumulate in memory.
+                    if cache is None:
+                        new_eval[col][rid] = stacked[col]
                 _emit(
                     f'[{bi + 1}/{n_bundles}] cell{cell_idx:03d}: '
                     f'{ri + 1}/{len(resolved)} runs re-evaled '
                     f'({len(by_id)}/{len(ids_in_order)} total)',
+                )
+            if cache is not None:
+                # Persist this cell's eval arrays atomically — the run is
+                # now resumable past this cell, and the in-RAM cell_eval
+                # is released at the next iteration.
+                cache.save_cell(cell_idx, cell_eval)
+                cached_ids.update(
+                    rid for col in EVAL_DERIVED_COLUMNS for rid in cell_eval[col]
+                )
+                _emit(
+                    f'[{bi + 1}/{n_bundles}] cell{cell_idx:03d}: cached '
+                    f'{len(resolved)} runs to {cache.cell_path(cell_idx).name}',
                 )
         finally:
             # Free the bundle's local copy whether or not it processed
@@ -1284,7 +1411,10 @@ def reeval_corpus_streaming(
             restorer.release(relpath)
             _emit(f'[{bi + 1}/{n_bundles}] released {relpath}')
 
-    missing = set(ids_in_order) - set(by_id)
+    # Completeness check: every source run-id must have a re-evaled
+    # result, either freshly matched (by_id) or recovered from cache.
+    covered = set(by_id) | cached_ids
+    missing = set(ids_in_order) - covered
     if missing:
         raise ValueError(
             f'reeval streaming: {len(missing)} run rows had no checkpoint '
@@ -1292,6 +1422,11 @@ def reeval_corpus_streaming(
             f'by the restorer ({bundle_relpaths}) do not cover every run '
             'row — check the manifest / chunk coverage.',
         )
+
+    # Cache path: assemble new_eval from the on-disk npz cache (low-RAM
+    # until this point; the dict is just the eval columns, ~tens of MB).
+    if cache is not None:
+        new_eval = cache.load_all()
 
     _emit(
         f'all {n_bundles} bundles done; writing output traces '
