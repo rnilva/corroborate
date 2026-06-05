@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Protocol, cast
+from typing import IO, Protocol, cast
 
 import fsspec.core
 
@@ -41,6 +41,7 @@ class FsspecFs(Protocol):
     def exists(self, path: str) -> bool: ...
     def rm(self, path: str) -> object: ...
     def makedirs(self, path: str, exist_ok: bool = False) -> object: ...
+    def open(self, path: str, mode: str = 'rb') -> IO[bytes]: ...
 
 
 def _resolve(uri: str) -> tuple[FsspecFs, str]:
@@ -139,3 +140,24 @@ def remote_delete(remote_uri: str) -> None:
     """Delete a single remote object."""
     fs, path = _resolve(remote_uri)
     fs.rm(path)
+
+
+def open_remote(remote_uri: str) -> IO[bytes]:
+    """Open `remote_uri` for binary reading through fsspec.
+
+    fsspec's `url_to_fs` honors the per-profile `endpoint_url` in
+    `~/.aws/config` (required for Cloudflare R2). polars' and
+    pyarrow's NATIVE object-store readers do NOT — they derive the
+    endpoint from region alone, so `region='auto'` builds the bogus
+    `s3.auto.amazonaws.com` host and any `pl.read_parquet('s3://…')`
+    / `pq.ParquetFile('s3://…')` against a custom-endpoint store
+    fails with a HEAD error. Reading from the file object this
+    returns routes through the working fsspec config instead.
+
+    The returned object is a SEEKABLE binary file (backed by S3
+    range GETs), so parquet readers retain column / row-group
+    projection pushdown — only the bytes they need are fetched, not
+    the whole object. Use as a context manager; the caller closes
+    it."""
+    fs, path = _resolve(remote_uri)
+    return fs.open(path, 'rb')

@@ -214,6 +214,17 @@ class PanelDiagnostics:
     the bridge author makes via the `scope_chain`."""
     n_cells_per_stratum: Mapping[tuple[object, ...], int]
     corpora_per_stratum: Mapping[tuple[object, ...], frozenset[str]]
+    # Distinct `RunRow.program` values pooled into each stratum.
+    # `arm_key` is the pure intervention fingerprint and is
+    # program-BLIND (a `dqn` `baseline` arm and a `paired_dqn`
+    # `baseline` arm share `arm_key='baseline'`), so a stratum whose
+    # set here has >1 element is pooling cells from structurally
+    # different root programs under one arm. Cross-program contrast
+    # is legitimate (make `program` a stratify/scope dimension); this
+    # surfaces the case so ACCIDENTAL pooling is visible rather than
+    # silent. Empty frozenset for corpora predating the `program`
+    # column (null reads as absent, not a distinct program).
+    programs_per_stratum: Mapping[tuple[object, ...], frozenset[str]]
     finite_fraction_per_stratum_measurable: Mapping[
         tuple[object, ...], Mapping[str, float]
     ]
@@ -957,6 +968,7 @@ class Panel:
             return PanelDiagnostics(
                 n_cells_per_stratum={},
                 corpora_per_stratum={},
+                programs_per_stratum={},
                 finite_fraction_per_stratum_measurable={},
                 nonunique_configs_per_stratum={},
                 scope_provenance=self.scope_chain,
@@ -991,6 +1003,7 @@ class Panel:
             ]
         n_counts: dict[tuple[object, ...], int] = {}
         corpora: dict[tuple[object, ...], frozenset[str]] = {}
+        programs: dict[tuple[object, ...], frozenset[str]] = {}
         finite_frac: dict[
             tuple[object, ...], Mapping[str, float]
         ] = {}
@@ -1012,6 +1025,17 @@ class Panel:
                 )
             else:
                 corpora[stratum_id] = frozenset()
+            # programs_per_stratum: distinct non-null 'program'
+            # values. Surfaces program-blind arm_key pooling (a
+            # stratum with >1 program mixes root programs under one
+            # arm). Absent/all-null column → empty set.
+            if 'program' in sub.columns:
+                program_vals: list[object] = list(sub['program'].to_list())
+                programs[stratum_id] = frozenset(
+                    str(v) for v in program_vals if v is not None
+                )
+            else:
+                programs[stratum_id] = frozenset()
             # finite_fraction_per_stratum_measurable.
             per_meas: dict[str, float] = {}
             for mc in meas_cols:
@@ -1035,6 +1059,7 @@ class Panel:
         return PanelDiagnostics(
             n_cells_per_stratum=n_counts,
             corpora_per_stratum=corpora,
+            programs_per_stratum=programs,
             finite_fraction_per_stratum_measurable=finite_frac,
             nonunique_configs_per_stratum=nonunique,
             scope_provenance=self.scope_chain,

@@ -381,9 +381,11 @@ def sniff_row_ids(source: Path | str) -> tuple[str, ...]:
     so a merged-corpus row can be traced back to its source shard.
 
     Accepts either a local `Path` or an fsspec URI string
-    (e.g. `s3://bucket/sweeps/.../runs.parquet`). Polars' parquet
-    reader handles both transparently via fsspec, with column
-    projection pushdown — only the `id` column's pages are
+    (e.g. `s3://bucket/sweeps/.../runs.parquet`). Remote URIs are
+    opened through fsspec (which honors the R2 `endpoint_url` in
+    `~/.aws/config`; polars' native object-store does not — see
+    `_fs.open_remote`), with column projection pushdown preserved
+    over the seekable handle — only the `id` column's pages are
     fetched on remote reads.
 
     Quietly returns `()` for non-parquet inputs, parquets without
@@ -400,8 +402,13 @@ def sniff_row_ids(source: Path | str) -> tuple[str, ...]:
             return ()
         target = source
     import polars as pl
+    target_str = str(target)
     try:
-        df = pl.read_parquet(target, columns=['id'])
+        if '://' in target_str:
+            with _fs.open_remote(target_str) as _fh:
+                df = pl.read_parquet(_fh, columns=['id'])
+        else:
+            df = pl.read_parquet(target, columns=['id'])
     except (pl.exceptions.ColumnNotFoundError, pl.exceptions.ComputeError):
         return ()
     except FileNotFoundError:
@@ -953,14 +960,24 @@ def restore_columns(
         if local.exists() and not overwrite:
             continue
         remote_uri = _join_remote(manifest.remote_root, relpath)
+        # Open the shard through fsspec — `pl.scan_parquet('s3://…')`
+        # uses polars' native object-store, which ignores the R2
+        # `endpoint_url` in `~/.aws/config` (derives the endpoint from
+        # region alone → bogus `s3.auto.amazonaws.com`); fsspec honors
+        # it (see `_fs.open_remote`). The handle is seekable so the
+        # lazy scan still streams + projects (range GETs). Use a
+        # SEPARATE handle per scan: a parquet scan leaves the handle
+        # at the footer, and re-scanning the same handle reads from
+        # the wrong offset ("file out of specification").
         # Intersect requested cols with the file's actual schema —
-        # callers commonly pass a "union of required-reads" set
-        # which may contain runs.parquet fields not present on
+        # callers commonly pass a "union of required-reads" set which
+        # may contain runs.parquet fields not present on
         # traces.parquet (CACHE_BUILD.md: trace_reads is unsplit).
         # Silently dropping is correct here: the runner downstream
-        # joins what's available; columns not in this file would
-        # be NaN anyway after a full restore.
-        available = set(pl.scan_parquet(remote_uri).collect_schema().names())
+        # joins what's available; columns not in this file would be
+        # NaN anyway after a full restore.
+        with _fs.open_remote(remote_uri) as fh_schema:
+            available = set(pl.scan_parquet(fh_schema).collect_schema().names())
         keep = [c for c in columns if c in available]
         if not keep:
             # Nothing useful in this file for the requested colset;
@@ -968,24 +985,25 @@ def restore_columns(
             continue
         local.parent.mkdir(parents=True, exist_ok=True)
         tmp = local.with_suffix(local.suffix + '.tmp')
-        lazy = pl.scan_parquet(remote_uri).select(keep)
         # Stream remote→local through `sink_parquet` so cloud files
         # whose single row group is larger than RAM don't OOM at
-        # restore time. `sink_parquet` evaluates the query in
-        # streaming mode and writes chunks to disk; the local file
-        # comes out with row groups sized to `row_group_size` so
-        # downstream `compute_trace_measurables_streaming` has a
-        # meaningful per-batch boundary regardless of the cloud
-        # writer's row-group choice.
-        sink_row_group_size = row_group_size
-        if sink_row_group_size is None:
-            # Match the legacy behaviour: a single row group per
-            # write. Callers who opt out of re-chunking are
-            # accepting the responsibility to avoid 1-RG OOM
-            # downstream.
-            lazy.sink_parquet(tmp)
-        else:
-            lazy.sink_parquet(tmp, row_group_size=sink_row_group_size)
+        # restore time. `sink_parquet` evaluates the query in streaming
+        # mode and writes chunks to disk; the local file comes out with
+        # row groups sized to `row_group_size` so downstream
+        # `compute_trace_measurables_streaming` has a meaningful
+        # per-batch boundary regardless of the cloud writer's row-group
+        # choice.
+        with _fs.open_remote(remote_uri) as fh_data:
+            lazy = pl.scan_parquet(fh_data).select(keep)
+            sink_row_group_size = row_group_size
+            if sink_row_group_size is None:
+                # Match the legacy behaviour: a single row group per
+                # write. Callers who opt out of re-chunking are
+                # accepting the responsibility to avoid 1-RG OOM
+                # downstream.
+                lazy.sink_parquet(tmp)
+            else:
+                lazy.sink_parquet(tmp, row_group_size=sink_row_group_size)
         tmp.replace(local)
         restored.append(relpath)
     return restored

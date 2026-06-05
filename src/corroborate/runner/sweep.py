@@ -275,6 +275,15 @@ def run_intervention[R: Mapping[str, object]](
     parquets. Default: `f'{arm_key}'` — caller usually overrides
     to encode grid_point keys (e.g. `env_name`).
 
+    `arm_key` is the pure intervention fingerprint
+    (`combined_arm_key` of the arm's `do()` tuple), base-agnostic
+    per the leaves-as-covariates discipline. When `base` is itself a
+    *distinct program* (a different root claim, e.g. `paired_dqn` vs
+    `dqn`), that program identity is NOT part of the arm_key — the
+    substrate records it on the typed `RunRow.program` column (see
+    `signature.root_claim_name`), keeping arm identity and program
+    identity on separate, independently-queryable axes.
+
     `archive_remote`: optional fsspec URI prefix; uploads each
     cell's parquet pair to remote storage right after the cell
     completes, purges local; merges from remote at the end.

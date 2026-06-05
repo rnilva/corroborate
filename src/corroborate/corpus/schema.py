@@ -245,6 +245,16 @@ class RunRow:
     # `pl.col('substrate_commit_sha').is_in([...])`. See
     # `docs/SUBSTRATE_FIXES.md` for the SHA → fix-name catalogue.
     substrate_commit_sha: str | None = None
+    # Root program (top-level `@claim`) that produced this cell —
+    # e.g. `'dqn'`, `'paired_dqn'`. The arm fingerprint `arm_key`
+    # captures the INTERVENTION tuple only (slot swaps on one base);
+    # program identity is a distinct axis (a different root claim,
+    # not a slot delta) and is NOT derivable from the flattened
+    # leaves, so it earns a typed column rather than a denormalised
+    # arm_key prefix. Cross-program contrasts (e.g. `paired_dqn` vs
+    # `dqn`) scope via `pl.col('program') == 'paired_dqn'`. `None`
+    # for cells produced before this field existed.
+    program: str | None = None
     measurements: Mapping[str, MeasurementLeaf] = field(
         default_factory=lambda: {},
     )
@@ -258,6 +268,7 @@ class RunRow:
             'verdict': self.verdict.value,
             'arm_key': self.arm_key,
             'substrate_commit_sha': self.substrate_commit_sha,
+            'program': self.program,
         }
         _flatten_measurements(out, self.measurements)
         return out
@@ -289,6 +300,7 @@ class RunRow:
             verdict=require_verdict(d, 'verdict'),
             arm_key=arm_key,
             substrate_commit_sha=optional_str(d, 'substrate_commit_sha'),
+            program=optional_str(d, 'program'),
             measurements=measurements,
         )
 

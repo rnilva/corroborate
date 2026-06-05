@@ -681,6 +681,67 @@ def test_restore_columns_writes_thin_local(tmp_path: Path) -> None:
     assert df.height == 500
 
 
+def test_restore_columns_reads_via_fsspec_on_remote_uri(
+    tmp_path: Path,
+) -> None:
+    """`restore_columns` reads the cloud shard back through fsspec, not
+    polars' native object-store — the same R2-endpoint fix as the sweep
+    merge. polars' native reader can't resolve a custom-endpoint store
+    (`region='auto'` → `s3.auto.amazonaws.com`).
+
+    Guarded here with a `memory://` remote: unlike `file://` (which
+    polars reads natively), polars has no native `memory://` backend,
+    so `pl.scan_parquet('memory://…')` fails outright — the test
+    passes only because the read is routed through fsspec. Also asserts
+    column projection still drops the fat columns over the fsspec
+    handle (pushdown preserved)."""
+    import polars as pl
+
+    sweep = tmp_path / 'sweep'
+    _write_multicol_parquet(sweep / 'traces.parquet')
+    full_size = (sweep / 'traces.parquet').stat().st_size
+    remote = 'memory://restore-cols-remote'
+    _ = cloud.archive(sweep, remote)
+    # Force a fetch.
+    (sweep / 'traces.parquet').unlink()
+
+    restored = cloud.restore_columns(
+        sweep, file_columns={'traces.parquet': ['id', 'wanted_col']},
+    )
+    assert restored == ['traces.parquet']
+
+    thin = sweep / 'traces.parquet'
+    assert thin.exists()
+    # Projection preserved over the fsspec handle: fat columns dropped.
+    assert thin.stat().st_size < full_size * 0.5
+    df = pl.read_parquet(thin)
+    assert set(df.columns) == {'id', 'wanted_col'}
+    assert df.height == 500
+
+
+def test_sniff_row_ids_reads_remote_uri(tmp_path: Path) -> None:
+    """`sniff_row_ids` reads the `id` column from a shard that may be
+    a remote URI (the I5 provenance / merge-integrity path: the merged
+    corpus's row count is cross-checked against the sum of shard
+    `row_ids`). The projected `columns=['id']` read must honor the R2
+    endpoint, so it's routed through fsspec.
+
+    Guarded with `memory://`: on the old (native) code,
+    `pl.read_parquet('memory://…', columns=['id'])` raises
+    FileNotFoundError, which `sniff_row_ids` swallows and returns `()`
+    — a SILENT wrong answer that would skip the integrity check. The
+    fsspec route returns the real ids."""
+    import polars as pl
+    from corroborate._internals import fsspec as _fsspec_io
+
+    local = tmp_path / 'shard.parquet'
+    pl.DataFrame({'id': ['a', 'b', 'c'], 'x': [1, 2, 3]}).write_parquet(local)
+    _fsspec_io.put_file(local, 'memory://sniff/shard.parquet')
+
+    ids = cloud.sniff_row_ids('memory://sniff/shard.parquet')
+    assert ids == ('a', 'b', 'c')
+
+
 def test_restore_columns_raises_on_unknown_relpath(tmp_path: Path) -> None:
     sweep = tmp_path / 'sweep'
     _write_real_parquet(sweep / 'runs.parquet')

@@ -78,6 +78,17 @@ class InterventionConfig:
         default_factory=lambda: DoEffect(arms=((),)),
     )
     required_measurables: tuple[str, ...] = ()
+    # Base PROGRAM (root claim) this config runs — any `@claim` root
+    # program registered in `DQN_REGISTRY_MODULES`, resolved via
+    # `reg.fn(program)`. Default `'dqn'` (single-net). `'paired_dqn'`
+    # selects the coupled two-learner deep van Hasselt 2010 program
+    # (DDQN-indp), whose cross-evaluation is structural — so a paired
+    # config carries an EMPTY arm (no marker, no slot swap). Program
+    # identity is recorded on `RunRow.program`, NOT in `arm_key`
+    # (which stays the pure intervention fingerprint), so a paired
+    # `baseline` arm and a `dqn` `baseline` arm are distinguished by
+    # the typed `program` column, not a name collision.
+    program: str = 'dqn'
 
 
 _CLASS_KEY = 'class'
@@ -318,11 +329,31 @@ def build_intervention_from_mapping(
 
     required_measurables = _build_required_measurables(node)
 
+    program = node.get('program', 'dqn')
+    if not isinstance(program, str):
+        raise TypeError(
+            f'intervention.program must be a string; got '
+            f'{type(program).__name__}',
+        )
+    # The registry is the single authority on valid program names —
+    # `reg.fn` raises a loud KeyError listing the known set on a
+    # typo. No hardcoded enum: any registered claim is a candidate
+    # `program:` value (the program is the outermost claim in the
+    # cell's computation graph).
+    try:
+        _ = reg.fn(program)
+    except KeyError as e:
+        raise ValueError(
+            f'intervention.program {program!r} is not a registered '
+            f'claim program: {e}',
+        ) from e
+
     return InterventionConfig(
         name=name,
         base=base,
         do_effect=DoEffect(arms=arms),
         required_measurables=required_measurables,
+        program=program,
     )
 
 

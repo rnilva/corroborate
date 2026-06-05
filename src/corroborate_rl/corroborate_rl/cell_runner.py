@@ -57,7 +57,7 @@ from corroborate_rl.dqn.q_checkpoint_bundle import (
 )
 from corroborate_rl.env_catalogue import EnvSpec, EnvWrapper, make_env
 from corroborate.corpus.schema import MeasurementLeaf, RunRow, TraceLeaf, TraceRow
-from corroborate.core.signature import walk, walk_paths
+from corroborate.core.signature import root_claim_name, walk, walk_paths
 from corroborate.bridge.verdict import Verdict
 from corroborate.measurables import Measurable
 
@@ -596,6 +596,7 @@ def run_dqn_arm(
             cycle_id=cycle_id, timestamp=timestamp,
             verdict=verdict, arm_key=arm_key,
             substrate_commit_sha=_git_head_sha(),
+            program=root_claim_name(claim),
             measurements=measurements,
         )
         # Trace leaves: configurational leaves (shared with the

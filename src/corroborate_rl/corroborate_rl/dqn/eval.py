@@ -25,7 +25,7 @@ bursts (PPO, SAC, etc.)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, NamedTuple, cast
+from typing import TYPE_CHECKING, NamedTuple, Protocol, cast
 
 import jax
 import jax.numpy as jnp
@@ -34,7 +34,6 @@ from gymnax import EnvParams, EnvState
 from corroborate import claim
 from corroborate.core.loop import Loop, iterate
 from corroborate_rl.loop import scan_loop
-from corroborate_rl.dqn.state import DQNState
 from corroborate_rl.dqn.claims.q_network import QFunction
 from corroborate_rl.dqn.q_checkpoint import checkpoint_key
 from corroborate_rl.dqn.types import StepRecord
@@ -240,15 +239,30 @@ def eval_burst(
 
 # ============ train_with_eval — nested scan driver ============
 
-def train_with_eval(
+class _ParamsView(Protocol):
+    """Minimal carry contract `train_with_eval` needs for the Q
+    checkpoint snapshots: read access to the acting unit's online +
+    target params. `DQNState` satisfies it via its NamedTuple
+    fields; `PairedDQNState` via `@property` delegating to its A
+    unit — so the SAME driver powers single-net `dqn` AND the paired
+    `paired_dqn` program (D1, no driver duplication). The scan body
+    is otherwise carry-opaque (it only threads the carry through
+    `step_fn` / `eval_fn`)."""
+    @property
+    def online_params(self) -> dict[str, jax.Array]: ...
+    @property
+    def target_params(self) -> dict[str, jax.Array]: ...
+
+
+def train_with_eval[S: _ParamsView](
     *,
-    step_fn: Callable[[DQNState, jax.Array], tuple[DQNState, StepRecord]],
-    eval_fn: Callable[[DQNState, jax.Array], EvalBurstOut],
-    init_state: DQNState,
+    step_fn: Callable[[S, jax.Array], tuple[S, StepRecord]],
+    eval_fn: Callable[[S, jax.Array], EvalBurstOut],
+    init_state: S,
     total_steps: int,
     eval_every: int,
     loop: Loop[
-        DQNState,
+        S,
         tuple[
             StepRecord, EvalBurstOut,
             dict[str, jax.Array], dict[str, jax.Array],
@@ -305,7 +319,7 @@ def train_with_eval(
     # T per call site without higher-kinded polymorphism.
     # `cast` is the documented escape hatch — same Loop instance,
     # different T binding for the inner-vs-outer call.
-    inner_loop = cast('Loop[DQNState, StepRecord, jax.Array]', loop)
+    inner_loop = cast('Loop[S, StepRecord, jax.Array]', loop)
 
     # Decide ONCE outside the scan whether per-burst snapshots are
     # captured: the scan body's pytree shape must be static across
@@ -326,9 +340,9 @@ def train_with_eval(
     # branches without forcing the framework's JIT cache to re-trace.
 
     def super_step(
-        s: DQNState, super_idx: jax.Array,
+        s: S, super_idx: jax.Array,
     ) -> tuple[
-        DQNState,
+        S,
         tuple[
             StepRecord, EvalBurstOut,
             dict[str, jax.Array], dict[str, jax.Array],
@@ -412,3 +426,76 @@ def train_with_eval(
             record[checkpoint_key('target', 'final', pk)] = arr
 
     return record
+
+
+# ============ shared composition for eval-bursting programs ============
+
+def validate_eval_schedule(total_steps: int, eval_every: int) -> None:
+    """Run-length contract shared by every eval-bursting program
+    (`dqn`, `paired_dqn`): `eval_every` must divide `total_steps`
+    and at least one super-step must run. One ground used by both
+    programs so the contract can't drift between them."""
+    # Positivity first: `eval_every <= 0` would make the modulo below
+    # raise a bare ZeroDivisionError (or pass a negative through to a
+    # malformed scan length); a loud ValueError is the intended
+    # contract for both programs.
+    if eval_every <= 0:
+        raise ValueError(
+            f'eval_every ({eval_every}) must be a positive integer.',
+        )
+    if total_steps <= 0:
+        raise ValueError(
+            f'total_steps ({total_steps}) must be a positive integer.',
+        )
+    if total_steps % eval_every != 0:
+        raise ValueError(
+            f'total_steps ({total_steps}) must be a multiple of '
+            f'eval_every ({eval_every}); got remainder '
+            f'{total_steps % eval_every}',
+        )
+    if total_steps < eval_every:
+        raise ValueError(
+            f'total_steps ({total_steps}) must be ≥ eval_every '
+            f'({eval_every}) — at least one super-step required.',
+        )
+
+
+def run_with_eval[S: _ParamsView](
+    *,
+    init_state: S,
+    step_fn: Callable[[S, jax.Array], tuple[S, StepRecord]],
+    run_key: jax.Array,
+    env: Env,
+    env_params: EnvParams,
+    q_network: QFunction,
+    gamma: float,
+    eval_episode_cap: int,
+    n_episodes: int,
+    total_steps: int,
+    eval_every: int,
+    keep_q_checkpoint_final: bool = False,
+    keep_q_checkpoint_per_burst: bool = False,
+) -> dict[str, jax.Array]:
+    """The common tail of the eval-bursting programs: build the
+    per-burst eval closure over the acting unit's `online_params`
+    (A's net for `paired_dqn` via the `@property`, the sole net for
+    `dqn`) and drive `train_with_eval`. `dqn` and `paired_dqn`
+    differ ONLY in their init + `step_fn`; everything downstream of
+    the composed state is shared here so eval-side changes (a new
+    burst metric, a seed-derivation fix) land once."""
+    def eval_fn(s: S, super_idx: jax.Array) -> EvalBurstOut:
+        return eval_burst(
+            online_params=s.online_params,
+            env=env, env_params=env_params,
+            rng_key=jax.random.fold_in(run_key, super_idx),
+            q_network=q_network, gamma=gamma,
+            episode_cap=eval_episode_cap, n_episodes=n_episodes,
+        )
+
+    return train_with_eval(
+        step_fn=step_fn, eval_fn=eval_fn,
+        init_state=init_state,
+        total_steps=total_steps, eval_every=eval_every,
+        keep_q_checkpoint_final=keep_q_checkpoint_final,
+        keep_q_checkpoint_per_burst=keep_q_checkpoint_per_burst,
+    )

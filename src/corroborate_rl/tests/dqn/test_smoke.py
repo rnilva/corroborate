@@ -44,13 +44,8 @@ if TYPE_CHECKING:
 
 # ============ Fixtures ============
 
-def _make_env() -> tuple[Env, EnvParams, tuple[int, ...], int]:
-    env, env_params = gymnax.make('CartPole-v1')
-    obs_space = env.observation_space(env_params)
-    act_space = env.action_space(env_params)
-    obs_shape = tuple(int(d) for d in obs_space.shape)
-    n_actions = int(act_space.n)
-    return env, env_params, obs_shape, n_actions
+# `_make_env` is the shared CartPole builder (see tests/dqn/_helpers).
+from ._helpers import make_cartpole_env as _make_env  # noqa: E402
 
 
 def _build_step_fn(

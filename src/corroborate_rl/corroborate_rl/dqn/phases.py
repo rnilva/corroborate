@@ -46,6 +46,23 @@ from corroborate_rl.dqn.types import (
 from corroborate_rl.env_catalogue import StateHash
 
 
+# ============ Symmetric Double Q-learning — the evaluator edge ======
+#
+# Faithful van Hasselt 2010 lives in the `paired_dqn` PROGRAM
+# (dqn_paired.py), NOT in a `dqn`-step flag. The single principled
+# surface `train_phase` exposes for it is `evaluator_params`: A SELECTS
+# with its own online argmax and is EVALUATED by whatever target net is
+# passed there —
+#   y_A = r + γ·(1−term)·Q_{eval}(s', argmax_a Q_A(s', a)).
+# Default `None` → the unit's own A⁻ (vanilla / DDQN-2016). The paired
+# program supplies the partner's time-delayed target B⁻, which IS the
+# DDQN-indp intervention: hold selector + acting + target stationarity
+# fixed, swap only WHICH target evaluates. B's params arrive from the
+# caller's state → constant under A's `value_and_grad` (no cross-
+# gradient leak). The two coupled learners are composed in
+# `paired_step`, which drives `train_phase` once per net.
+
+
 def _zero_state_hash(obs: jax.Array) -> jax.Array:
     """Local single-bucket fallback (mirrors dqn.default_state_hash —
     keeping a local copy to avoid the phases→dqn circular import).
@@ -266,6 +283,8 @@ def train_phase(
     replay: Replay,
     state_hash: StateHash = _zero_state_hash,
     count_weight_alpha: float = 0.0,
+    evaluator_params: Params | None = None,
+    probes: bool | None = None,
 ) -> tuple[DQNState, dict[str, jax.Array]]:
     """One gradient step: sample batch → bootstrap target →
     compute loss → apply update.
@@ -282,6 +301,7 @@ def train_phase(
     (batch axis collapsed); bridges that want full distributional
     information consume `pearson_stats` (5 sufficient statistics
     per step) instead."""
+    # A's minibatch key + the carried key for the next step.
     sample_key, next_rng_key = jax.random.split(state.rng_key)
 
     batch = replay.sample_batch(state.replay, sample_key)
@@ -330,6 +350,29 @@ def train_phase(
         (on_flat * tg_flat).mean(),
     ])  # shape (5,) per step
 
+    # A's bootstrap EVALUATOR target net. Faithful van Hasselt 2010 —
+    # A SELECTS with its OWN online argmax and is EVALUATED by a target
+    # net:
+    #   y_A = r + γ·Q_{eval}(s', argmax_a Q_A(s', a)).
+    # The SELECTOR stays `params` (A's online — the var being
+    # differentiated); only the EVALUATOR target varies. The
+    # evaluator-edge hook (the principled single-edge surface): when
+    # `evaluator_params` is supplied, it IS the bootstrap evaluator —
+    # the net whose Q scores the selected action. Default None → the
+    # unit's own target net (`state.target_params`), the historical
+    # path (vanilla / DDQN-2016 both evaluate against A⁻). `paired_step`
+    # (dqn_paired.py) supplies the independent partner's time-delayed
+    # target B⁻ here, which is the whole DDQN-indp intervention: hold
+    # selector + acting + target stationarity fixed, swap only WHICH
+    # target evaluates. B⁻ comes from `state` (the partner's), so it's
+    # a constant under value_and_grad — no gradient flows into B from
+    # A's loss.
+    eval_target_params = (
+        evaluator_params
+        if evaluator_params is not None
+        else state.target_params
+    )
+
     def compute_loss(
         params: Params,
     ) -> tuple[jax.Array, tuple[jax.Array, jax.Array]]:
@@ -346,8 +389,14 @@ def train_phase(
         # v(s')); n_step is consumed at the dqn-level only.
         bootstrap_gamma = float(gamma) ** int(n_step)
         target = bootstrap(
+            # SELECTOR: A's own online net (the var being
+            # differentiated) — A selects its own argmax in BOTH its
+            # target and behavior → coherent policy. Vanilla ignores
+            # this; DDQN-family reads it.
             online_params=params,
-            target_params=state.target_params,
+            # EVALUATOR: the unit's own A⁻ by default, or the
+            # partner's B⁻ when `evaluator_params` is supplied.
+            target_params=eval_target_params,
             q_network=q_network,
             next_obs=batch.next_obs, reward=batch.reward, done=batch.done,
             truncated=batch.truncated,
@@ -386,19 +435,23 @@ def train_phase(
 
     # ============ Gradient-overlap probes (intra-α + inter-α) ============
     #
-    # Disabled when `_GRADIENT_PROBES_ENABLED` is False — set
-    # via YAML `gradient_probes: false` (yaml_sweep mutates the
-    # module flag at sweep launch). Probes scale O(n_actions ×
-    # n_params) per training step — ~2× cell time on |A|=12 envs.
-    # Disable for sweeps that don't consume gradient-overlap
-    # measurables.
+    # Gated by `probes` when the caller passes it explicitly, else by
+    # the module flag `_GRADIENT_PROBES_ENABLED` (set via YAML
+    # `gradient_probes: false`, which yaml_sweep mutates at sweep
+    # launch). The per-call override exists for the paired program:
+    # the co-learner B's diagnostic dict is DISCARDED, so B's
+    # train_phase passes `probes=False` to skip ~3 jacrev passes per
+    # step that nothing ever reads — independent of whether the sweep
+    # wants A's probes. Probes scale O(n_actions × n_params) per
+    # training step — ~2× cell time on |A|=12 envs.
     #
     # Schema-stable: even when disabled, emits diagnostic keys as
     # NaN so downstream parquet shape is invariant. Measurables
     # `q_action_grad_overlap_late` / `q_inter_state_grad_overlap_late`
     # NaN-propagate; bridges with `is_finite()` scope filters drop
     # disabled-probe cells cleanly.
-    if not _GRADIENT_PROBES_ENABLED:
+    run_probes = _GRADIENT_PROBES_ENABLED if probes is None else probes
+    if not run_probes:
         q_action_grad_overlap = jnp.asarray(jnp.nan, dtype=jnp.float32)
         q_inter_state_grad_overlap = jnp.asarray(jnp.nan, dtype=jnp.float32)
         q_inter_state_grad_overlap_random = jnp.asarray(jnp.nan, dtype=jnp.float32)

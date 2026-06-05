@@ -562,22 +562,39 @@ def _build_wrappers(node: Mapping[str, object]) -> tuple['EnvWrapper', ...]:
     return tuple(out)
 
 
+# Single source of truth for the DQN substrate's registered claim
+# namespace — the slot-claim modules PLUS the two root programs
+# (`dqn`, `paired_dqn`). Root programs are registered so a sweep's
+# `program:` field resolves through the SAME `reg.fn(name)` path as
+# every other claim token (`add_module` keys each `FnClaim` by its
+# own `.name`; re-registering the imported slot claims these program
+# modules pull in is a no-op on the memoised instances). Adding a
+# new root program = add its module here; ZERO edits to dispatch or
+# config validation. Tests import this so the registry surface is
+# defined once.
+DQN_REGISTRY_MODULES: tuple[str, ...] = (
+    'corroborate_rl.dqn.claims.bootstrap',
+    'corroborate_rl.dqn.claims.action_select',
+    'corroborate_rl.dqn.claims.replay',
+    'corroborate_rl.dqn.claims.q_network',
+    'corroborate_rl.dqn.claims.optimizer',
+    'corroborate_rl.dqn.claims.target_sync',
+    'corroborate_rl.dqn.claims.loss',
+    # Root programs — resolvable as `program:` values.
+    'corroborate_rl.dqn.dqn',
+    'corroborate_rl.dqn.dqn_paired',
+)
+
+
 def default_dqn_registry() -> Registry:
     """Pre-populated Registry covering the DQN substrate's claim
     namespace. `add_modules` auto-discovers `@claim` free
     functions and frozen-dataclass config bundles (`Replay`,
     `MLP`, `CNN`); authors of one-off sweeps rarely need to
-    extend this."""
+    extend this. Root programs (`dqn`, `paired_dqn`) are included
+    so `cfg.program` resolves via `reg.fn(...)`."""
     reg = Registry()
-    reg.add_modules((
-        'corroborate_rl.dqn.claims.bootstrap',
-        'corroborate_rl.dqn.claims.action_select',
-        'corroborate_rl.dqn.claims.replay',
-        'corroborate_rl.dqn.claims.q_network',
-        'corroborate_rl.dqn.claims.optimizer',
-        'corroborate_rl.dqn.claims.target_sync',
-        'corroborate_rl.dqn.claims.loss',
-    ))
+    reg.add_modules(DQN_REGISTRY_MODULES)
     return reg
 
 
@@ -683,9 +700,10 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
 
     from corroborate.corpus.persistence import stream_concat_parquets
     from corroborate.runner.sweep import run_intervention
+    import inspect
+
     from corroborate_rl.dqn import phases
     from corroborate_rl.dqn.collect import _chunks
-    from corroborate_rl.dqn.dqn import dqn
     from corroborate_rl.dqn.measurables import dqn_default_measurables
     from corroborate_rl.dqn.trace_reductions import (
         Q_TRACE_DROPS, Q_TRACE_REDUCTIONS,
@@ -773,7 +791,32 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         # `base` IS the SCM kwargs map; each arm's interventions
         # override slot values via partial precedence in
         # `apply_interventions`. Empty-tuple arm = "use base".
-        base: Callable[..., object] = partial(dqn, **base_overrides)
+        #
+        # The base PROGRAM (root claim) is `cfg.program`-resolved
+        # through the registry — `'dqn'`, `'paired_dqn'`, or any
+        # future `@claim` root program registered in
+        # `DQN_REGISTRY_MODULES`. A program is a DISTINCT claim, not
+        # a slot config of `dqn`; its identity is stamped on
+        # `RunRow.program` by the cell runner (NOT smuggled into
+        # `arm_key`, which stays the pure intervention fingerprint).
+        program_fn = reg.fn(cfg.program)
+        # Resume support is capability-as-property: a program admits
+        # checkpoint resume iff its signature exposes `init_override`.
+        # A name check would drift from what the program accepts.
+        supports_resume = (
+            'init_override' in inspect.signature(program_fn.fn).parameters
+        )
+        if not supports_resume and (
+            sweep.init_q_checkpoint_path_template is not None
+            or sweep.init_q_checkpoint_bundle_path is not None
+        ):
+            raise ValueError(
+                f'intervention {cfg.name!r} uses program={cfg.program!r}, '
+                'which does not support checkpoint resume — its signature '
+                'has no init_override parameter. Resume requires a program '
+                'that exposes init_override (e.g. dqn).',
+            )
+        base: Callable[..., object] = partial(program_fn, **base_overrides)
         intervention = cfg.do_effect
         # Flat grid_points: env × chunk × wrappers. When the
         # sweep's `init_q_checkpoint_path_template` is set, each

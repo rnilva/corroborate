@@ -35,9 +35,10 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Generator, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from contextlib import contextmanager
+from typing import IO, TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401
@@ -52,6 +53,7 @@ ParquetCompression = Literal[
     'lz4', 'uncompressed', 'snappy', 'gzip', 'brotli', 'zstd',
 ]
 
+from corroborate._internals import fsspec as _fsspec_io
 from corroborate._internals.json import loads as _json_loads
 from corroborate._internals.narrow import is_mapping_str_object
 from corroborate._internals.polars import (
@@ -68,6 +70,66 @@ from corroborate.corpus.schema import (
     RunRow,
     TraceRow,
 )
+
+
+# ============ URI-aware parquet input reads ============
+#
+# Sweep merges are manifest-driven (SWEEP_PERSISTENCY.md I3): when a
+# sweep archives per-cell shards, the merge reads them back from their
+# `s3://…` URIs. polars' and pyarrow's native object-store readers
+# can't reach a custom-endpoint store (Cloudflare R2) — they derive
+# the endpoint from region alone (`region='auto'` → bogus
+# `s3.auto.amazonaws.com`) and ignore the `endpoint_url` configured in
+# `~/.aws/config`. fsspec honors it. These helpers route remote-URI
+# reads through fsspec; local paths read directly. fsspec file objects
+# are seekable (S3 range GETs) so projection pushdown is preserved.
+
+def _is_remote_uri(p: str) -> bool:
+    """True for an fsspec remote URI (`scheme://…`). Local POSIX
+    paths never contain `://`; a Windows drive path (`C:\\…`) uses
+    `:` but not `://`."""
+    return '://' in p
+
+
+@contextmanager
+def _parquet_source(
+    p: Path | str,
+) -> Generator[Path | str | IO[bytes], None, None]:
+    """Yield a value the polars / pyarrow parquet readers accept as
+    input. Remote fsspec URIs open via `_fsspec_io.open_remote`
+    (honors the R2 endpoint) and yield a seekable binary file object;
+    local paths yield unchanged. Closes the remote handle on exit."""
+    s = str(p)
+    if _is_remote_uri(s):
+        with _fsspec_io.open_remote(s) as fh:
+            yield fh
+    else:
+        yield p
+
+
+def _read_parquet_input(p: Path | str) -> pl.DataFrame:
+    """`pl.read_parquet` that honors the R2 endpoint for remote URIs.
+    `glob=False` on the local path: sweep arm-tag relpaths embed
+    `wrap[<wrapper>(<args>)]`, which polars otherwise treats as glob
+    character classes ("expanded paths were empty"). Reads all
+    columns — the merge keeps every column (diagonal-relaxed union);
+    projected reads live in `cloud` (`sniff_row_ids`, `restore_columns`)."""
+    s = str(p)
+    if _is_remote_uri(s):
+        with _fsspec_io.open_remote(s) as fh:
+            return pl.read_parquet(fh)
+    return pl.read_parquet(s, glob=False)
+
+
+def _read_parquet_schema(p: Path | str) -> pl.DataFrame:
+    """Empty (0-row) frame carrying just the parquet's schema —
+    metadata-only read. Remote URIs route through fsspec
+    (`n_rows=0` reads the footer, not the column pages)."""
+    s = str(p)
+    if _is_remote_uri(s):
+        with _fsspec_io.open_remote(s) as fh:
+            return pl.read_parquet(fh, n_rows=0)
+    return pl.scan_parquet(s, glob=False).limit(0).collect()
 
 
 # ============ RunRow ============
@@ -343,15 +405,19 @@ def _estimated_decompressed_bytes(path: Path | str) -> int:
     trace shards."""
     try:
         import pyarrow.parquet as _pq
-        meta = _pq.ParquetFile(str(path)).metadata
-        total = 0
-        for i in range(meta.num_row_groups):
-            total += meta.row_group(i).total_byte_size
+        with _parquet_source(path) as src:
+            meta = _pq.ParquetFile(src).metadata
+            total = 0
+            for i in range(meta.num_row_groups):
+                total += meta.row_group(i).total_byte_size
         if total > 0:
             return total
     except Exception:
         pass
     try:
+        s = str(path)
+        if _is_remote_uri(s):
+            return _fsspec_io.remote_size(s) * 4
         from pathlib import Path as _Path
         return _Path(path).stat().st_size * 4
     except Exception:
@@ -413,9 +479,7 @@ def _streaming_merge_unified(
     polars_frames_for_schema: list[pl.DataFrame] = []
     for p in inputs:
         try:
-            polars_frames_for_schema.append(
-                pl.scan_parquet(p, glob=False).limit(0).collect(),
-            )
+            polars_frames_for_schema.append(_read_parquet_schema(p))
         except Exception:
             continue
     if not polars_frames_for_schema:
@@ -435,12 +499,15 @@ def _streaming_merge_unified(
     )
     try:
         for p in inputs:
-            pq_file = pq.ParquetFile(str(p))
-            for rg_idx in range(pq_file.num_row_groups):
-                table = pq_file.read_row_group(rg_idx)
-                # Project + null-pad missing columns.
-                table = _project_to_unified(table, unified_arrow_schema)
-                writer.write_table(table)
+            with _parquet_source(p) as src:
+                # `src` is a local path str or a seekable fsspec file
+                # object; pyarrow's ParquetFile accepts either.
+                pq_file = pq.ParquetFile(src)
+                for rg_idx in range(pq_file.num_row_groups):
+                    table = pq_file.read_row_group(rg_idx)
+                    # Project + null-pad missing columns.
+                    table = _project_to_unified(table, unified_arrow_schema)
+                    writer.write_table(table)
     finally:
         writer.close()
     out_partial.replace(out)
@@ -549,7 +616,7 @@ def stream_concat_parquets(
         from shutil import disk_usage as _disk_usage
         total_input_bytes = sum(
             _path.getsize(p) for p in inputs_list_check
-            if _path.exists(p) and not p.startswith('s3://')
+            if not _is_remote_uri(p) and _path.exists(p)
         )
         if total_input_bytes > 0:
             free_bytes = _disk_usage(out.parent).free
@@ -603,7 +670,7 @@ def stream_concat_parquets(
     if len(inputs_list) <= chunk_size:
         # Small case: load+concat+write directly. No temp files.
         eager_frames = [
-            pl.read_parquet(p, glob=False) for p in inputs_list
+            _read_parquet_input(p) for p in inputs_list
         ]
         merged = pl.concat(eager_frames, how=how)
         merged.write_parquet(
@@ -646,7 +713,7 @@ def stream_concat_parquets(
         for i in range(0, len(inputs_list), chunk_size):
             batch = inputs_list[i:i + chunk_size]
             chunk_path = tmp_dir / f'chunk_{i // chunk_size:04d}.parquet'
-            eager_frames = [pl.read_parquet(p, glob=False) for p in batch]
+            eager_frames = [_read_parquet_input(p) for p in batch]
             merged = pl.concat(eager_frames, how=how)
             merged.write_parquet(
                 str(chunk_path),

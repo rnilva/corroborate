@@ -159,6 +159,49 @@ def test_diagnostics_corpora_per_stratum_surfaces_hp_mixing() -> None:
     )
 
 
+def test_diagnostics_programs_per_stratum_surfaces_program_blind_pooling(
+) -> None:
+    """`programs_per_stratum` surfaces program-blind `arm_key`
+    pooling. `arm_key` is the pure intervention fingerprint, so a
+    `dqn` `baseline` arm and a `paired_dqn` `baseline` arm collide
+    on `arm_key='baseline'` — a stratum spanning >1 program is
+    pooling structurally different root programs. Cross-program
+    contrast is legitimate (program becomes the axis); this makes
+    ACCIDENTAL pooling visible. Cells predating the `program`
+    column read as null → absent (empty set), NOT a distinct
+    program."""
+    df = pl.DataFrame({
+        'id': [f'c{i}' for i in range(6)],
+        'env_name': ['Mix'] * 2 + ['Single'] * 2 + ['Legacy'] * 2,
+        'arm_key': ['baseline'] * 6,
+        'seed': [0, 1, 0, 1, 0, 1],
+        # Mix: same arm_key collides across two programs.
+        # Single: one program. Legacy: null (pre-program corpus).
+        'program': ['dqn', 'paired_dqn', 'dqn', 'dqn', None, None],
+    })
+    diag = Panel.from_dataframe(df).diagnostics
+    # Program-blind collision surfaced.
+    assert diag.programs_per_stratum[('Mix', 'baseline')] == (
+        frozenset({'dqn', 'paired_dqn'})
+    )
+    # Single program → singleton.
+    assert diag.programs_per_stratum[('Single', 'baseline')] == (
+        frozenset({'dqn'})
+    )
+    # Null program (legacy) → absent, not a distinct program.
+    assert diag.programs_per_stratum[('Legacy', 'baseline')] == frozenset()
+
+
+def test_diagnostics_programs_per_stratum_absent_column() -> None:
+    """A panel whose cells carry no `program` column at all reports
+    an empty set per stratum (not a KeyError) — old corpora pre-date
+    the typed column."""
+    diag = Panel.from_dataframe(_make_cells_dataframe()).diagnostics
+    assert diag.programs_per_stratum[('Asterix-MinAtar', 'baseline')] == (
+        frozenset()
+    )
+
+
 def test_diagnostics_nonunique_configs_surfaces_hp_heterogeneity() -> None:
     """`nonunique_configs_per_stratum` counts distinct config
     fingerprints (auto-detected via `aggregate.leaf_signature`-

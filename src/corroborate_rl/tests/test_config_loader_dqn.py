@@ -32,6 +32,9 @@ DQN_CLAIM_MODULES = (
     'corroborate_rl.dqn.claims.optimizer',
     'corroborate_rl.dqn.claims.target_sync',
     'corroborate_rl.dqn.claims.loss',
+    # Root programs — resolvable as `program:` values.
+    'corroborate_rl.dqn.dqn',
+    'corroborate_rl.dqn.dqn_paired',
 )
 
 
@@ -394,3 +397,47 @@ base: {gamma: 0.99}
 """.strip())
     cfg = load_intervention(p, reg=reg)
     assert cfg.required_measurables == ()
+
+
+# ---------- program (base-claim selection) ----------
+
+def test_program_defaults_to_dqn(reg: Registry, tmp_path: Path) -> None:
+    """Omitting `program:` yields the single-net `dqn` base."""
+    p = tmp_path / 'no_program.yaml'
+    _ = p.write_text("""
+name: vanilla
+base: {gamma: 0.99}
+""".strip())
+    cfg = load_intervention(p, reg=reg)
+    assert cfg.program == 'dqn'
+
+
+def test_program_paired_dqn_parsed(reg: Registry, tmp_path: Path) -> None:
+    """`program: paired_dqn` selects the coupled two-learner program;
+    the cross-evaluation is structural so the arm stays empty (no
+    marker, no slot swap)."""
+    p = tmp_path / 'paired.yaml'
+    _ = p.write_text("""
+name: deep2010
+program: paired_dqn
+base: {gamma: 0.999}
+arms:
+  - []
+""".strip())
+    cfg = load_intervention(p, reg=reg)
+    assert cfg.program == 'paired_dqn'
+    assert cfg.do_effect.arms == ((),)
+
+
+def test_program_invalid_raises(reg: Registry, tmp_path: Path) -> None:
+    """An unregistered program name is a config error — the registry
+    is the single authority, surfacing a loud error listing the
+    known set (no hardcoded enum to maintain)."""
+    p = tmp_path / 'bad_program.yaml'
+    _ = p.write_text("""
+name: bad
+program: triple_dqn
+base: {}
+""".strip())
+    with pytest.raises(ValueError, match='not a registered claim program'):
+        _ = load_intervention(p, reg=reg)

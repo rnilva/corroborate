@@ -41,7 +41,7 @@ from corroborate_rl.dqn.claims.optimizer import (
 )
 from corroborate_rl.dqn.claims.q_network import Params, QFunction
 from corroborate_rl.dqn.claims.replay import Replay, init_pending_n_step
-from corroborate_rl.dqn.eval import EvalBurstOut, eval_burst, train_with_eval
+from corroborate_rl.dqn.eval import run_with_eval, validate_eval_schedule
 from corroborate_rl.dqn.init_override import InitOverride
 from corroborate_rl.dqn.phases import (
     rollout_phase,
@@ -398,17 +398,7 @@ def dqn(
     # (cf. ENDOGENEITY_TOPOLOGY.md); the dqn body itself only sees
     # the resolved env.
     del env_name, wrappers
-    if total_steps % eval_every != 0:
-        raise ValueError(
-            f'total_steps ({total_steps}) must be a multiple of '
-            f'eval_every ({eval_every}); got remainder '
-            f'{total_steps % eval_every}',
-        )
-    if total_steps < eval_every:
-        raise ValueError(
-            f'total_steps ({total_steps}) must be ≥ eval_every '
-            f'({eval_every}) — at least one super-step required.',
-        )
+    validate_eval_schedule(total_steps, eval_every)
 
     # Build the optax handle once. The Module-shaped
     # `OptimizerFactory` (Adam / RMSProp / WarmedUpdate)
@@ -446,18 +436,11 @@ def dqn(
         count_weight_alpha=count_weight_alpha,
     )
 
-    def eval_fn(s: DQNState, super_idx: jax.Array) -> EvalBurstOut:
-        return eval_burst(
-            online_params=s.online_params,
-            env=env, env_params=env_params,
-            rng_key=jax.random.fold_in(run_key, super_idx),
-            q_network=q_network, gamma=gamma,
-            episode_cap=eval_episode_cap, n_episodes=n_episodes,
-        )
-
-    return train_with_eval(
-        step_fn=step_fn, eval_fn=eval_fn,
-        init_state=state,
+    return run_with_eval(
+        init_state=state, step_fn=step_fn, run_key=run_key,
+        env=env, env_params=env_params, q_network=q_network,
+        gamma=gamma, eval_episode_cap=eval_episode_cap,
+        n_episodes=n_episodes,
         total_steps=total_steps, eval_every=eval_every,
         keep_q_checkpoint_final=keep_q_checkpoint_final,
         keep_q_checkpoint_per_burst=keep_q_checkpoint_per_burst,

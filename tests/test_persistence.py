@@ -515,3 +515,82 @@ def test_stream_concat_atomicity_simulated_crash_leaves_no_torn_parquet(
     # framework guarantees consumers don t see torn data, NOT that
     # disk is left tidy on crash.
     assert out.with_suffix(out.suffix + '.partial').exists()
+
+
+# ============ stream_concat_parquets remote-URI inputs ============
+
+
+def test_stream_concat_reads_remote_uri_inputs(tmp_path: Path) -> None:
+    """The manifest-driven sweep merge (SWEEP_PERSISTENCY.md I3)
+    passes `s3://…` shard URIs to `stream_concat_parquets`: cells are
+    archived, then read back from cloud so paired sweeps merge every
+    shard. polars' native object-store can't reach a custom-endpoint
+    store (Cloudflare R2) — it derives the endpoint from region alone
+    (`region='auto'` → `s3.auto.amazonaws.com`) and ignores the
+    `endpoint_url` in `~/.aws/config`, so the merge died at
+    `pl.read_parquet('s3://…')`. The fix routes remote-URI reads
+    through fsspec, which honors the endpoint.
+
+    Exercised with an in-process `memory://` fsspec filesystem — a
+    genuine non-local URI (`_is_remote_uri` True). It reproduces the
+    bug *class* rather than the exact R2 endpoint-HEAD error: polars'
+    native reader can't resolve a `memory://` URI at all (verified:
+    old `pl.read_parquet('memory://…')` → FileNotFoundError), the same
+    way it can't resolve an R2 store with a custom endpoint. The merge
+    succeeds only because the read is routed through fsspec; an `s3://`
+    URI travels the identical code path (only the backend differs).
+    Small case: 3 inputs ≤ default chunk_size → the
+    `_read_parquet_input` site that originally failed."""
+    import polars as pl
+    from corroborate._internals import fsspec as _fsspec_io
+    from corroborate.corpus.persistence import stream_concat_parquets
+
+    uris: list[str] = []
+    for i in range(3):
+        # Stage the shard locally, then put it to a `memory://` URI via
+        # the typed fsspec boundary — the merge's INPUT is the remote
+        # URI, exercising the fsspec read path.
+        local = tmp_path / f'src_{i}.parquet'
+        pl.DataFrame({'x': [i, i + 1]}).write_parquet(local)
+        uri = f'memory://repro/shard_{i}.parquet'
+        _fsspec_io.put_file(local, uri)
+        uris.append(uri)
+
+    out = tmp_path / 'merged.parquet'
+    stream_concat_parquets(uris, out)
+
+    df = pl.read_parquet(out)
+    assert df.height == 6
+    assert sorted(df['x'].to_list()) == [0, 1, 1, 2, 2, 3]
+
+
+def test_stream_concat_remote_uri_streaming_path(tmp_path: Path) -> None:
+    """Same remote-URI routing, but force `chunk_size=1` to take the
+    pyarrow `_streaming_merge_unified` path (the large-trace branch).
+    That path reads shard SCHEMAS (`_read_parquet_schema`) and ROW
+    GROUPS (`pq.ParquetFile`) — both must also honor the endpoint for
+    remote URIs, not just the small-case `pl.read_parquet`. Inputs
+    carry a disjoint column so the diagonal-relaxed schema union +
+    null-pad is exercised over the fsspec route too."""
+    import polars as pl
+    from corroborate._internals import fsspec as _fsspec_io
+    from corroborate.corpus.persistence import stream_concat_parquets
+
+    uris: list[str] = []
+    for i in range(3):
+        # Disjoint extra column per shard → forces schema unification.
+        frame = pl.DataFrame({'x': [i, i + 1], f'c{i}': [i, i]})
+        local = tmp_path / f'src_{i}.parquet'
+        frame.write_parquet(local)
+        uri = f'memory://repro_stream/shard_{i}.parquet'
+        _fsspec_io.put_file(local, uri)
+        uris.append(uri)
+
+    out = tmp_path / 'merged_stream.parquet'
+    stream_concat_parquets(uris, out, chunk_size=1)
+
+    df = pl.read_parquet(out)
+    assert df.height == 6
+    # Union of all columns, null-padded where a shard lacked one.
+    assert set(df.columns) == {'x', 'c0', 'c1', 'c2'}
+    assert sorted(df['x'].to_list()) == [0, 1, 1, 2, 2, 3]
