@@ -57,6 +57,7 @@ from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     stratified_arm_diff_pooled,
 )
 from corroborate.bridge.analysis import analysis
+from corroborate.bridge.verdict import RefutationClass, Verdict
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,7 +174,52 @@ def cross_env_consistency_binomial(
     )
 
 
+def cross_env_consistency_binomial_verdict(
+    result: CrossEnvConsistencyBinomialResult,
+    *,
+    min_strata: int = 5,
+    p_held: float = 0.05,
+    p_power_insufficient: float = 0.15,
+    sign_flip_fraction: float = 0.70,
+    null_fraction: float = 0.60,
+) -> tuple[Verdict, RefutationClass | None]:
+    """Canonical sign-test → verdict map for the cross-env directional
+    consistency claim. The framework-owned counterpart of
+    `random_effects_verdict` for the binomial-consistency shape (which
+    this result type deliberately leaves verdict-free, so the policy
+    lives here once instead of being re-derived per bridge).
+
+    Bands (one-tailed binomial `p_value` against the random-direction
+    null, then the predicted-direction fraction):
+      < `min_strata` strata above floor → POWER_INSUFFICIENT (the
+          primitive's own "don't use < 5" floor; an 8/8 is still only
+          p=0.0039, so below this the test simply lacks power).
+      p ≤ `p_held`              → HELD
+      p ≤ `p_power_insufficient`→ POWER_INSUFFICIENT
+      ≥ `sign_flip_fraction` of strata in the WRONG direction
+                                → NO_EFFECT / SIGN_FLIP
+      ≤ `null_fraction` predicted-direction → NO_EFFECT / NULL_EFFECT
+      otherwise                 → POWER_INSUFFICIENT
+
+    At n=4 even a perfect 4/4 is p=0.0625 — and 4 < default min_strata,
+    so this returns POWER_INSUFFICIENT, the honest underpowered state."""
+    n_above = result.n_strata_above_floor
+    if n_above < min_strata or math.isnan(result.p_value):
+        return Verdict.POWER_INSUFFICIENT, None
+    if result.p_value <= p_held:
+        return Verdict.HELD, None
+    if result.p_value <= p_power_insufficient:
+        return Verdict.POWER_INSUFFICIENT, None
+    n_wrong = n_above - result.n_signed_predicted
+    if n_above > 0 and n_wrong / n_above >= sign_flip_fraction:
+        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
+    if result.n_signed_predicted / max(n_above, 1) <= null_fraction:
+        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
+    return Verdict.POWER_INSUFFICIENT, None
+
+
 __all__ = [
     'CrossEnvConsistencyBinomialResult',
     'cross_env_consistency_binomial',
+    'cross_env_consistency_binomial_verdict',
 ]

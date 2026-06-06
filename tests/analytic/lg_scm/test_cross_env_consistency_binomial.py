@@ -29,8 +29,11 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.analyses.panel.cross_env_consistency_binomial import (
+    CrossEnvConsistencyBinomialResult,
     cross_env_consistency_binomial,
+    cross_env_consistency_binomial_verdict,
 )
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
@@ -182,3 +185,70 @@ def test_consistency_binomial_either_two_tailed() -> None:
     # Two-tailed p for k=10 out of n=10
     expected_p = 2 * (0.5 ** 10)
     assert abs(result.p_value - expected_p) < 1e-9
+
+
+# ============ cross_env_consistency_binomial_verdict band map ============
+
+
+def _result(
+    *, p_value: float, n_above: int, n_signed: int,
+) -> CrossEnvConsistencyBinomialResult:
+    """Minimal result carrying only the fields the verdict map reads."""
+    return CrossEnvConsistencyBinomialResult(
+        n_strata_total=n_above,
+        n_strata_above_floor=n_above,
+        n_signed_predicted=n_signed,
+        p_value=p_value,
+        measurable='x',
+        predicted_direction='a_gt_b',
+        null_floor=0.0,
+        cohen_d_per_stratum=(),
+        stratum_ids=(),
+    )
+
+
+def test_verdict_held_when_significant() -> None:
+    """p ≤ 0.05 above the strata floor → HELD (10/10, p≈1e-3)."""
+    v, refut = cross_env_consistency_binomial_verdict(
+        _result(p_value=0.5 ** 10, n_above=10, n_signed=10),
+    )
+    assert v is Verdict.HELD and refut is None
+
+
+def test_verdict_power_insufficient_band() -> None:
+    """0.05 < p ≤ 0.15 → POWER_INSUFFICIENT (not yet HELD, not null)."""
+    v, refut = cross_env_consistency_binomial_verdict(
+        _result(p_value=0.11, n_above=8, n_signed=7),
+    )
+    assert v is Verdict.POWER_INSUFFICIENT and refut is None
+
+
+def test_verdict_min_strata_floor_dominates() -> None:
+    """Below min_strata the floor returns POWER_INSUFFICIENT regardless
+    of alignment — the n=4 regime of ddqn2010_xenv: a perfect 4/4 is
+    p=0.0625 (would-be near-HELD) yet 4 < 5 → POWER_INSUFFICIENT."""
+    v, refut = cross_env_consistency_binomial_verdict(
+        _result(p_value=0.0625, n_above=4, n_signed=4), min_strata=5,
+    )
+    assert v is Verdict.POWER_INSUFFICIENT and refut is None
+    # Lower the floor to 4 and the same data clears the p≤0.15 band.
+    v2, _ = cross_env_consistency_binomial_verdict(
+        _result(p_value=0.0625, n_above=4, n_signed=4), min_strata=4,
+    )
+    assert v2 is Verdict.POWER_INSUFFICIENT  # 0.0625 in (0.05, 0.15]
+
+
+def test_verdict_sign_flip_when_mostly_wrong_direction() -> None:
+    """≥70% of strata in the WRONG direction → NO_EFFECT / SIGN_FLIP."""
+    v, refut = cross_env_consistency_binomial_verdict(
+        _result(p_value=0.99, n_above=10, n_signed=1),
+    )
+    assert v is Verdict.NO_EFFECT and refut is RefutationClass.SIGN_FLIP
+
+
+def test_verdict_null_effect_when_no_alignment() -> None:
+    """≤60% predicted-direction (and not a sign-flip) → NO_EFFECT/NULL."""
+    v, refut = cross_env_consistency_binomial_verdict(
+        _result(p_value=0.62, n_above=10, n_signed=5),
+    )
+    assert v is Verdict.NO_EFFECT and refut is RefutationClass.NULL_EFFECT
