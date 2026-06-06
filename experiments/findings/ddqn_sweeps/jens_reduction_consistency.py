@@ -25,12 +25,12 @@ power.
 """
 from __future__ import annotations
 
-import math
 
 import polars as pl
 
 from corroborate.analyses.panel.cross_env_consistency_binomial import (
     CrossEnvConsistencyBinomialResult,
+    cross_env_consistency_binomial_verdict,
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge
 from corroborate.bridge.verdict import RefutationClass, Verdict
@@ -96,25 +96,14 @@ def ddqn_reduces_jens_consistently__canonical_g0999(
         predicted_direction, null_floor, scope_predictor,
         min_baseline_predictor, min_seeds_per_arm,
     )
-    if cross_env_consistency_binomial.n_strata_above_floor < min_strata:
-        return Verdict.POWER_INSUFFICIENT, None
-    p = cross_env_consistency_binomial.p_value
-    if math.isnan(p):
-        return Verdict.POWER_INSUFFICIENT, None
-    n_above = cross_env_consistency_binomial.n_strata_above_floor
-    n_signed = cross_env_consistency_binomial.n_signed_predicted
-    if p <= p_threshold_held:
-        return Verdict.HELD, None
-    if p <= p_threshold_pi:
-        return Verdict.POWER_INSUFFICIENT, None
-    # Sign-flip detection: ≥ 70% of strata in WRONG direction
-    n_wrong = n_above - n_signed
-    if n_above > 0 and n_wrong / n_above >= 0.70:
-        return Verdict.NO_EFFECT, RefutationClass.SIGN_FLIP
-    # Otherwise null effect
-    if n_signed / max(n_above, 1) <= 0.60:
-        return Verdict.NO_EFFECT, RefutationClass.NULL_EFFECT
-    return Verdict.POWER_INSUFFICIENT, None
+    # Defer to the framework-owned sign-test → verdict map (identical
+    # bands; factored out so this logic lives in one tested place).
+    return cross_env_consistency_binomial_verdict(
+        cross_env_consistency_binomial,
+        min_strata=min_strata,
+        p_held=p_threshold_held,
+        p_power_insufficient=p_threshold_pi,
+    )
 
 
 __all__ = [
