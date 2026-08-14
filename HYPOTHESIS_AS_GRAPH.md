@@ -88,7 +88,9 @@ them, all members hash to the same extent → automatic cluster.
 
 The canonical 3-bridge pattern (used by
 `reach_link_backdoor_ate_negative` + `_placebo_refuted` +
-`_rcc_robust` in `experiments/findings/ddqn/bias_correction.py`):
+`_rcc_robust` in the frozen study's
+`experiments/findings/ddqn/bias_correction.py`, `submission`
+branch):
 
 ```python
 from experiments.findings.ddqn._scope import DDQN_RELEVANT_SCOPE
@@ -125,7 +127,8 @@ they form distinct clusters. The framework derives this from the
 data the scope admits, not from any stringified scope
 representation.
 
-Concrete examples in `experiments/findings/ddqn/`:
+Concrete examples in the frozen study's
+`experiments/findings/ddqn/` (`submission` branch):
 - REACH DoWhy trio: 3 bridges on `(jensen_gap, eval_best_burst_mean)`
   sharing `DDQN_RELEVANT_SCOPE` → cluster of 3 at one extent.
 - Extreme-Q-div trio: 3 bridges on the same `(source, target)` but
@@ -180,7 +183,7 @@ declares which bridges support the claim; the framework computes
 the verdict via `composed_verdict`:
 
 ```python
-# experiments/findings/ddqn/finding_reach_bias_link.py
+# finding_reach_bias_link.py (frozen study, `submission` branch)
 """REACH bias-correction link is causally corroborated."""
 from corroborate.graph.causal import ClusterVerdict
 from experiments.findings.ddqn.bias_correction import (
@@ -212,9 +215,10 @@ the graph.
 
 The framework provides `evaluated_graph`, `clusters_by_extent`,
 `cluster_verdict`, `composed_verdict`, and the `ClusterVerdict`
-enum in `corroborate.graph.causal`. See
-`experiments/findings/ddqn/finding_*.py` for hand-rolled findings
-covering cluster, refutation-with-EXPECTED=REFUTED, and
+enum in `corroborate.graph.causal`. See the frozen study's
+`experiments/findings/ddqn/finding_*.py` (`submission` branch)
+for hand-rolled findings covering cluster,
+refutation-with-EXPECTED=REFUTED, and
 asymmetric-envelope-across-scopes shapes.
 
 ### 3b. Scope clusters — pool bridge + meta-regression sibling
@@ -264,8 +268,9 @@ empirical scope claim's structural unit — same `(source,
 target, extent_hash)` on the post-evaluated graph → automatic
 cluster.
 
-The methodology is in `ANALYSIS_RECIPE.md` §1.5; the discipline
-against treating heterogeneous-but-pooled-positive as plain
+The methodology is in `ANALYSIS_RECIPE.md` §1.5 (`submission`
+branch); the discipline against treating
+heterogeneous-but-pooled-positive as plain
 HELD is in `corroborate/bridge/verdict.py`. The choice of
 independent-samples Cohen's d over paired Hedges' g (rejecting
 seed-pairing for cross-env pooling) is documented in
@@ -280,7 +285,7 @@ docstring.
   refutation siblings (placebo, RCC) sharing scope for the
   mechanism story.
 - **Findings prose without graph-walk justification**. A claim
-  "DDQN helps via clip channel" in `findings_*.md` should
+  "DDQN helps via clip channel" in findings prose should
   reference the path through the graph that carries it (which
   edges? which `evidentiary_level`? which extent cluster?).
   Otherwise it's interpretation unanchored to the framework's
@@ -305,6 +310,9 @@ docstring.
   bridge name.
 
 ## Connection to existing framework docs
+
+(The internal design docs below other than `CLAUDE.md` are frozen
+on the `submission` branch.)
 
 - `CLAUDE.md` typing discipline applies at the node + edge level:
   no `Any`, frozen dataclasses, PEP 695 generics. Graph traversals

@@ -62,10 +62,13 @@ them differently. All three reuse the same primitives.
 
 Two layers stack: individual bridges (one falsifiable edge each)
 and hypothesis modules (the package surface that composes them).
-The canonical primary usage is hypothesis modules under
-`experiments/findings/<name>/` — modular packages organized per
-claim and per finding. **`Panel`** is the substrate-author's
-pre-authoring exploration surface that precedes both.
+The canonical primary usage is hypothesis modules — modular
+packages organized per claim and per finding, conventionally
+under `experiments/findings/<name>/` in the consuming project.
+(The frozen DDQN study on the `submission` branch is the
+fully-worked example throughout this README.) **`Panel`** is the
+substrate-author's pre-authoring exploration surface that
+precedes both.
 
 ### Day-1/2 exploration via `Panel`
 
@@ -81,7 +84,7 @@ import polars as pl
 
 # Three load entry points: from one corpus, multiple corpora, or
 # an existing per-hypothesis cache.
-panel = Panel.from_cache('experiments.findings.ddqn')
+panel = Panel.from_cache('experiments.findings.<hyp>')
 # panel = Panel.from_corpora(['experiments/data/<corp_a>', ...])
 # panel = Panel.from_corpus('experiments/data/<one_corpus>')
 
@@ -121,10 +124,10 @@ sigmas = canonical.derive(DerivedSpec(
 canonical.to_cache('experiments.findings.<new_hyp>')
 ```
 
-See `experiments/findings/hasselt_clean/_exploration.py` for a
-fully-worked Day-1/2 substrate-author walk-through that decides
-the scope predicates ultimately encoded in
-`hasselt_clean/_scope.py`.
+See `experiments/findings/hasselt_clean/_exploration.py` on the
+`submission` branch for a fully-worked Day-1/2 substrate-author
+walk-through that decides the scope predicates ultimately encoded
+in `hasselt_clean/_scope.py`.
 
 ### A bridge
 
@@ -171,8 +174,8 @@ is the canonical cross-env / cross-config pool.
 
 A hypothesis module / package satisfies the
 `corroborate.core.hypothesis.Hypothesis` Protocol by exposing
-six module-level names. Canonical layout
-(`experiments/findings/ddqn/__init__.py`):
+six module-level names. Canonical layout (the frozen study's
+`experiments/findings/ddqn/__init__.py`, `submission` branch):
 
 ```python
 import corroborate.analyses                  # populate analysis registry
@@ -216,8 +219,9 @@ Six load-bearing module-level names:
 | `FINDINGS: tuple[Finding, ...]` | cluster-shaped claims composed from subsets of `BRIDGES` (see below) |
 | `REQUIRED_MEASURABLES: tuple[str, ...]` | opt-in measurables to pre-populate at ingest, even when no current bridge consumes them. Validated against the registry at `_validate_hypothesis` |
 
-**Sub-module shape** — `ddqn/` exemplifies one decomposition that
-the framework doesn't enforce; siblings adapt as needed:
+**Sub-module shape** — the study's `ddqn/` exemplifies one
+decomposition that the framework doesn't enforce; siblings adapt
+as needed:
 
 - **`ddqn/`** is the most decomposed: package-private constants in
   `_arms.py` / `_common.py` / `_scope.py` / `_verdicts.py`; one
@@ -239,7 +243,8 @@ functions and a closing `BRIDGES = (bridge_a, bridge_b, ...)`
 tuple — the per-claim sub-modules are NOT packages, just regular
 Python modules.
 
-Three live hypothesis packages at the time of writing:
+The frozen study (`submission` branch) carries three hypothesis
+packages:
 
 - `experiments/findings/ddqn/` — the DDQN canonical study.
   ~58 bridges across 9 per-claim sub-modules; 9 findings spanning
@@ -263,7 +268,7 @@ causal graph asserting an aggregate verdict. Module-level
 attributes only (mirrors `Hypothesis`):
 
 ```python
-# experiments/findings/ddqn/finding_hasselt_chain.py
+# finding_hasselt_chain.py (frozen study, `submission` branch)
 from corroborate.bridge.bridge import Bridge
 from corroborate.graph.causal import ClusterVerdict
 from experiments.findings.ddqn.bias_correction import (
@@ -319,16 +324,16 @@ were confirmed; the predicted direction names which prediction.
 ## Running it
 
 ```bash
-# Run a hypothesis module / package. Four CLI modes (CACHE_ADDITIVITY.md):
+# Run a hypothesis module / package. Four CLI modes:
 uv run corroborate hypothesis \
-    experiments.findings.ddqn                         # read-only (default)
+    experiments.findings.<hyp>                        # read-only (default)
 uv run corroborate hypothesis \
-    experiments.findings.ddqn --check                 # drift report, no work
+    experiments.findings.<hyp> --check                # drift report, no work
 uv run corroborate hypothesis \
-    experiments.findings.ddqn \
+    experiments.findings.<hyp> \
     --ingest <corpus>[,<corpus>...]                   # named ingest
 uv run corroborate hypothesis \
-    experiments.findings.ddqn \
+    experiments.findings.<hyp> \
     --ingest-all experiments/data/                    # walk full root
 ```
 
@@ -336,10 +341,9 @@ The legacy `python scripts/run_hypothesis.py ...` invocation
 continues to work as a back-compat shim that forwards to the same
 `corroborate.cli.hypothesis.main`.
 
-The runner imports the hypothesis module (e.g.
-`experiments.findings.ddqn`), validates the `Hypothesis`
-Protocol shape, populates / extends
-`experiments/data/cache/ddqn.parquet` with the cells `BRIDGES`
+The runner imports the hypothesis module, validates the
+`Hypothesis` Protocol shape, populates / extends
+`experiments/data/cache/<hyp>.parquet` with the cells `BRIDGES`
 need, evaluates each bridge, then surfaces:
 
 - per-bridge verdicts (HELD / NO_EFFECT / POWER_INSUFFICIENT /
@@ -393,7 +397,9 @@ PYTHONPATH=. uv run python scripts/trace_schema.py \
 Per-step trace columns (`online_max_q_per_step`, etc.) are the
 heavyweight part of a corpus (~MB per cell). The runner reads
 them only when computing measurables, then evicts them
-(CORPUS_INTEGRITY.md CI7). For OOM-prone cases, the opt-in
+(corpus-integrity invariant CI7; the CI1–CI8 catalogue lives in
+`CORPUS_INTEGRITY.md` on the `submission` branch). For OOM-prone
+cases, the opt-in
 `corpus.measurements.compute_trace_measurables_streaming`
 iterates row-groups instead of materialising the full join.
 
@@ -525,7 +531,7 @@ uv run corroborate purge experiments/data/<corpus>
   column-additive. Each `@measurable` is hashed (closure +
   reads + name); the `measurements.hashes.json` sidecar tracks
   which hashes are current. Drifted / missing measurables are
-  recomputed on `--ingest` (CACHE_ADDITIVITY.md C2/C3).
+  recomputed on `--ingest`.
 - **Per-hypothesis cache** (`cache/<hyp>.parquet`): a
   `diagonal_relaxed` concat over the per-corpus stores, filtered
   by the hypothesis's `MODULE_SCOPE`. Rebuilt atomically each
@@ -543,15 +549,14 @@ uv run corroborate purge experiments/data/<corpus>
   the leaf directory name — `<name>` for top-level corpora,
   `<parent>/<name>` for nested sub-corpora (parent dir has its
   own `runs.parquet`). Distinguishes sub-corpora that share leaf
-  names across different parents
-  (`findings_corpus_name_leaf_collision.md`).
+  names across different parents.
 - **Trace eviction (CI7)**: trace columns are heavy (~MB per
   cell) and cloud-recoverable. Local `traces.parquet` is evicted
   post-measurable-compute when the cloud manifest confirms a
   sha256-matching archived copy.
 - **`.in_progress` sentinel**: a sweep mid-flight drops this
   file; `--ingest-all` walks skip the corpus until it lands
-  (CORPUS_INTEGRITY.md CI1).
+  (invariant CI1).
 
 ### When to reach for which command
 
@@ -565,34 +570,30 @@ uv run corroborate purge experiments/data/<corpus>
 | "trace cols missing on a new measurable" | runner auto-restores from cloud; ensure `.env` is sourced |
 | "free disk on a cloud-backed corpus" | `corroborate purge` (NEVER `rm`) |
 
-See `CACHE_ARCHITECTURE.md` for the full picture, `CACHE_ADDITIVITY.md`
-for the named-ingest contract, and `CORPUS_INTEGRITY.md` for the
-CI1–CI8 invariants the runner enforces.
+The full internal design docs — `CACHE_ARCHITECTURE.md`,
+`CACHE_ADDITIVITY.md` (the named-ingest contract), and
+`CORPUS_INTEGRITY.md` (the CI1–CI8 invariants the runner
+enforces) — are frozen on the `submission` branch.
 
 ## Status
 
-Pre-v0. The acceptance test is a DDQN-vs-vanilla study
-reproducing the `mechanism HELD ↛ outcome HELD ↛ link HELD`
-verdict pattern across the canonical 12-env panel. Current state:
+Pre-v0. `main` is the clean framework repo: `src/corroborate`
+(the framework), `src/corroborate_rl` (the in-tree DQN substrate),
+tests, and the four docs listed below.
 
-- **3 hypothesis-module packages** under `experiments/findings/`:
-  `ddqn/`, `ddqn_sweeps/`, `ddqn_three_conditions/` — each with a
-  modular per-claim + per-finding sub-module layout (see
-  Authoring shape above).
-- **~77 bridges** across the three packages (≈58 + ≈15 + 4),
-  organized into per-claim groupings (bias-correction / mediation
-  / q-shape-mediation / polarity-conditional-mediation /
-  cross-env-mediation / outcome-scope / within-env / chain-depth
-  / HP-sweeps / three-conditions panels).
-- **13 findings** as cluster-shaped claims on the post-evaluated
-  graph (Hasselt's chain, polarity-conditional moderation,
-  per-burst dynamics, channel decomposition, three-conditions
-  decomposition, ...).
-- Earlier flat-file zoos `experiments/findings/dqn_bridges.py`
-  and `experiments/findings/second_layer_theorem.py` remain for
-  backwards reference; new work goes into the modular packages.
+The acceptance test is a DDQN-vs-vanilla study reproducing the
+`mechanism HELD ↛ outcome HELD ↛ link HELD` verdict pattern
+across the canonical 12-env panel. That study — 3 hypothesis
+packages, ~77 bridges, 13 findings, data manifests, cached
+verdict snapshots, and the full internal design-doc set — is
+frozen verbatim on the **`submission`** branch for paper
+reproduction. Every `experiments/...` path in this README refers
+to that branch's tree (or to the same conventional layout in
+your own consuming project).
 
 ## Documentation
+
+On `main`:
 
 - `CLAUDE.md` — typing discipline, vocabulary, canonical
   analyses, contributor instructions.
@@ -601,17 +602,14 @@ verdict pattern across the canonical 12-env panel. Current state:
   the bridge-naming + refutation-cluster + scope-as-extent
   authoring discipline. Pair-read with the Findings section
   above.
-- `ANALYSIS_RECIPE.md` — post-sweep analysis sequence (classify
-  cells → bridges → meta-regression → PC → robustness →
-  per-burst → tautology audit → data-driven intervention
-  selection).
-- `SCOPE_SEARCH.md` — the scope-finding procedure (Phase 1).
-- `LIFECYCLE.md` — corpus + verdict lifecycle from cell-runner
-  to bridge evaluation.
-- `CACHE_ARCHITECTURE.md` / `CACHE_ADDITIVITY.md` /
-  `CACHE_BUILD.md` — two-layer cache: per-corpus stores
-  (column-additive, closure-hash drift) vs per-hypothesis cache
-  (atomically-rebuilt projection). `CORPUS_INTEGRITY.md` —
-  the CI1–CI8 invariants the runner enforces on ingest.
-- `FUTURE_WORKS.md` — explicit deferrals and open questions.
-- `FINDINGS.md` — historical narrative log of empirical findings.
+- `REPRODUCIBILITY.md` — what same-seed actually buys you:
+  bitwise vs scientific reproducibility under XLA configuration
+  (determinism flag, TF32, CUDA-graph capture), and the
+  cross-mode analysis discipline it forces.
+
+On the **`submission`** branch (frozen with the study): the
+internal design docs (`ANALYSIS_RECIPE.md`, `SCOPE_SEARCH.md`,
+`LIFECYCLE.md`, `CACHE_ARCHITECTURE.md`, `CACHE_ADDITIVITY.md`,
+`CACHE_BUILD.md`, `CORPUS_INTEGRITY.md`, ...), the historical
+findings log (`FINDINGS.md`), and the deferral list
+(`FUTURE_WORKS.md`).
