@@ -61,7 +61,7 @@ def test_hypothesis_skips_preflight_when_no_ingest(
         # Actually, the cleanest no-cloud no-ingest path is just
         # "no args after module" with --no-report.
         _ = main([
-            'experiments.findings.ddqn',
+            'tests.probes.stub_hypothesis',
             '--no-report', '--no-cache',
         ])
     # We care only that preflight wasn't called; the run-level
@@ -91,7 +91,7 @@ def test_hypothesis_skips_preflight_when_no_remote_json(
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
-            'experiments.findings.ddqn',
+            'tests.probes.stub_hypothesis',
             '--ingest', str(corpus),
             '--no-report', '--no-cache',
         ])
@@ -121,7 +121,7 @@ def test_hypothesis_runs_preflight_when_remote_json_present(
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
-            'experiments.findings.ddqn',
+            'tests.probes.stub_hypothesis',
             '--ingest', str(corpus),
             '--no-report', '--no-cache',
         ])
@@ -149,7 +149,7 @@ def test_hypothesis_skip_preflight_flag_disables_check(
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
-            'experiments.findings.ddqn',
+            'tests.probes.stub_hypothesis',
             '--ingest', str(corpus),
             '--skip-preflight',
             '--no-report', '--no-cache',
@@ -178,7 +178,7 @@ def test_hypothesis_no_restore_skips_preflight(
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
-            'experiments.findings.ddqn',
+            'tests.probes.stub_hypothesis',
             '--ingest', str(corpus),
             '--no-restore',
             '--no-report', '--no-cache',
@@ -201,7 +201,7 @@ def test_hypothesis_profile_exported_to_env_independent_of_preflight(
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
-            'experiments.findings.ddqn',
+            'tests.probes.stub_hypothesis',
             '--ingest', str(corpus),
             '--profile', 'r2',
             '--skip-preflight',  # CRITICAL: profile should still export
@@ -235,7 +235,7 @@ def test_hypothesis_nested_corpus_triggers_preflight(
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
-            'experiments.findings.ddqn',
+            'tests.probes.stub_hypothesis',
             '--ingest-all', str(root),
             '--no-report', '--no-cache',
         ])
@@ -263,7 +263,7 @@ def test_hypothesis_named_ingest_nested_corpus_triggers_preflight(
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         _ = main([
-            'experiments.findings.ddqn',
+            'tests.probes.stub_hypothesis',
             '--ingest', str(parent),
             '--no-report', '--no-cache',
         ])
@@ -289,7 +289,7 @@ def test_hypothesis_corrupt_remote_json_fails_cleanly(
          patch(_HYP_PRINT_PATH):
         from corroborate.cli.hypothesis import main
         rc = main([
-            'experiments.findings.ddqn',
+            'tests.probes.stub_hypothesis',
             '--ingest', str(corpus),
             '--no-report', '--no-cache',
         ])
