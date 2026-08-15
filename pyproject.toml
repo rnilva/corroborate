@@ -235,7 +235,7 @@ paths_to_mutate = [
 # `meta_regression_paired_g` / `meta_regression_per_burst` /
 # `dowhy/dowhy.py`. These remain at well-defined post-consolidation
 # paths and have lg_scm tests, but the paired-g family is off-
-# limits in RL substrate bridges (CLAUDE.md §"Methodology debt")
+# limits in RL substrate bridges (CLAUDE.md §"Canonical analyses")
 # so they're a lower priority for mutate-coverage; re-add when
 # the analytic suite grows tighter closed-form coverage on them.
 # `also_copy`: mutmut copies `paths_to_mutate` + `also_copy` into

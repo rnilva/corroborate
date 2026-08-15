@@ -758,7 +758,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
         )
         return f'{env_name}__{arm_key}{suffix}'
 
-    # **CORPUS_INTEGRITY.md CI1 + sentinel discipline**: write
+    # **corpus-integrity invariant CI1 + sentinel discipline**: write
     # `.in_progress` at sweep start so an `--ingest-all` walk in
     # parallel skips the half-built corpus. Removed in the
     # `try/finally` after `dispatch_sweep` returns / errors so the
@@ -1011,7 +1011,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     # **Scratch cleanup**: per-arm sub-corpora are scratch — the
     # parent runs.parquet + traces.parquet now have everything.
     # Pre-fix this was documented as a manual `rm -rf` step,
-    # which created CORPUS_INTEGRITY.md CI1 nested-corpus
+    # which created corpus-integrity invariant CI1 nested-corpus
     # violations on every subsequent `--ingest-all` walk. Auto-
     # clean now: each per-arm `<out_dir>/<arm>/` directory
     # (containing the unconcatenated runs/traces used as merge

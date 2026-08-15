@@ -377,7 +377,9 @@ per-hypothesis cache is a projection.
 # top-level `<out_dir>/{runs,traces}.parquet`, archives to cloud.
 # Drops a `.in_progress` sentinel for the duration so concurrent
 # `--ingest-all` walks skip the half-built corpus.
-set -a && . .env && set +a   # AWS creds for archive
+# export cloud creds (a .env must use the AWS_* names botocore
+# reads: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_ENDPOINT_URL)
+set -a && . .env && set +a
 uv run --package corroborate_rl corroborate sweep run \
     --substrate corroborate_rl.dqn_sweep --device gpu \
     experiments/configs/<sweep>.yaml
@@ -419,7 +421,7 @@ experiments/probes/<corpus>/            ├── <hyp>.parquet      (cells × m
   ├── traces.parquet                    └── (verdict snapshot)
   └── _remote.json (cloud manifest)
                               ↕
-                 s3://corroborate-archive/<corpus>/
+                 s3://<your-bucket>/<corpus>/
                  (MANIFEST.json mirror)
 ```
 
@@ -436,7 +438,7 @@ absolute paths.
 # (CLOUD_AND_LOCAL / CLOUD_EVICTED / LOCAL_ONLY / IN_PROGRESS_SCAFFOLD).
 uv run corroborate catalogue \
     experiments/data experiments/probes \
-    --remote-prefix s3://corroborate-archive/
+    --remote-prefix s3://<your-bucket>/
 
 # Per-(corpus, arm) leaf-signature view — the configurational
 # fingerprint each sweep arm holds constant vs sweeps over.
@@ -472,7 +474,9 @@ via any of:
    Then: `corroborate archive <dir> --remote s3://... --profile r2`
 2. **Environment variables** (`AWS_ACCESS_KEY_ID`,
    `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL`): work without
-   profile config. If you keep them in `.env`, source it
+   profile config. If you keep them in `.env`, the variables must
+   use these exact AWS_* names (botocore doesn't read
+   provider-specific names like `R2_*`); source it
    explicitly (`set -a && . .env && set +a`) — there's no
    auto-load.
 3. **IAM role** (EC2 / ECS): zero config; the chain picks it up.
@@ -510,7 +514,7 @@ Python API: `from corroborate._internals.cloud_auth import preflight`
 ```bash
 # Per-command --profile flag (or rely on AWS_PROFILE env var):
 uv run corroborate archive experiments/data/<corpus> \
-    --remote s3://corroborate-archive/<corpus> --profile r2
+    --remote s3://<your-bucket>/<corpus> --profile r2
 
 # Inspect what a corpus has archived:
 uv run corroborate ls experiments/data/<corpus> --profile r2
@@ -567,7 +571,7 @@ uv run corroborate purge experiments/data/<corpus>
 | "I deleted a sweep dir, the cache still has its cells" | `corroborate hypothesis <module> --evict <corpus>` |
 | "drift check, no work" | `corroborate hypothesis <module> --check` (reports both measurable-side AND input-side drift) |
 | "which caches depend on corpus X? did the source drift?" | `cat experiments/data/cache/*.sources.json \| jq` or `runner.check_cache_sources(<cache_path>)` |
-| "trace cols missing on a new measurable" | runner auto-restores from cloud; ensure `.env` is sourced |
+| "trace cols missing on a new measurable" | runner auto-restores from cloud; ensure AWS_* creds are exported |
 | "free disk on a cloud-backed corpus" | `corroborate purge` (NEVER `rm`) |
 
 The full internal design docs — `CACHE_ARCHITECTURE.md`,

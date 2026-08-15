@@ -358,7 +358,7 @@ def list_archives(remote_prefix: str) -> list[str]:
     knowing local state.
 
     `remote_prefix` is an fsspec URI like
-    `s3://corroborate-archive/`. Returns the list of full
+    `s3://<your-bucket>/`. Returns the list of full
     `remote_root` URIs (the prefix + each subdirectory whose
     MANIFEST.json is reachable)."""
     if not remote_prefix.endswith('/'):
@@ -600,7 +600,7 @@ def archive(
     after size verification. Default false (safer two-step
     lifecycle: archive → verify → purge).
 
-    `validate`: run CORPUS_INTEGRITY.md CI5 archive-eligibility
+    `validate`: run corpus-integrity invariant CI5 archive-eligibility
     check on each local file (min size + PAR1 footer for
     parquets) before uploading. Default true. Pass `False` only
     when the local files are deliberately small / non-standard
@@ -619,7 +619,7 @@ def archive(
             f'{remote_root!r}. Restore + re-archive if intentional.',
         )
 
-    # CORPUS_INTEGRITY.md CI1: refuse to archive a directory that
+    # corpus-integrity invariant CI1: refuse to archive a directory that
     # itself contains nested sub-corpora (each with its own
     # `runs.parquet`). The runner's ingest path already refuses
     # this layout via `assert_no_nested_corpora`; closing the
@@ -635,7 +635,7 @@ def archive(
     )
     assert_named_corpora_no_nested((sweep_dir,))
 
-    # CORPUS_INTEGRITY.md CI3: refuse if a sibling corpus already
+    # corpus-integrity invariant CI3: refuse if a sibling corpus already
     # claims this `remote_root`. Two local corpora pushing to the
     # same s3 prefix silently overwrite each other on every
     # archive call. Check only fires when this corpus is NEW (no
@@ -662,7 +662,7 @@ def archive(
         if not local.is_file():
             raise FileNotFoundError(f'{local}: not a file')
 
-        # CORPUS_INTEGRITY.md CI5: refuse to push a file that
+        # corpus-integrity invariant CI5: refuse to push a file that
         # fails the archive precondition (too small, missing
         # PAR1 footer, etc.). The check fires BEFORE we hash or
         # touch the cloud — a 0-byte placeholder from an

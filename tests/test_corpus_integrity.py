@@ -1,5 +1,5 @@
 """Tests for `corpus.integrity` — defensive primitives at the
-corpus boundary (CORPUS_INTEGRITY.md).
+corpus boundary (invariant catalogue: corpus/integrity.py docstring).
 
 Each invariant CI1-CI7 has a dedicated test. Currently:
 - CI1 nested-corpus detection.
@@ -236,7 +236,7 @@ def test_assert_unique_remote_root_no_siblings(tmp_path: Path) -> None:
     sweep.mkdir(parents=True)
     # Should NOT raise.
     assert_unique_remote_root(
-        sweep, 's3://corroborate-archive/corpA',
+        sweep, 's3://test-bucket/corpA',
     )
 
 
@@ -248,11 +248,11 @@ def test_assert_unique_remote_root_distinct_roots_pass(
     sib = root / 'corpA'
     me = root / 'corpB'
     me.mkdir(parents=True)
-    _stamp_manifest(sib, 's3://corroborate-archive/corpA')
+    _stamp_manifest(sib, 's3://test-bucket/corpA')
 
     # Should NOT raise.
     assert_unique_remote_root(
-        me, 's3://corroborate-archive/corpB',
+        me, 's3://test-bucket/corpB',
     )
 
 
@@ -265,12 +265,12 @@ def test_assert_unique_remote_root_collision_raises(
     Mirrors the in-the-wild
     `minatar_sync_curve/{ddqn_sync1k, ddqn_sync3k, vanilla_sync1k,
     vanilla_sync3k}` quartet sharing
-    `s3://corroborate-archive/minatar_sync_curve`."""
+    `s3://test-bucket/minatar_sync_curve`."""
     root = tmp_path / 'data'
     sib = root / 'corpA'
     me = root / 'corpB'
     me.mkdir(parents=True)
-    shared_root = 's3://corroborate-archive/minatar_sync_curve'
+    shared_root = 's3://test-bucket/minatar_sync_curve'
     _stamp_manifest(sib, shared_root)
 
     with pytest.raises(RemoteRootCollision) as exc_info:
@@ -291,7 +291,7 @@ def test_assert_unique_remote_root_self_excluded(
     root = tmp_path / 'data'
     me = root / 'corpA'
     me.mkdir(parents=True)
-    my_root = 's3://corroborate-archive/corpA'
+    my_root = 's3://test-bucket/corpA'
     _stamp_manifest(me, my_root)
 
     # Should NOT raise — only OTHER corpora's claims are

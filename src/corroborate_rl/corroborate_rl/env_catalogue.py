@@ -2304,7 +2304,7 @@ def _register_synthetic_bias_typeb_panel() -> None:
     `synthetic_bias_typeb.py`'s module docstring. v3 (state-baked
     `mu_state(s) = peak_value · β^(s mod K)`) was scrapped after
     value iteration confirmed two STRUCTURAL flaws
-    (`/tmp/synthetic_v3_review.md`):
+    (from the v3 design review):
 
     - `Var_a[V*(s'_a)] = 0` at every β (modular periodicity made
       every reachable successor sit on the same V* orbit);

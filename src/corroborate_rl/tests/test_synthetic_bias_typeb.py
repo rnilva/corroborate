@@ -4,8 +4,7 @@ v1 → v2 → v3 → v3.1 evolution lives in
 `src/corroborate_rl/corroborate_rl/synthetic_bias_typeb.py`.
 
 These tests verify the LOAD-BEARING structural properties of v3.1
-(addresses the v3 reviewer's two STRUCTURAL critiques in
-`/tmp/synthetic_v3_review.md`):
+(addresses the v3 design review's two STRUCTURAL critiques):
 
 1. Action-DEPENDENT transitions: `s' = (s + a + 1) mod L` (each
    action visits a distinct successor — preserved from v2/v3).
@@ -242,7 +241,7 @@ def test_mu_state_range_scales_with_payoff_spread() -> None:
 def test_var_a_v_star_is_nonzero_at_high_spread() -> None:
     """**The v3.1 substantive fix.** v3's design had
     `Var_a[V*(s'_a)] = 0` identically at every β (the v3 reviewer's
-    load-bearing structural critique in `/tmp/synthetic_v3_review.md`).
+    load-bearing structural critique from the v3 design review).
     v3.1 with random per-state payoffs has `Var_a[V*(s'_a)] > 0`
     at every `payoff_spread > 0`, confirmed by value iteration.
 

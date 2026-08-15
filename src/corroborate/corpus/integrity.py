@@ -1,7 +1,25 @@
-"""Defensive primitives at the corpus boundary
-(CORPUS_INTEGRITY.md).
+"""Defensive primitives at the corpus boundary.
 
-Each invariant CI1-CI8 has a check function that surfaces
+This module is the in-repo home of the corpus-integrity
+invariant catalogue (the full design rationale lives in
+`CORPUS_INTEGRITY.md`, frozen on the `submission` branch):
+
+- CI1 — a corpus is a leaf: a dir with `runs.parquet` must not
+  contain a subdir that also has one (`.in_progress` sentinel is
+  the mid-sweep escape hatch).
+- CI2 — cell `id`s are unique within a corpus's stores.
+- CI3 — a cloud root is owned by exactly one local corpus.
+- CI4 — content-equality dedup ignores runtime-volatile fields
+  (object reprs with memory addresses).
+- CI5 — archive refuses trivially-broken files.
+- CI6 — per-corpus stores stay in sync with their parent
+  `runs.parquet` (orphan rows evicted).
+- CI7 — local trace files are reclaimed proactively once
+  cloud-recoverable.
+- CI8 — `traces.parquet` ids are a subset of `runs.parquet` ids.
+- CI9 — dispatcher refuses configs that share output paths.
+
+Each implemented invariant has a check function that surfaces
 violations as a typed exception. Called at the boundaries
 where corpora enter the framework: `_load_directory` for
 ingest, `cloud.archive` for outbound writes, trace restore
@@ -111,7 +129,7 @@ class NestedCorpusError(RuntimeError):
 
     def _format(self) -> str:
         lines = [
-            f'CORPUS_INTEGRITY.md CI1 — {len(self.violations)} '
+            f'corpus-integrity invariant CI1 — {len(self.violations)} '
             f'corpus dir(s) contain nested sub-corpora; the runner '
             f'walks one level deep and would silently skip the '
             f'inner ones. Flatten the layout (move nested dirs to '
@@ -216,7 +234,7 @@ class ArchivePrecondition(RuntimeError):
     too small or otherwise lacks the integrity signal that
     `archive()` requires before pushing.
 
-    The canonical example from CORPUS_INTEGRITY.md was the
+    The canonical example (from the corpus-integrity design history) was the
     0-byte `traces.parquet` placeholders that
     `archive_unarchived.py` blindly pushed for `action_dim_wide`
     and `reward_scale_sweep` after their sweep merges were
@@ -226,7 +244,7 @@ class ArchivePrecondition(RuntimeError):
         self.path = path
         self.reason = reason
         super().__init__(
-            f'CORPUS_INTEGRITY.md CI5 — {path} fails archive '
+            f'corpus-integrity invariant CI5 — {path} fails archive '
             f'precondition: {reason}. A trivial / corrupt file '
             f'should not be pushed to the cloud archive.'
         )
@@ -284,10 +302,10 @@ class RemoteRootCollision(RuntimeError):
 
     Two corpora pushing to the same s3 prefix silently overwrite
     each other on every archive — only one's data survives. The
-    canonical example from CORPUS_INTEGRITY.md was the
+    canonical example (from the corpus-integrity design history) was the
     `minatar_sync_curve/{ddqn_sync1k, ddqn_sync3k, vanilla_sync1k,
     vanilla_sync3k}` quartet sharing
-    `s3://corroborate-archive/minatar_sync_curve`."""
+    `s3://<bucket>/minatar_sync_curve`."""
 
     def __init__(
         self,
@@ -299,7 +317,7 @@ class RemoteRootCollision(RuntimeError):
         self.claiming_dir = claiming_dir
         self.existing_dir = existing_dir
         super().__init__(
-            f'CORPUS_INTEGRITY.md CI3 — remote_root '
+            f'corpus-integrity invariant CI3 — remote_root '
             f'{remote_root!r} is already claimed by '
             f'{existing_dir}; {claiming_dir} cannot also archive '
             f'to it (silent overwrite would lose data). Use a '
@@ -365,7 +383,7 @@ class TraceContaminationStats:
 class TraceContaminationError(RuntimeError):
     """Raised when `traces.parquet` carries ids not present in
     `runs.parquet` — the cloud-collision residue pattern from
-    CORPUS_INTEGRITY.md.
+    the corpus-integrity design doc (`submission` branch).
 
     Two corpora pushed to the same cloud root pre-CI3 silently
     overwrite each other; the survivor's traces.parquet contains
@@ -382,7 +400,7 @@ class TraceContaminationError(RuntimeError):
     def __init__(self, stats: TraceContaminationStats) -> None:
         self.stats = stats
         super().__init__(
-            f'CORPUS_INTEGRITY.md CI8 — '
+            f'corpus-integrity invariant CI8 — '
             f'{stats.corpus_dir.name}/traces.parquet contains '
             f'{stats.spurious_count} id(s) absent from '
             f'runs.parquet (traces={stats.traces_count} ids, '

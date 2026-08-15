@@ -4,7 +4,7 @@ Run any bridges-module-as-hypothesis (`experiments/findings/<X>.py`
 exporting `INTERVENTION` + `BRIDGES`) on a data input, with the
 per-hypothesis cache:
 
-    corroborate hypothesis experiments.findings.ddqn \\
+    corroborate hypothesis experiments.findings.my_hyp \\
         --ingest-all experiments/data/
 
 Three invocation surfaces share the same logic:
@@ -59,12 +59,12 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     """
     parser.add_argument(
         'module',
-        help='dotted module path, e.g. experiments.findings.ddqn',
+        help='dotted module path of a Hypothesis module, e.g. experiments.findings.my_hyp',
     )
     parser.add_argument(
         '--ingest', type=str, default=None, metavar='CORPUS[,CORPUS...]',
-        help='ingest specific named corpora (CACHE_ADDITIVITY.md '
-             'CA3). Names are resolved relative to '
+        help='ingest specific named corpora. '
+             'Names are resolved relative to '
              'experiments/data/<name>/ unless absolute. Use this '
              'when you know what new data to load — much faster '
              'than --ingest-all.',
@@ -136,7 +136,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         '--check', action='store_true',
-        help='**CACHE_ADDITIVITY.md Phase 2** drift-visibility '
+        help='drift-visibility '
              'mode. Reports per-corpus drift / missing columns '
              'vs the current registry, no compute / no ingest. '
              'Exits 0 if cache is current, 2 if drift detected.',

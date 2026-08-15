@@ -27,6 +27,13 @@ graph, NOT decided by a central aggregator. See
 entails (bridge naming, refutation clusters via shared scope
 predicates, scope-as-extent).
 
+**Design-doc citations.** Code comments and docstrings cite
+internal design docs by name (`CACHE_ADDITIVITY.md`,
+`SWEEP_PERSISTENCY.md`, `ANALYSIS_RECIPE.md`, `FINDINGS.md`
+revisions, ...). Those docs are frozen with the study on the
+`submission` branch; the citations are stable historical
+anchors, not in-tree paths.
+
 ## Typing discipline (load-bearing)
 
 The framework's contribution is logical strictness applied to
@@ -396,7 +403,7 @@ layout.)
   walks have surfaced 60% false-orphan-rate on the live tree).
 - **Discovery via `corroborate catalogue`**. Reach for
   `corroborate catalogue experiments/data
-  experiments/probes --remote-prefix s3://corroborate-archive/`
+  experiments/probes --remote-prefix s3://<your-bucket>/`
   BEFORE inventing your own glob / walk. The catalogue carries
   `parent`, `name`, `status` (CLOUD_AND_LOCAL / CLOUD_EVICTED /
   LOCAL_ONLY / IN_PROGRESS_SCAFFOLD), and `--leaves` /
@@ -451,7 +458,9 @@ layout.)
   preference: (1) `~/.aws/credentials` + `~/.aws/config` with
   per-profile `endpoint_url` for R2; (2) env vars
   (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-  `AWS_ENDPOINT_URL`) — if kept in `.env`, source manually
+  `AWS_ENDPOINT_URL`) — if kept in `.env`, the variables must use
+  these exact AWS_* names (botocore doesn't read provider-specific
+  names like `R2_*`); source manually
   (`set -a && . .env && set +a`); (3) IAM role (EC2/ECS).
   Every cloud-touching CLI entry runs a `preflight` check
   (`_internals.cloud_auth.preflight`) that emits a typed
@@ -485,7 +494,11 @@ stamps env vars (`JAX_PLATFORMS`) BEFORE any heavy-import
 callable fires. Use:
 
 ```bash
-set -a && . .env && set +a   # AWS creds for archive_remote
+# export cloud creds — botocore reads the AWS_* names, so a .env
+# must define AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
+# AWS_ENDPOINT_URL (an .env with provider-specific names, e.g.
+# R2_*, must be mapped to AWS_* before this works):
+set -a && . .env && set +a
 uv run --package corroborate_rl corroborate sweep run \
     --substrate corroborate_rl.dqn_sweep --device gpu \
     experiments/configs/<sweep>.yaml
@@ -661,59 +674,6 @@ moderation, not mediation. Reach for the moderation primitive,
 NOT a partial-Spearman over Δ-projection (which is a mediation
 question on a different sample shape).
 
-### Methodology debt (out of scope of `corroborate.analyses`)
-
-CLAUDE.md flags `paired_g`, `paired_g_per_burst`,
-`paired_link_per_burst`, and `mundlak_paired_g_per_burst` as
-"off-limits in RL substrate bridges". Status after the
-consolidation (the bridge modules named below are the frozen
-study's, `submission` branch):
-
-- **`dqn_bridges.py`** — fully audited (Phase B5). Of 18
-  distinct seed-paired
-  consumer bridges, **17 migrated to independent-samples
-  Cohen's d** (`arm_mean_diff` for single-stratum,
-  `meta_regression_unpaired_d_by_nstep` for the n_step slope
-  family, `meta_regression_unpaired_d` for the action-dim
-  meta-regression, `stratum_effect_panel_per_burst` for the
-  per-burst phase-consistency tests). **1 retained as
-  principled exception** with explicit docstring justification:
-  - `ddqn_benefit_scales_with_gamma__discountingchain` —
-    `helped_fraction` per-seed sign-count requires the paired
-    form on the bimodal DC reward distribution.
-
-  The two per-burst phase-consistency bridges
-  (`ddqn_outcome_stable_across_bursts__fourrooms`,
-  `ddqn_outcome_zero_across_bursts__catch`) migrated to the
-  framework's `stratum_effect_panel_per_burst` primitive
-  (per-(env, burst) Cohen's d via independent-samples seed
-  pooling). Zero verdict drift on the canonical cache;
-  saturation cells (Catch's identical per-arm means → NaN d)
-  fall back to a per-burst |mean_t − mean_b| floor check
-  inside the bridge.
-
-- **`experiments/findings/ddqn/mediation.py`** — the polyak τ
-  bridges (`staleness_amplifies_..._sparse_goal_polyak`,
-  `staleness_does_not_amplify_..._survival_polyak`) keep the
-  seed-paired `paired_continuous_do_dowhy` form under the
-  HP-keyed-pair_by principled exception: each pair contributes
-  one (HP_value, Δ_outcome) regression observation in a dose-
-  response analysis. Seed-as-row-id ≠ seed-pseudo-replication
-  of stratum-level effect size.
-
-- **Other findings modules** — audit closed 2026-05-18.
-  Surveyed via grep across `experiments/findings/`: zero
-  bridges outside `dqn_bridges.py` and `ddqn/mediation.py`'s
-  polyak τ pair still use the off-limits seed-paired
-  primitives. The taxonomy that drove the audit remains the
-  contributor heuristic for future bridge-authoring: any
-  bridge whose question depends on a per-pair Δ diagnostic
-  (helped_fraction, per-seed sign histograms, per-burst
-  phase consistency, dose-response per HP value) is a
-  candidate principled exception; bridges that ask "is the
-  treatment-baseline difference real at this stratum?" should
-  reach for `arm_mean_diff` / `stratified_arm_diff_pooled`.
-
 ### Mediation recipe (load-bearing — read before authoring mediation bridges)
 
 Mediation magnitudes are slippery. The framework's
@@ -764,9 +724,8 @@ The pipeline:
    bridge paired with its linearity sibling at the same scope)
    forms a HYPOTHESIS_AS_GRAPH §3b scope-cluster — both HELD →
    robust mediation under both rank-based AND linear
-   identifications. See `finding_bg_jens_mediation_robust__reach`
-   and `finding_staleness_jens_mediation_robust__minatar` for
-   the two canonical instances in the ddqn hypothesis.
+   identifications. The frozen study's ddqn hypothesis
+   (`submission` branch) carries the two canonical instances.
 
 5. **Refutations on the total.** Placebo + RCC corroborate the
    foundation; mediation magnitude doesn't inherit

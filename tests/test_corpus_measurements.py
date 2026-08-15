@@ -338,7 +338,7 @@ def test_build_measurements_rebuilds_from_scratch_on_duplicate_ids(
 def test_build_measurements_drops_orphan_rows_not_in_runs(
     tmp_path: Path,
 ) -> None:
-    """**CORPUS_INTEGRITY.md CI6**: rows in `measurements.parquet`
+    """**corpus-integrity invariant CI6**: rows in `measurements.parquet`
     whose `id` is no longer in `runs.parquet` are orphans —
     dropped on every rebuild. Sweep extensions or partial
     reruns that removed cells from runs.parquet would

@@ -103,9 +103,11 @@ def test_envs_with_threshold_excludes_absent() -> None:
 
 
 def test_envs_with_threshold_count() -> None:
-    """At pin-time: 9 literature + 4 derived = 13 envs with
-    defensible thresholds. The 5 misc envs are 'absent'."""
-    assert len(envs_with_threshold()) == 13
+    """Pin the count of envs with defensible thresholds (the
+    misc envs stay 'absent'). Update the pin when a threshold
+    is deliberately added — the sibling test guarantees
+    'absent'-confidence envs are always excluded."""
+    assert len(envs_with_threshold()) == 16
 
 
 # Custom-table override: removed in the env_catalogue

@@ -37,6 +37,8 @@ def test_all_v9_envs_registered() -> None:
         'MNISTBandit-bsuite',
         'Asterix-MinAtar', 'Breakout-MinAtar', 'Freeway-MinAtar',
         'SpaceInvaders-MinAtar',
+        # pgx backend (Seaquest is absent from gymnax MinAtar).
+        'Seaquest-MinAtar',
         'FourRooms-misc', 'MetaMaze-misc', 'Pong-misc',
         'BernoulliBandit-misc', 'GaussianBandit-misc',
     }
@@ -49,9 +51,9 @@ def test_all_v9_envs_registered() -> None:
     # Synthetic bias Type-A/B v3.2 panel (controlled-substrate
     # causal-test envs; see `synthetic_bias_typeb.py` and the
     # v1/v2/v3/v3.1/v3.2 evolution in its module docstring).
-    # v3.2 drops the L=32 envs (see /tmp/synthetic_v3_1_review.md
-    # — n_seeds bump from 8 → 16 forced a cell-budget trade and
-    # L=1024 is where the FA-binding substantive claim lives).
+    # v3.2 drops the L=32 envs — the n_seeds bump from 8 → 16
+    # forced a cell-budget trade and L=1024 is where the
+    # FA-binding substantive claim lives.
     # 15 envs spanning n_states ∈ {1024} × payoff_spread ∈ {0.0,
     # 0.25, 0.5, 0.75, 1.0} × payoff_seed ∈ {0, 1, 2}.
     expected_synthetic = {

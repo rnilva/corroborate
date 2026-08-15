@@ -334,10 +334,8 @@ def exogenous_scope(
                 f'Bridge.scope references only exogenous (leaves '
                 f"of the outermost claim) columns: "
                 f'{sorted(exogenous)!r}. The principled scope-axis '
-                f'is endogenous (cf. ANALYSIS_RECIPE.md §0); HP '
-                f'envelopes are a temporary substitute. See '
-                f'FUTURE_WORKS "Endogenous-variable scope '
-                f'predicates".'
+                f'is endogenous; HP '
+                f'envelopes are a temporary substitute.'
             ),
         )
     return None

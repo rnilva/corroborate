@@ -8,7 +8,7 @@ tuxedo" — `s' = (s+1) mod L` made transitions action-independent;
 that cancelled out of `argmax`. No chain-amplified policy-
 informative bias was possible. Also: `reward_variance_scale` knob
 confounded |Q*|, Δ_v, AND Var_a[Q*] in lockstep; no FA-capacity
-axis; γ pinned at 0.99. See `/tmp/synthetic_env_roast.md`.
+axis; γ pinned at 0.99. From the v1 design review.
 
 **v2** (2026-05-19 afternoon, scrapped pre-sweep): added action-
 dependent transitions (`s' = (s + a + 1) mod L`) and an
@@ -21,12 +21,12 @@ natural-env knife-edge of ~1%); L ∈ {16, 64} with hidden=[32, 32]
 gave 12.8× over-parameterized FA at the L=64 corner; n_seeds=12
 (under-powered); pre-registration walk-back paths pre-laundered
 every observed-data shape as publishable.
-See `/tmp/synthetic_v2_roast.md`.
+From the v2 design review.
 
 **v3** (2026-05-19 evening, scrapped pre-sweep): introduced
 state-baked deterministic payoffs `mu_state(s) = peak_value · β^(s
 mod K)`. Value iteration on the v3 MDP revealed two STRUCTURAL
-flaws (`/tmp/synthetic_v3_review.md`):
+flaws (from the v3 design review):
 
 1. **`Var_a[V*(s'_a)] = 0` at every β.** Under the optimal
    policy, every reachable successor sits on the same V* orbit

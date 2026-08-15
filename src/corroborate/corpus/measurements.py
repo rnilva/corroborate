@@ -246,7 +246,7 @@ def build_measurements(
             f'from scratch.\n',
         )
         existing = pl.DataFrame()
-    # **CORPUS_INTEGRITY.md CI6**: row-level orphan eviction.
+    # **corpus-integrity invariant CI6**: row-level orphan eviction.
     # `existing` may contain rows whose `id` is no longer in
     # `runs_df['id']` — sweep extensions or partial reruns that
     # dropped cells from runs.parquet leave stale orphans in

@@ -32,7 +32,7 @@ MINATAR_1M_YAML = """
 name: minatar_1M
 out_dir: experiments/data/minatar_1M
 env_binding: per_env
-archive_remote: s3://corroborate-archive/minatar_1M
+archive_remote: s3://test-bucket/minatar_1M
 
 envs:
   - {name: Asterix-MinAtar,        n_seeds: 30, chunk_size: 15}
@@ -247,7 +247,7 @@ def test_minatar_1M_envelope(
     s = minatar_1M_sweep
     assert s.name == 'minatar_1M'
     assert s.out_dir == Path('experiments/data/minatar_1M')
-    assert s.archive_remote == 's3://corroborate-archive/minatar_1M'
+    assert s.archive_remote == 's3://test-bucket/minatar_1M'
     assert s.envs == (
         EnvConfig('Asterix-MinAtar', n_seeds=30, chunk_size=15),
         EnvConfig('Breakout-MinAtar', n_seeds=30, chunk_size=15),
@@ -449,7 +449,7 @@ def test_dispatch_sweep_raises_on_cfg_name_collision(tmp_path: Path) -> None:
     data. `dispatch_sweep` must refuse the collision pre-dispatch.
 
     Regression test for the 2026-05-11 silent-overwrite bug in
-    reward_scale_sweep_postfix (CORPUS_INTEGRITY.md CI9)."""
+    reward_scale_sweep_postfix (corpus-integrity invariant CI9)."""
     from corroborate_rl.dqn.yaml_sweep import dispatch_sweep
 
     cfg = tmp_path / 'colliding_per_env_sweep.yaml'

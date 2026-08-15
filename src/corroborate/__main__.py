@@ -325,7 +325,7 @@ def _build_parser(
     _ = p_purge.add_argument('--files', nargs='*', default=None)
     _ = p_purge.add_argument(
         '--remote-prefix', dest='remote_prefix', default=None,
-        help='fsspec URI prefix (e.g. s3://corroborate-archive/) for '
+        help='fsspec URI prefix (e.g. s3://<your-bucket>/) for '
              'the cloud-fallback path. Used when the local '
              '_remote.json was lost (e.g., post-merge cleanup wiped '
              'the sub-corpus dir that held it). Discovers sub-archives '
@@ -351,7 +351,7 @@ def _build_parser(
     _ = cat_remote.add_argument(
         '--remote-prefix', dest='remote_prefix', default=None,
         help='fsspec URI prefix for cloud discovery '
-             '(e.g. s3://corroborate-archive/). Falls back to '
+             '(e.g. s3://<your-bucket>/). Falls back to '
              '$CORROBORATE_REMOTE_PREFIX. Pass --local-only to '
              'explicitly skip cloud queries.',
     )

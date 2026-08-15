@@ -1345,7 +1345,7 @@ _OBJECT_REPR_PATTERN = re.compile(r'<.+\sobject\sat\s0x[0-9a-f]+>')
 
 
 def _volatile_object_repr_columns(df: pl.DataFrame) -> list[str]:
-    """**CORPUS_INTEGRITY.md CI4** dynamic complement to
+    """**corpus-integrity invariant CI4** dynamic complement to
     `_PROVENANCE_TAGS`. Returns string columns whose first
     non-null value matches the Python-object-repr pattern
     `<...\\sobject\\sat\\s0x[0-9a-f]+>` (e.g. `<gymnax.envs.…
@@ -1392,7 +1392,7 @@ def _dedup_by_content(df: pl.DataFrame, *, source: str) -> pl.DataFrame:
     list/object columns get coerced via `hash` first so the equality
     check is value-based even on heterogeneous shapes.
 
-    **CI4** (CORPUS_INTEGRITY.md): in addition to static
+    **CI4** (corpus-integrity catalogue, corpus/integrity.py): in addition to static
     `_PROVENANCE_TAGS`, dynamically excludes string columns
     carrying Python object reprs (process-volatile memory
     addresses). Without this, two re-ingests of the same
@@ -1904,7 +1904,7 @@ def _estimate_max_workers(
 def _trace_is_cloud_recoverable(
     corpus_dir: Path, traces_path: Path,
 ) -> bool:
-    """**CORPUS_INTEGRITY.md CI7** helper. Returns True iff the
+    """**corpus-integrity invariant CI7** helper. Returns True iff the
     local `traces_path` can be re-restored from cloud:
     - `_remote.json` exists at `corpus_dir`,
     - manifest lists `traces.parquet`,
@@ -2194,7 +2194,7 @@ def _load_one_corpus(
         return None, log_lines
     df = pl.read_parquet(runs_path)
     runs_columns = set(df.columns)
-    # **CORPUS_INTEGRITY.md CI8**: refuse a contaminated
+    # **corpus-integrity invariant CI8**: refuse a contaminated
     # `traces.parquet` (cloud-collision residue from pre-CI3 era
     # that overwrote distinct corpora's archives at the same
     # remote_root). The runner falls back to "no cloud traces"
@@ -2448,7 +2448,7 @@ def _load_one_corpus(
         df = df.drop(joined_trace_cols)
     if 'corpus' not in df.columns:
         df = df.with_columns(pl.lit(_corpus_stamp(sub)).alias('corpus'))
-    # **CORPUS_INTEGRITY.md CI7**: evict locally-cached trace
+    # **corpus-integrity invariant CI7**: evict locally-cached trace
     # files when they're cloud-recoverable, not just when
     # downloaded THIS session. Pre-fix, pre-existing local
     # traces accumulated forever (`ddqn_better_hp` 3.4 GB,
@@ -2518,7 +2518,7 @@ def _load_directory(
     registered measurable's defining module) — substrate-agnostic,
     no CLI plumbing. The single-worker sequential path never forks
     and ignores this entirely."""
-    # CORPUS_INTEGRITY.md CI1: refuse nested corpora at ingest
+    # corpus-integrity invariant CI1: refuse nested corpora at ingest
     # rather than silently drop the inner ones (the runner walks
     # one level deep). Caller fixes the layout, then retries.
     # Corpus dirs marked with `.in_progress` (sweep mid-flight)

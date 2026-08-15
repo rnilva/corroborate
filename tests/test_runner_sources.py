@@ -1,10 +1,9 @@
 """Tests for the cache-sources sidecar — input provenance for
-`cache/<short>.parquet`. See the plan at
-`/root/.claude/plans/cache-sources-sidecar.md`.
+`cache/<short>.parquet`.
 
 This module covers the schema, atomic I/O, and the `evict()`
-wire-in (test #5 in the plan). The build path (`_ingest_and_compute`)
-and `check_cache_sources` come in follow-up commits.
+wire-in. The build path (`_ingest_and_compute`) and
+`check_cache_sources` are covered in their own modules.
 """
 from __future__ import annotations
 
@@ -52,7 +51,7 @@ class _StubHypothesis:
 
 def _make_entry(
     corpus: str,
-    data_root: str | None = '/workspace/corroborate/experiments/data',
+    data_root: str | None = '/repo/experiments/data',
     remote_root: str | None = None,
     ingested_at: tuple[str, ...] = ('2026-05-15T12:00:00+00:00',),
 ) -> CacheSourceEntry:
@@ -109,7 +108,7 @@ def test_write_then_read_round_trip(tmp_path: Path) -> None:
     p = tmp_path / 'ddqn.sources.json'
     original = CacheSources(sources=(
         _make_entry('cartpole_1M_postfix',
-                    remote_root='s3://corroborate-archive/cartpole_1M_postfix'),
+                    remote_root='s3://test-bucket/cartpole_1M_postfix'),
         _make_entry('fourrooms_100k_slice',
                     ingested_at=('2026-05-10T08:00:00+00:00',
                                  '2026-05-15T12:00:00+00:00')),
@@ -132,7 +131,7 @@ def test_write_sources_is_byte_stable(tmp_path: Path) -> None:
         # Intentionally out-of-order corpus names; write must sort.
         _make_entry('zebra'),
         _make_entry('alpha',
-                    remote_root='s3://corroborate-archive/alpha'),
+                    remote_root='s3://test-bucket/alpha'),
     ))
     _write_sources(p, src)
     first = p.read_bytes()
@@ -189,7 +188,7 @@ def test_evict_drops_sources_entry(tmp_path: Path) -> None:
     _write_sources(sources_path, CacheSources(sources=(
         _make_entry('corpus_A'),
         _make_entry('corpus_B',
-                    remote_root='s3://corroborate-archive/corpus_B'),
+                    remote_root='s3://test-bucket/corpus_B'),
     )))
 
     # Use a minimal stub Hypothesis-like object (the runner accepts
@@ -366,7 +365,7 @@ def test_build_null_preserves_existing_values(tmp_path: Path) -> None:
     sources_path = _sources_path(cache_path)
     _write_sources(sources_path, CacheSources(sources=(
         _make_entry('A',
-                    remote_root='s3://corroborate-archive/A',
+                    remote_root='s3://test-bucket/A',
                     ingested_at=('2026-05-15T11:00:00+00:00',)),
     )))
 
@@ -383,7 +382,7 @@ def test_build_null_preserves_existing_values(tmp_path: Path) -> None:
     assert len(got.sources) == 1
     e = got.sources[0]
     # Prior remote_root preserved (B2 fix: null-preserving update).
-    assert e.remote_root == 's3://corroborate-archive/A'
+    assert e.remote_root == 's3://test-bucket/A'
     assert len(e.ingested_at) == 2
 
 
