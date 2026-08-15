@@ -23,9 +23,14 @@ Cluster-shaped causal claims (a refutation triple, a sibling
 mean/median pair) live at the graph level — queried by extent
 identity `(source, target, extent_hash)` over the post-evaluated
 graph, NOT decided by a central aggregator. See
-`HYPOTHESIS_AS_GRAPH.md` for the authoring discipline this
+`docs/HYPOTHESIS_AS_GRAPH.md` for the authoring discipline this
 entails (bridge naming, refutation clusters via shared scope
 predicates, scope-as-extent).
+
+**Design-doc citations.** Other design docs cited by name below
+(`PRIMITIVES_AUDIT.md`, `ANALYSIS_RECIPE.md`, `CACHE_*.md`,
+`CORPUS_INTEGRITY.md` CI-invariants, ...) are stable historical
+anchors from the development record, not in-tree paths.
 
 ## Typing discipline (load-bearing)
 

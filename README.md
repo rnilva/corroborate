@@ -596,21 +596,15 @@ verdict pattern across the canonical 12-env panel. Current state:
 
 - `CLAUDE.md` — typing discipline, vocabulary, canonical
   analyses, contributor instructions.
-- `HYPOTHESIS_AS_GRAPH.md` — the framework's organizing
+- `docs/HYPOTHESIS_AS_GRAPH.md` — the framework's organizing
   principle. Why a hypothesis IS a causal graph (not a claim),
   the bridge-naming + refutation-cluster + scope-as-extent
   authoring discipline. Pair-read with the Findings section
   above.
-- `ANALYSIS_RECIPE.md` — post-sweep analysis sequence (classify
-  cells → bridges → meta-regression → PC → robustness →
-  per-burst → tautology audit → data-driven intervention
-  selection).
-- `SCOPE_SEARCH.md` — the scope-finding procedure (Phase 1).
-- `LIFECYCLE.md` — corpus + verdict lifecycle from cell-runner
-  to bridge evaluation.
-- `CACHE_ARCHITECTURE.md` / `CACHE_ADDITIVITY.md` /
-  `CACHE_BUILD.md` — two-layer cache: per-corpus stores
-  (column-additive, closure-hash drift) vs per-hypothesis cache
-  (atomically-rebuilt projection). `CORPUS_INTEGRITY.md` —
-  the CI1–CI8 invariants the runner enforces on ingest.
-- `FINDINGS.md` — historical narrative log of empirical findings.
+- `REPRODUCIBILITY.md` — bitwise vs scientific reproducibility
+  under XLA configuration.
+
+Design-doc names cited inline (`CACHE_ADDITIVITY.md`,
+`CORPUS_INTEGRITY.md` CI-invariants, `ANALYSIS_RECIPE.md`, ...)
+are stable historical anchors from the development record, not
+in-tree paths.
