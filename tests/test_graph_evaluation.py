@@ -20,6 +20,7 @@ from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import claim_bridge
 from corroborate.bridge.verdict import Verdict
 from corroborate.graph.causal import (
+    stable_extent_hash,
     BridgeEdge,
     ClusterVerdict,
     Direction,
@@ -286,7 +287,7 @@ def test_cluster_verdict_underpowered_mixed_unevaluated() -> None:
 def test_cluster_verdict_empty_extent_all_empty() -> None:
     """All members admit zero cells (shared empty-frozenset hash)
     → EMPTY_EXTENT, even if their levels suggest otherwise."""
-    empty_hash = hash(frozenset[str]())
+    empty_hash = stable_extent_hash(())
     members = (
         _edge('correlational', empty_hash),
         _edge('refuted', empty_hash),

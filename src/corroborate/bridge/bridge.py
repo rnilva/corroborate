@@ -70,6 +70,7 @@ from corroborate.core.claim import Claim
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import ArmRole, DoEffect
 from corroborate.measurables import Measurable, register
+from corroborate.graph._extent import stable_extent_hash
 
 
 # Direction and Tier are the canonical edge-metadata enums used
@@ -383,13 +384,13 @@ class BridgeEvaluation:
     downstream consumers (extent-cluster grouping, walks) can key
     by edge endpoints without re-loading the Bridge.
 
-    `extent_hash`: hash of the frozenset of cell IDs admitted by
+    `extent_hash`: stable BLAKE2b identity of the set of cell IDs admitted by
     the bridge's effective scope (`bridge.scope ∧ module_scope`).
     Two bridges with the same `(source_name, target_name,
     extent_hash)` admit identical cell-sets on the current cache
     — the extent-based cluster identity proposed at the
     findings-walk layer. Empty-scope bridges share
-    `hash(frozenset())`, honestly reflecting "framework cannot
+    `stable_extent_hash(())`, honestly reflecting "framework cannot
     distinguish these on this cache." Cluster identity is
     therefore corpus-dependent by design (bridge verdicts already
     are; cluster identity inherits the dependency)."""
@@ -810,16 +811,16 @@ def evaluate(
             if df.height > 0 else []
         )
     n_cells_in_scope = len(filtered_cells)
-    # extent_hash: identity of the bridge's admitted cell-set on
-    # the current cache. Frozenset-of-ids hash; two bridges with
-    # identical sets get identical hashes. Empty extent → constant
-    # hash, honestly reflecting "indistinguishable on this cache."
+    # extent_hash: process-portable identity of the bridge's admitted
+    # cell-set on the current cache. Set semantics mean two bridges
+    # with identical admitted IDs get identical values irrespective of
+    # row order. Empty extent maps to one deterministic constant.
     admitted_ids: list[str] = []
     for c in filtered_cells:
         cid = c.get('id')
         if isinstance(cid, str):
             admitted_ids.append(cid)
-    extent_hash = hash(frozenset(admitted_ids))
+    extent_hash = stable_extent_hash(admitted_ids)
     # Run admission gates BEFORE the bridge body. Auto-gates
     # (typed-contract guards, exogenous-source/scope, etc.) are
     # always-on; per-bridge `gates=(...)` are appended. BLOCK-level

@@ -29,6 +29,7 @@ from corroborate.graph.causal import (
     clusters_by_extent,
     evaluated_graph,
 )
+from corroborate.graph._extent import stable_extent_hash
 from corroborate.graph.computation import (
     ComputationGraph,
 )
@@ -51,4 +52,5 @@ __all__ = [
     'cluster_verdict',
     'clusters_by_extent',
     'evaluated_graph',
+    'stable_extent_hash',
 ]

@@ -24,6 +24,7 @@ from corroborate.core.claim import claim
 from corroborate.core.finding import Finding
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.graph.causal import (
+    stable_extent_hash,
     BridgeEdge, ClusterVerdict, Direction, Tier,
     composed_verdict, evaluated_graph,
 )
@@ -183,9 +184,9 @@ def test_composed_verdict_mix_admit_unevaluated_underpowered() -> None:
 
 
 def test_composed_verdict_all_empty_extent_empty_extent() -> None:
-    """All members admit zero cells (extent_hash == hash(frozenset()))
+    """All members admit zero cells (extent_hash == stable_extent_hash(()))
     → EMPTY_EXTENT. The corpus can't distinguish them."""
-    empty = hash(frozenset[str]())
+    empty = stable_extent_hash(())
     g = _evaluated_with(
         (_bridge_a, _bridge_b),
         {

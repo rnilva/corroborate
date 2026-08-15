@@ -625,9 +625,14 @@ def discover_adjacency(
                     z_matrix = np.column_stack(
                         [columns[z] for z in z_subset],
                     )
-                    _, p = partial_spearman_rho_multi(
-                        columns[x], columns[y], z_matrix,
-                    )
+                    if strata_arr is not None:
+                        _, p = stratified_partial_spearman_rho_multi(
+                            columns[x], columns[y], z_matrix, strata_arr,
+                        )
+                    else:
+                        _, p = partial_spearman_rho_multi(
+                            columns[x], columns[y], z_matrix,
+                        )
                 if math.isnan(p):
                     continue
                 if p >= alpha:
