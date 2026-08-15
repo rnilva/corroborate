@@ -1,6 +1,6 @@
 """Graph — typed graph primitives.
 
-Five sub-modules, each addressable via the qualified path
+Six sub-modules, each addressable via the qualified path
 (`corroborate.graph.X.Y`):
 
 - `graph.graph` — generic `Graph[N, M]` + `Edge[N, M]`.
@@ -11,6 +11,8 @@ Five sub-modules, each addressable via the qualified path
 - `graph.correlation` — measurable cross-correlation graph +
   diff machinery.
 - `graph.discovery` — PC-style adjacency discovery + orientation.
+- `graph.render` — deterministic DOT/SVG renderers for computation and
+  evaluated evidence graphs.
 
 The package surface re-exports only the most commonly-consumed
 types. Helpers, internal statistical primitives, diff/PC
