@@ -43,6 +43,12 @@ dowhy = [
 # enforced by package boundary, not just by author discipline.
 members = ["src/corroborate_rl"]
 
+[tool.uv.sources]
+# Resolve the substrate from the workspace checkout, not PyPI (it is
+# unpublished). Pairs with the `corroborate-rl` entry in the `dev`
+# dependency group below.
+corroborate-rl = { workspace = true }
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -52,6 +58,23 @@ packages = ["src/corroborate"]
 
 [dependency-groups]
 dev = [
+    # The substrate is a DEV/REPRO dependency, never a package one.
+    # `experiments/findings/**` and `papers/**/scripts/**` import
+    # `corroborate_rl.dqn.measurables` to populate the measurable
+    # registry, so `uv run corroborate hypothesis ...` and
+    # `papers/g099_mediation/run_all.sh` need it importable. Without
+    # it `corroborate_rl` resolves to the bare `src/corroborate_rl/`
+    # directory as a namespace package (src/ is on sys.path via the
+    # editable install) and every such import dies with
+    # `No module named 'corroborate_rl.dqn'`.
+    #
+    # Declaring it HERE rather than in `[project.dependencies]` keeps
+    # the substrate-neutrality claim above literally true: dependency
+    # groups are local tooling and never appear in the built wheel's
+    # metadata, so the published `corroborate` still does not depend
+    # on its substrate. uv installs this group by default, so the
+    # documented commands work from a clean checkout.
+    "corroborate-rl",
     "pytest>=8",
     "basedpyright>=1.18",
     "mutmut>=3.5.0",
