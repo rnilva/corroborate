@@ -1,6 +1,6 @@
 """Tests for `stratified_arm_diff_pooled`'s heterogeneity-flagged
 verdict (added 2026-05-12 as the discoverable surface for the
-scope-cluster pattern in HYPOTHESIS_AS_GRAPH.md §3b).
+scope-cluster pattern in docs/HYPOTHESIS_AS_GRAPH.md §3b).
 
 Replaces the prior `test_random_effects_pool.py`. The earlier
 primitive paired by seed via `per_env_paired_g_panel`, inheriting

@@ -5,7 +5,7 @@ the `Δ_predictor → Δ_target` slope?
 # this fixture. Kept because (a) the method is RL-substrate-safe
 # (independent-samples per stratum, no seed pairing) and (b) it
 # answers a structurally distinct question (moderation, not
-# mediation) that HYPOTHESIS_AS_GRAPH.md §3b's scope-cluster
+# mediation) that docs/HYPOTHESIS_AS_GRAPH.md §3b's scope-cluster
 # pattern naturally invokes. If no consumer adopts it by the
 # revisit date, demote to DELETE.
 

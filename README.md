@@ -608,7 +608,7 @@ On `main`:
 
 - `CLAUDE.md` — typing discipline, vocabulary, canonical
   analyses, contributor instructions.
-- `HYPOTHESIS_AS_GRAPH.md` — the framework's organizing
+- `docs/HYPOTHESIS_AS_GRAPH.md` — the framework's organizing
   principle. Why a hypothesis IS a causal graph (not a claim),
   the bridge-naming + refutation-cluster + scope-as-extent
   authoring discipline. Pair-read with the Findings section

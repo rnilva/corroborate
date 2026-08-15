@@ -23,7 +23,7 @@ Cluster-shaped causal claims (a refutation triple, a sibling
 mean/median pair) live at the graph level — queried by extent
 identity `(source, target, extent_hash)` over the post-evaluated
 graph, NOT decided by a central aggregator. See
-`HYPOTHESIS_AS_GRAPH.md` for the authoring discipline this
+`docs/HYPOTHESIS_AS_GRAPH.md` for the authoring discipline this
 entails (bridge naming, refutation clusters via shared scope
 predicates, scope-as-extent).
 
@@ -631,7 +631,7 @@ different verdicts — the framework refuses to collapse them.
 | `stratum_delta_link_dowhy` | **canonical RL-substrate link**: per-(env, burst) Δ via independent-samples seed pooling per arm, DoWhy backdoor / placebo / RCC on the panel. Mech→outcome inference goes through this. |
 | `meta_regression_paired_g` | per-stratum Δ regressed on covariates |
 | `meta_regression_per_burst` | per-(stratum, burst) panel meta-regression |
-| `stratified_arm_diff_pooled` | per-stratum **independent-samples** Cohen's d → DL random-effects pool with heterogeneity-flagged verdict (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT). Pair with `meta_regression` sibling on the same scope for the scope-cluster pattern (HYPOTHESIS_AS_GRAPH.md §3b). Use **this** for cross-env / cross-config pooling — NOT `paired_g_pooled`, which pseudo-replicates by seed (see its module docstring). |
+| `stratified_arm_diff_pooled` | per-stratum **independent-samples** Cohen's d → DL random-effects pool with heterogeneity-flagged verdict (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT). Pair with `meta_regression` sibling on the same scope for the scope-cluster pattern (docs/HYPOTHESIS_AS_GRAPH.md §3b). Use **this** for cross-env / cross-config pooling — NOT `paired_g_pooled`, which pseudo-replicates by seed (see its module docstring). |
 | `stratum_effect_panel_per_burst` | per-(env, burst) **independent-samples** Cohen's d panel. Walks per-burst NDArray source (same shape as `paired_g_per_burst`) but pools treatment / baseline seeds independently within each (env, burst) → Cohen's d via simple-mean-variance form. Canonical migration target for per-burst phase-consistency bridges that can't use `paired_g_per_burst` under the RL substrate seed-pairing rule. |
 | `mundlak_paired_g_per_burst` | **synthetic SCM tests only** — paired form. Off-limits in RL substrate. |
 | `partial_spearman` | **Canonical mediation primitive — unified JCI (partial-)Spearman**. Subsumes five legacy variants (`stratified_spearman` / `stratified_partial_spearman` / `stratified_partial_spearman_multi` / `per_burst_jci_spearman` / `per_burst_partial_jci_spearman`). Single result type `PartialSpearmanResult`. Granularity detected from input types: `x/y: str` → per-cell; `x/y: Measurable[..., NDArray]` → per-burst (one observation per (cell, burst) — preserves phase structure). `conditioning: tuple[..., ...] = ()` — empty for marginal, single entry for closed-form first-order partial, k entries for multi-Z OLS-residual partial. Internal dispatch picks the right `graph.discovery` primitive per k. |
@@ -658,7 +658,7 @@ The above primitives ask **mediation** questions ("does the
 intervention work THROUGH X to affect Y?"). A structurally
 distinct question is **moderation**: "does the intervention
 CHANGE the strength or direction of the X→Y relationship?"
-HYPOTHESIS_AS_GRAPH.md §3b's scope-cluster pattern is
+docs/HYPOTHESIS_AS_GRAPH.md §3b's scope-cluster pattern is
 moderation-shaped (the meta-regression coefficient on an env
 feature IS a moderation test: does the effect size differ by
 context?). The mediation answer comes from

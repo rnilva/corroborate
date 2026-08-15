@@ -2,7 +2,7 @@
 cluster-identity queries.
 
 Covers the framework primitives promoted from
-`experiments/findings/ddqn/walks.py` per HYPOTHESIS_AS_GRAPH.md
+`experiments/findings/ddqn/walks.py` per docs/HYPOTHESIS_AS_GRAPH.md
 (commit landing the principle wiring):
 
 - `evaluated_graph(bridges, post_eval)` — stamps each edge's

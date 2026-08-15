@@ -477,7 +477,7 @@ def evaluated_graph(
     Bridges absent from `post_eval` keep authored defaults
     (`evidentiary_level='unevaluated'`, `extent_hash=0`).
 
-    Per HYPOTHESIS_AS_GRAPH.md: the resulting graph IS the
+    Per docs/HYPOTHESIS_AS_GRAPH.md: the resulting graph IS the
     hypothesis under the principle's definition
     `Hypothesis = (V, E, evidence(E))`. Cluster-shaped queries
     on this graph use `clusters_by_extent` + `cluster_verdict`."""
