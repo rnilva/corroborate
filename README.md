@@ -1,5 +1,12 @@
 # corroborate
 
+> **RLC paper artifact**: the frozen DDQN study that accompanies
+> the paper — hypothesis packages, findings, data manifests,
+> cached verdicts, figure pipelines, and the internal design
+> docs — lives on the
+> [**`submission` branch**](../../tree/submission).
+> `main` is the clean framework.
+
 Find the *scope* of a mechanism claim, then verify the *causal
 chain* that explains it.
 
