@@ -5,6 +5,9 @@ description = "Framework for executable scientific claims — intervention study
 readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }
+authors = [
+    { name = "Jean Seong Bjorn Choe", email = "rnilva849@gmail.com" },
+]
 dependencies = [
     "polars>=1.0",
     "numpy>=1.26",
@@ -282,3 +285,6 @@ tests_dir = [
 # resolves modules by file path, sidestepping the package-name
 # collision.
 pytest_add_cli_args = ["--import-mode=importlib"]
+
+[project.urls]
+Repository = "https://github.com/rnilva/corroborate"
