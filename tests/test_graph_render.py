@@ -1,19 +1,23 @@
 """Contract tests for generic evidence/computation graph rendering."""
 from __future__ import annotations
 
+from pathlib import Path
 from types import MappingProxyType
+
+import pytest
 
 from corroborate.bridge.bridge import BridgeEvaluation, claim_bridge
 from corroborate.bridge.verdict import Verdict
 from corroborate.core.claim import claim, trace_context
 from corroborate.core.intervention import DoEffect, Intervention
-from corroborate.graph.causal import ClusterVerdict, Direction, Tier
+from corroborate.graph.causal import Direction, Tier
 from corroborate.graph.computation import build_computation_graph
 from corroborate.graph.render import (
     computation_graph_to_dot,
     computation_graph_to_svg,
     evidence_graph_to_dot,
     evidence_graph_to_svg,
+    render_evidence,
 )
 
 
@@ -62,7 +66,10 @@ def _evaluation(bridge_name: str, verdict: Verdict) -> BridgeEvaluation:
     )
 
 
-def test_evidence_renderer_filters_by_bridge_identity() -> None:
+def test_evidence_renderer_selects_by_bridge_subset() -> None:
+    """`bridges` IS the selection surface: passing a Finding-style
+    subset draws only its edges, even when the run's evaluation
+    mapping carries unrelated parallel edges on the same endpoints."""
     evaluations = {
         _visitation_edge.name: _evaluation(
             _visitation_edge.name,
@@ -74,9 +81,8 @@ def test_evidence_renderer_filters_by_bridge_identity() -> None:
         ),
     }
     dot = evidence_graph_to_dot(
-        (_visitation_edge, _parallel_edge_not_in_finding),
+        (_visitation_edge,),
         evaluations,
-        bridge_names=(_visitation_edge.name,),
         edge_labels={_visitation_edge.name: 'changes exploration breadth'},
         edge_summaries={_visitation_edge.name: 'g = 0.31; n = 6'},
     )
@@ -102,13 +108,14 @@ def test_evidence_svg_is_standalone_and_exact() -> None:
             'state_visitation_breadth': 'early visitation breadth',
         },
         title='Exploration claim',
-        aggregate_verdict=ClusterVerdict.UNDERPOWERED,
     )
     assert svg.startswith('<?xml')
     assert '<svg ' in svg
     assert 'do(entropy bonus)' in svg
     assert 'early visitation breadth' in svg
     assert 'POWER INSUFFICIENT' in svg
+    # The badge is framework-derived, not caller-supplied: a single
+    # POWER_INSUFFICIENT bridge composes to UNDERPOWERED.
     assert 'UNDERPOWERED' in svg
     assert 'stroke-dasharray="9 7"' in svg
 
@@ -151,17 +158,52 @@ def test_renderers_are_deterministic() -> None:
     )
 
 
-def test_unknown_finding_bridge_fails_loudly() -> None:
-    try:
-        evidence_graph_to_dot(
-            (_visitation_edge,),
-            {},
-            bridge_names=('missing-bridge',),
+def test_render_evidence_one_call_defaults_everything(
+    tmp_path: Path,
+) -> None:
+    """The one-call entry consumes exactly what a run produces and
+    defaults every display decision from it: edge label from the
+    bridge name, verdict styling from the evaluation, badge from the
+    framework's composed verdict, format from the suffix."""
+    evaluations = {
+        _visitation_edge.name: _evaluation(
+            _visitation_edge.name, Verdict.HELD,
+        ),
+    }
+    out = tmp_path / 'evidence.svg'
+    written = render_evidence(
+        (_visitation_edge,), evaluations, out,
+        title='experiments.findings.demo',
+    )
+    assert written == out
+    svg = out.read_text(encoding='utf-8')
+    assert svg.startswith('<?xml')
+    # Edge label defaulted from the bridge name (underscores → spaces).
+    assert 'visitation edge' in svg
+    # Verdict styling from the evaluation.
+    assert 'HELD' in svg
+    # Aggregate badge derived by the framework: one HELD bridge with a
+    # non-empty extent composes to SUPPORTED.
+    assert 'SUPPORTED' in svg
+    # Title from the caller (the CLI passes the hypothesis module name).
+    assert 'experiments.findings.demo' in svg
+
+    dot_out = tmp_path / 'evidence.dot'
+    _ = render_evidence((_visitation_edge,), evaluations, dot_out)
+    dot = dot_out.read_text(encoding='utf-8')
+    assert dot.startswith('digraph corroborate')
+    assert 'HELD' in dot
+
+
+def test_render_evidence_rejects_unrenderable_input(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match='nothing renderable'):
+        _ = render_evidence((), {}, tmp_path / 'empty.svg')
+    with pytest.raises(ValueError, match='unsupported render suffix'):
+        _ = render_evidence(
+            (_visitation_edge,), {}, tmp_path / 'evidence.png',
         )
-    except KeyError as error:
-        assert 'missing-bridge' in str(error)
-    else:  # pragma: no cover - defensive assertion
-        raise AssertionError('unknown bridge name should fail')
 
 
 @claim_bridge(

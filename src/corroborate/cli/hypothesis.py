@@ -129,6 +129,15 @@ def add_args(parser: argparse.ArgumentParser) -> None:
              'experiments/findings/<short>.run.json',
     )
     parser.add_argument(
+        '--render', type=Path, default=None, metavar='OUT.svg|OUT.dot',
+        help='after the run, draw the evaluated evidence graph to '
+             'OUT — format from the suffix (.svg standalone vector, '
+             '.dot Graphviz source). Edge labels, verdict styling, '
+             'and the aggregate-verdict badge all default from the '
+             'run itself; the title is the hypothesis module name. '
+             'One command, one figure.',
+    )
+    parser.add_argument(
         '-k', '--filter', dest='bridge_filter', type=str, default=None,
         help='substring match against bridge names (pytest\'s -k '
              'shape). Run only bridges whose name contains the '
@@ -420,6 +429,53 @@ def dispatch(args: argparse.Namespace) -> int:
         force_recompute=force_names,
     )
     _print_verdicts(results, bridges, findings)
+
+    render_out = cast(Path | None, args.render)
+    if render_out is not None:
+        return _render_evidence_graph(
+            module_name=module_name, bridges=bridges,
+            results=results, out=render_out,
+        )
+    return 0
+
+
+def _render_evidence_graph(
+    *,
+    module_name: str,
+    bridges: tuple[Bridge, ...],
+    results: dict[str, BridgeEvaluation],
+    out: Path,
+) -> int:
+    """`--render` worker: draw the run's evidence graph to `out`.
+
+    Everything defaults from the run itself; the title is the
+    hypothesis module name. Fails with a clean stderr message (exit
+    1) when the run produced nothing renderable — no bridges, or no
+    bridge evaluated (e.g. a `-k` filter that matched nothing)."""
+    import sys
+    from corroborate.graph.render import render_evidence
+    if not bridges:
+        print(
+            'render: nothing to draw — the hypothesis module '
+            'declares no BRIDGES.',
+            file=sys.stderr,
+        )
+        return 1
+    if not results:
+        print(
+            'render: nothing to draw — the run evaluated no '
+            'bridges (did a -k filter match nothing?).',
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        written = render_evidence(
+            bridges, results, out, title=module_name,
+        )
+    except ValueError as e:
+        print(f'render: {e}', file=sys.stderr)
+        return 1
+    print(f'render: wrote {written}')
     return 0
 
 

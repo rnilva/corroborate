@@ -12,7 +12,11 @@ Six sub-modules, each addressable via the qualified path
   diff machinery.
 - `graph.discovery` — PC-style adjacency discovery + orientation.
 - `graph.render` — deterministic DOT/SVG renderers for computation and
-  evaluated evidence graphs.
+  evaluated evidence graphs; `render_evidence` is the one-call entry
+  that draws a hypothesis run's evidence graph with every display
+  decision defaulted from the run. (Not re-exported here:
+  `graph.render` imports the bridge layer, which itself imports this
+  package — the qualified path avoids the cycle.)
 
 The package surface re-exports only the most commonly-consumed
 types. Helpers, internal statistical primitives, diff/PC

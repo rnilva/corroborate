@@ -11,6 +11,12 @@ This module deliberately keeps those surfaces separate.  Both can be
 rendered as DOT or as dependency-free SVG.  The SVG layout is intended
 for compact findings and intervention fragments rather than arbitrary
 large network visualisation.
+
+:func:`render_evidence` is the one-call entry: it consumes exactly what
+a hypothesis run produces (the module's bridges plus the run's verdict
+mapping) and defaults every display decision from the run itself.  The
+``evidence_graph_to_*`` / ``computation_graph_to_*`` functions remain
+the fine-control surface for publication figures.
 """
 from __future__ import annotations
 
@@ -19,12 +25,20 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from html import escape as xml_escape
+from pathlib import Path
 from typing import Literal
 
 from corroborate.bridge.bridge import Bridge, BridgeEvaluation
 from corroborate.bridge.verdict import Verdict
 from corroborate.core.intervention import DoEffect
-from corroborate.graph.causal import ClusterVerdict, Direction, Tier
+from corroborate.graph.causal import (
+    ClusterVerdict,
+    Direction,
+    PostEvalEntry,
+    Tier,
+    composed_verdict,
+    evaluated_graph,
+)
 from corroborate.graph.computation import ComputationGraph
 
 
@@ -105,16 +119,40 @@ def _verdict_label(verdict: Verdict | None) -> str:
     return verdict.value.replace('_', ' ').upper()
 
 
+def _aggregate_verdict(
+    bridge_tuple: tuple[Bridge, ...],
+    evaluations: Mapping[str, BridgeEvaluation],
+) -> ClusterVerdict | None:
+    """Compose the rendered bridge set's verdict from its inputs.
+
+    The badge is framework-derived, never caller-supplied: the same
+    ``composed_verdict`` a Finding walk uses, applied to exactly the
+    bridges being drawn.  Rendering a subset (a Finding's ``BRIDGES``)
+    therefore shows that subset's composed verdict, and an unevaluated
+    graph honestly shows UNDERPOWERED."""
+    if not bridge_tuple:
+        return None
+    post_eval = {
+        name: PostEvalEntry(
+            verdict=evaluation.verdict,
+            extent_hash=evaluation.extent_hash,
+        )
+        for name, evaluation in evaluations.items()
+    }
+    return composed_verdict(
+        evaluated_graph(bridge_tuple, post_eval),
+        bridges=bridge_tuple,
+    )
+
+
 def _evidence_spec(
     bridges: Iterable[Bridge],
     evaluations: Mapping[str, BridgeEvaluation],
     *,
-    bridge_names: Iterable[str] | None,
     node_labels: Mapping[str, str] | None,
     edge_labels: Mapping[str, str] | None,
     edge_summaries: Mapping[str, str] | None,
     title: str | None,
-    aggregate_verdict: ClusterVerdict | None,
 ) -> _RenderSpec:
     bridge_tuple = tuple(bridges)
     by_name: dict[str, Bridge] = {}
@@ -126,19 +164,7 @@ def _evidence_spec(
             )
         by_name[bridge.name] = bridge
 
-    if bridge_names is None:
-        selected = bridge_tuple
-    else:
-        requested = tuple(bridge_names)
-        unknown = sorted(set(requested) - set(by_name))
-        if unknown:
-            raise KeyError(f'unknown bridge names: {unknown!r}')
-        requested_set = frozenset(requested)
-        selected = tuple(
-            bridge for bridge in bridge_tuple
-            if bridge.name in requested_set
-        )
-
+    selected = bridge_tuple
     labels = node_labels or {}
     display_edge_labels = edge_labels or {}
     summaries = edge_summaries or {}
@@ -203,7 +229,7 @@ def _evidence_spec(
             key=lambda edge: (edge.source, edge.target, edge.name),
         )),
         title=title,
-        aggregate_verdict=aggregate_verdict,
+        aggregate_verdict=_aggregate_verdict(bridge_tuple, evaluations),
     )
 
 
@@ -311,32 +337,32 @@ def evidence_graph_to_dot(
     bridges: Iterable[Bridge],
     evaluations: Mapping[str, BridgeEvaluation],
     *,
-    bridge_names: Iterable[str] | None = None,
     node_labels: Mapping[str, str] | None = None,
     edge_labels: Mapping[str, str] | None = None,
     edge_summaries: Mapping[str, str] | None = None,
     title: str | None = None,
-    aggregate_verdict: ClusterVerdict | None = None,
 ) -> str:
     """Render exact evaluated bridge edges as deterministic DOT.
 
-    ``bridge_names`` filters by bridge identity, not merely by graph
-    endpoints.  This matters for Findings in a multigraph: unrelated
-    parallel edges sharing the same source and target must not leak into
-    the visual. ``edge_labels`` can replace long Python bridge identifiers
-    with concise public copy. ``edge_summaries`` is an explicit display
-    sidecar for a headline estimate; the graph model itself intentionally
-    does not guess which field of an arbitrary analysis result is scientific.
+    ``bridges`` is the selection surface: pass a subset (a Finding's
+    ``BRIDGES``) to draw a subgraph — no separate name filter exists.
+    Verdict styling and the aggregate-verdict badge are derived from
+    ``evaluations``, never caller-supplied.  The surviving display
+    sidecars each carry information the run does not possess:
+    ``node_labels`` replaces code-facing measurable keys with public
+    copy; ``edge_labels`` replaces long Python bridge identifiers with
+    concise public copy; ``edge_summaries`` supplies a per-bridge
+    headline estimate, because the graph model intentionally does not
+    guess which field of an arbitrary analysis result is scientific;
+    ``title`` is a custom caption overriding the run-derived default.
     """
     return _spec_to_dot(_evidence_spec(
         bridges,
         evaluations,
-        bridge_names=bridge_names,
         node_labels=node_labels,
         edge_labels=edge_labels,
         edge_summaries=edge_summaries,
         title=title,
-        aggregate_verdict=aggregate_verdict,
     ))
 
 
@@ -599,23 +625,22 @@ def evidence_graph_to_svg(
     bridges: Iterable[Bridge],
     evaluations: Mapping[str, BridgeEvaluation],
     *,
-    bridge_names: Iterable[str] | None = None,
     node_labels: Mapping[str, str] | None = None,
     edge_labels: Mapping[str, str] | None = None,
     edge_summaries: Mapping[str, str] | None = None,
     title: str | None = None,
-    aggregate_verdict: ClusterVerdict | None = None,
 ) -> str:
-    """Render exact evaluated bridge edges as standalone vector SVG."""
+    """Render exact evaluated bridge edges as standalone vector SVG.
+
+    Same surface as :func:`evidence_graph_to_dot` — see its docstring
+    for the per-parameter justifications."""
     return _spec_to_svg(_evidence_spec(
         bridges,
         evaluations,
-        bridge_names=bridge_names,
         node_labels=node_labels,
         edge_labels=edge_labels,
         edge_summaries=edge_summaries,
         title=title,
-        aggregate_verdict=aggregate_verdict,
     ))
 
 
@@ -633,9 +658,65 @@ def computation_graph_to_svg(
     ))
 
 
+_RENDER_SUFFIXES: Mapping[str, Literal['svg', 'dot']] = {
+    '.svg': 'svg',
+    '.dot': 'dot',
+}
+
+
+def render_evidence(
+    bridges: Iterable[Bridge],
+    evaluations: Mapping[str, BridgeEvaluation],
+    out: Path,
+    *,
+    title: str | None = None,
+) -> Path:
+    """One-call evidence render from exactly what a hypothesis run holds.
+
+    ``bridges`` (the module's ``BRIDGES``) and ``evaluations`` (the
+    verdict mapping ``corroborate.runner.run`` returns) are the whole
+    input; every display decision defaults from the run itself — edge
+    labels from bridge names, verdict styling from the evaluations,
+    the aggregate-verdict badge from the framework's own
+    ``composed_verdict``.  The output format follows the suffix of
+    ``out`` (``.svg`` or ``.dot``); the rendered file is written there
+    and the path returned.
+
+    ``title`` is the only optional knob: the CLI passes the hypothesis
+    module name, library callers may caption differently or omit it.
+    For per-node/per-edge display copy, reach for the fine-control
+    functions (:func:`evidence_graph_to_svg` and siblings) instead.
+    """
+    bridge_tuple = tuple(bridges)
+    if not bridge_tuple:
+        raise ValueError(
+            'nothing renderable: the bridge set is empty — the '
+            'hypothesis module declares no BRIDGES (or an empty '
+            'subset was passed)',
+        )
+    fmt = _RENDER_SUFFIXES.get(out.suffix.lower())
+    if fmt is None:
+        raise ValueError(
+            f'unsupported render suffix {out.suffix!r} on {out} — '
+            f'use .svg (standalone vector) or .dot (Graphviz source)',
+        )
+    if fmt == 'svg':
+        rendered = evidence_graph_to_svg(
+            bridge_tuple, evaluations, title=title,
+        )
+    else:
+        rendered = evidence_graph_to_dot(
+            bridge_tuple, evaluations, title=title,
+        )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    _ = out.write_text(rendered, encoding='utf-8')
+    return out
+
+
 __all__ = [
     'computation_graph_to_dot',
     'computation_graph_to_svg',
     'evidence_graph_to_dot',
     'evidence_graph_to_svg',
+    'render_evidence',
 ]
