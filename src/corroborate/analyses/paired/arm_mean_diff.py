@@ -212,7 +212,12 @@ def arm_mean_diff(
     # tells the bridge author whether seed-pairing would gain power
     # over the indep-samples Welch's used here. CI excluding 0
     # toward + → paired_g would be more powerful.
-    paired_keys = sorted(set(treatment_paired) & set(baseline_paired))
+    # Empty pair_by is the explicit independent-arm contract: do not create
+    # the single synthetic key ``()`` and report it as one matched pair.
+    paired_keys = (
+        sorted(set(treatment_paired) & set(baseline_paired))
+        if pair_by else []
+    )
     n_paired = len(paired_keys)
     if n_paired >= 5:
         paired_t = [
