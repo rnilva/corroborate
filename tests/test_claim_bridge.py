@@ -581,3 +581,31 @@ def test_module_scope_attribute_absent_means_none() -> None:
     out = evaluate(treatment_helps_outcome, df, module_scope=module_scope)
     assert out.n_cells_in_scope == 60
     assert out.verdict == Verdict.HELD
+
+
+def test_analysis_wrapper_is_directly_callable() -> None:
+    """`Analysis.__call__` delegates to `fn` with kwargs passed
+    through UNFILTERED — the exploration / test-fixture spelling.
+    Contrast `run_for`, which filters `bridge_params` down to the
+    analysis signature; a direct call surfaces a mismatched kwarg
+    as a TypeError instead of silently dropping it.
+
+    Closed form: mean of {1, 2, 3, 4} scaled by 10 = 25.0 exactly
+    (exact rational arithmetic — no sampling bound applies)."""
+    from corroborate.bridge.analysis import analysis
+
+    @analysis
+    def _scaled_mean(
+        cells: list[Mapping[str, object]],
+        *,
+        scale: float = 1.0,
+    ) -> float:
+        vals = [float(cast(float, c['v'])) for c in cells]
+        return scale * sum(vals) / len(vals)
+
+    cells: list[Mapping[str, object]] = [
+        {'v': 1.0}, {'v': 2.0}, {'v': 3.0}, {'v': 4.0},
+    ]
+    assert _scaled_mean(cells, scale=10.0) == 25.0
+    with pytest.raises(TypeError):
+        _scaled_mean(cells, not_a_param=1)

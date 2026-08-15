@@ -71,6 +71,18 @@ class Analysis[R: Mapping[str, object], O]:
     name: str
     reads: tuple[str, ...] = field(default=())
 
+    def __call__(self, cells: Iterable[R], /, **params: object) -> O:
+        """Run the analysis directly on a corpus.
+
+        Bridges never need this — the runner resolves analyses by
+        parameter name and injects the typed result (`run_for`).
+        It exists because exploration code and test fixtures
+        otherwise fail with ``TypeError: 'Analysis' object is not
+        callable``, which sends the reader looking for `.fn`.
+        Delegating keeps one code path; unlike `run_for`, kwargs
+        are passed through unfiltered — the caller owns them."""
+        return self.fn(cells, **params)
+
 
 _REGISTRY: Registry[Analysis[Mapping[str, object], object]] = Registry()
 

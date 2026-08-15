@@ -1789,3 +1789,46 @@ def test_per_env_mediator_pc_smoke_finds_outcome_neighbours() -> None:
         f'{outcome}-neighbour, got {len(envs_with_neighbour)}: '
         f'{envs_with_neighbour}'
     )
+
+
+def test_discovered_adjacency_container_protocol() -> None:
+    """`DiscoveredAdjacency` exposes its skeleton edges through the
+    container protocol: `iter` / `len` / `in` mirror `.edges`, and
+    `__contains__` coerces any pair-like collection of names to
+    the canonical frozenset form. Pin the coercion + rejection
+    logic (that's the transformation the dunders add):
+
+    - a bare string is REJECTED, never iterated character-wise
+      (`'xy' in adj` must not mean `{'x', 'y'} in adj`);
+    - self-loops (repeated members) and non-string members can
+      never name an edge → False, not a raise;
+    - non-collections answer False (membership, not TypeError).
+
+    Framework-produced instance: structural r = 0.7/sqrt(0.49+0.25)
+    ≈ 0.81 at n = 200 → p ≪ α = 0.05, so PC keeps exactly the
+    {x, y} edge (same construction the boundary-alpha test pins)."""
+    from corroborate.graph.discovery import discover_adjacency
+    rng = np.random.default_rng(0)
+    n = 200
+    x = rng.standard_normal(n)
+    y = 0.7 * x + rng.standard_normal(n) * 0.5
+    df = _df_from_columns(x=x, y=y)
+    adj = discover_adjacency(
+        df, variables=['x', 'y'],
+        alpha=0.05, max_conditioning=0,
+    )
+    # iter / len mirror `.edges` exactly.
+    assert set(adj) == adj.edges == {frozenset({'x', 'y'})}
+    assert len(adj) == len(adj.edges) == 1
+    # Membership coerces any pair-like collection, unordered.
+    assert frozenset({'x', 'y'}) in adj
+    assert {'x', 'y'} in adj
+    assert ('x', 'y') in adj
+    assert ('y', 'x') in adj
+    assert ['x', 'y'] in adj
+    # Rejections answer False — never raise, never char-iterate.
+    assert 'xy' not in adj          # string is not a pair
+    assert ('x', 'x') not in adj    # self-loop is not an edge
+    assert ('x', 1) not in adj      # non-string member
+    assert 3.14 not in adj          # non-collection
+    assert ('x', 'z') not in adj    # not a discovered edge

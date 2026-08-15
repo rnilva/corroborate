@@ -31,7 +31,7 @@ heterogeneity without ordinal-encoding the env.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from itertools import combinations
@@ -479,6 +479,25 @@ class DiscoveredAdjacency:
     alpha: float
     max_conditioning: int
     stratify_by: str | None
+
+    def __iter__(self) -> Iterator[frozenset[str]]:
+        """Iterate the surviving skeleton edges (frozenset pairs)."""
+        return iter(self.edges)
+
+    def __len__(self) -> int:
+        return len(self.edges)
+
+    def __contains__(self, edge: object) -> bool:
+        """``{'a', 'b'} in adjacency`` — skeleton-edge membership
+        for any pair-like collection of variable names (frozenset /
+        set / tuple / list). A bare string is rejected rather than
+        iterated character-wise; collections with non-string or
+        repeated members can never name an edge, so they answer
+        False instead of raising."""
+        if isinstance(edge, str) or not isinstance(edge, Collection):
+            return False
+        members = frozenset(m for m in edge if isinstance(m, str))
+        return len(members) == len(edge) and members in self.edges
 
 
 @dataclass(frozen=True, slots=True)
