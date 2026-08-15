@@ -96,7 +96,6 @@ from experiments.findings.ddqn_three_conditions import (
     finding_ddqn_reduces_policy_churn,
     finding_gamma_amplification_anchor_gated,
     finding_gamma_jens_via_q_self_reference,
-    finding_hasselt_chain_at_fr_g999_unshaped,
     finding_temporal_ordering_at_fr_g999,
     finding_jens_does_not_mediate_outcome_at_fr_g999_mlp,
     finding_jens_reduction_factors,
@@ -200,7 +199,6 @@ BRIDGES = (
 
 
 FINDINGS = (
-    finding_hasselt_chain_at_fr_g999_unshaped,
     finding_temporal_ordering_at_fr_g999,
     finding_jens_reduction_factors,
     finding_shaping_decouples,

@@ -14,8 +14,9 @@ dist/
 .venv/
 venv/
 
-# uv
-uv.lock
+# uv — the lockfile IS committed on this branch: a paper artifact
+# pins its dependency universe (verdicts are estimator-version-
+# sensitive; see the drift sentinels).
 
 # Test / coverage
 .pytest_cache/
