@@ -1,4 +1,4 @@
-# Framework measurable-ingestion pitfalls (handover doc)
+# Framework measurable-ingestion pitfalls
 
 Compiled from hitting these during 2026-05-28 expansion of
 `hasselt_clean.REQUIRED_MEASURABLES`. Each section is a distinct

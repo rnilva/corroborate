@@ -4,7 +4,7 @@
 # combined corpus has the canonical n=30 per arm.
 set -euo pipefail
 
-cd /workspace/corroborate/experiments/configs
+cd "$(dirname "$0")"
 
 for base in acrobot cartpole fr metamaze mountaincar lunarlander; do
     src="${base}_g099_canonical_n_eps20_ckpt.yaml"

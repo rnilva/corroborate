@@ -871,7 +871,7 @@ mutations as wrap-broken, not real survivors.
 ## Acceptance criteria
 
 `v0` is acceptance-tested by reproducing the DDQN study in
-`/workspace/poc_v10/PAPER_NOTES.md` §3 — mechanism HELD ↛ outcome
+this branch — mechanism HELD ↛ outcome
 HELD ↛ link HELD across 17 envs, with the methodological
 contribution living in keeping these three verdicts separate.
 

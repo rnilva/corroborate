@@ -65,7 +65,3 @@ mutants/
 # The committed reports themselves live at experiments/findings/<short>.run.json
 # and ARE tracked.
 *.run.json.tmp
-branch_structure.json
-temp_auto_push.bat
-temp_interactive_push.bat
-.gitignore

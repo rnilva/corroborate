@@ -112,7 +112,7 @@ synthesis`'s confound table — making it explicit per env):
 ## Methodological lesson
 
 Read the existing memory before launching new analyses. Almost
-every "gotcha" in this session was already documented — the
+every "gotcha" encountered here was already documented — the
 multi-mediator dead end, the per-env mech-vs-link decomposition,
 the Acrobot dormancy, the |A|/r_min/polarity discriminator
 search dead-ends. The corroborate framework is *designed* to

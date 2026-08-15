@@ -179,7 +179,7 @@ Pick this up in a fresh worktree (`git worktree add ../substrate-pipeline main`)
 - The cache (`experiments/data/cache/*.parquet`) — F3 might force re-ingest if it detects historical silent-NaN cells. Test on a non-canonical cache first.
 - The DDQN study results (`experiments/findings/ddqn/*`, `experiments/findings/hasselt_clean/*`) — F2 would break every bridge that names `eval_*_mean`. Plan: deferred until after publication.
 
-The LL 2M corpus at `experiments/data/lunarlander_2M_30seeds_cpu/` is a useful test case for F1: it's currently in `COMPLETE_SUB_CORPORA_ONLY` state (parent.runs.parquet exists, no parent.traces.parquet, no sentinel as of this session's cleanup, sub-corpora's `_remote.json` cloud archives present, traces evicted locally).
+The LL 2M corpus at `experiments/data/lunarlander_2M_30seeds_cpu/` is a useful test case for F1: it's currently in `COMPLETE_SUB_CORPORA_ONLY` state (parent.runs.parquet exists, no parent.traces.parquet, no sentinel after cleanup, sub-corpora's `_remote.json` cloud archives present, traces evicted locally).
 
 ## Memory cross-references
 
