@@ -181,7 +181,26 @@ frozen dataclasses with `@property` for derived access.
 If a candidate primitive doesn't pass the four-question test,
 the answer is to leave it as plain Python.
 
-## Vocabulary (framework-honest, not domain-borrowed)
+## Vocabulary (paper-aligned prose, compatible identifiers)
+
+**Prose follows the paper.** The published paper deliberately
+uses a small plain-word vocabulary — *mechanism, claim, bridge,
+verdict, scope, hypothesis, finding* — plus: **condition** (one
+algorithm variant under study), **evaluation window** (a block of
+greedy eval episodes; the code names these `burst`), **run set**
+(the logged collection of runs; the code says corpus), **seeded
+run** at an environment–condition pair (the code says cell), and
+**the implementation under study** (the code and CLI say
+"substrate"). New docs, docstrings, README text, and PR prose use
+the paper's words, mentioning the code name once in parentheses
+where the reader will meet it (`eval_best_burst_raw_mean`).
+
+**Identifiers and column names do NOT churn.** `arm_key`,
+`burst`, corpus paths, `--substrate`, `@measurable` are load-
+bearing in parquet schemas, the CLI surface, and the frozen
+`submission` archive; renaming them buys prose purity at the
+cost of breaking every logged run set. The paper itself bridges
+the gap in its terminology paragraph — follow that pattern.
 
 The framework speaks of two kinds of measurables:
 
