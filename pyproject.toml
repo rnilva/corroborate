@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }
 authors = [
-    { name = "rnilva", email = "rnilva849@gmail.com" },
+    { name = "Milva", email = "rnilva849@gmail.com" },
 ]
 dependencies = [
     "polars>=1.0",
