@@ -30,9 +30,9 @@ predicates, scope-as-extent).
 **Design-doc citations.** Code comments and docstrings cite
 internal design docs by name (`CACHE_ADDITIVITY.md`,
 `SWEEP_PERSISTENCY.md`, `ANALYSIS_RECIPE.md`, `FINDINGS.md`
-revisions, ...). Those docs are frozen with the study on the
-`submission` branch; the citations are stable historical
-anchors, not in-tree paths.
+revisions, ...). The methodology set is preserved on the
+`submission` branch; the rest are stable historical anchors,
+not in-tree paths.
 
 ## Typing discipline (load-bearing)
 

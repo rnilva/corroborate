@@ -621,6 +621,5 @@ On `main`:
 On the **`submission`** branch (frozen with the study): the
 internal design docs (`ANALYSIS_RECIPE.md`, `SCOPE_SEARCH.md`,
 `LIFECYCLE.md`, `CACHE_ARCHITECTURE.md`, `CACHE_ADDITIVITY.md`,
-`CACHE_BUILD.md`, `CORPUS_INTEGRITY.md`, ...), the historical
-findings log (`FINDINGS.md`), and the deferral list
-(`FUTURE_WORKS.md`).
+`CACHE_BUILD.md`, `CORPUS_INTEGRITY.md`, ...) and the dated
+findings log (`FINDINGS.md`).
