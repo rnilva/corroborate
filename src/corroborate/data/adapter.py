@@ -24,7 +24,8 @@ Bundle format v1 — one directory, sealed by
 - ``manifest.json`` — content-addressed seal: per-file SHA-256 +
   size and an aggregate bundle digest.
 - ``contract.json`` — the compact study description (the design
-  note's StudySpec): ``study_id``, ``pair_by`` (the run-record
+  note's StudySpec): ``contract_version`` (currently ``1``),
+  ``study_id``, ``pair_by`` (the run-record
   field naming the pairing unit, integer-valued), the two-condition
   ``contrast`` (``parameter_path`` into the resolved config,
   ``baseline_arm`` / ``treatment_arm`` names, their intervention

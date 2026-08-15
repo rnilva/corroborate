@@ -1,0 +1,4 @@
+{
+ "producer": "stable-baselines3 DQN demo producer",
+ "command": "examples/sb3_demo/train.py --seeds 3 --steps 25000"
+}

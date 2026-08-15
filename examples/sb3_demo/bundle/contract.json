@@ -1,0 +1,35 @@
+{
+ "contract_version": 1,
+ "study_id": "sb3-cartpole-gamma",
+ "pair_by": "seed",
+ "pair_by_config_path": "seed",
+ "contrast": {
+  "parameter_path": "gamma",
+  "baseline_arm": "gamma080",
+  "treatment_arm": "gamma099",
+  "baseline_value": 0.8,
+  "treatment_value": 0.99
+ },
+ "scope": {
+  "env_id": "CartPole-v1"
+ },
+ "evaluation": {
+  "checkpoints": [
+   5000,
+   10000,
+   15000,
+   20000,
+   25000
+  ],
+  "seeds": [
+   1000,
+   1001,
+   1002,
+   1003,
+   1004
+  ],
+  "outcomes": [
+   "return"
+  ]
+ }
+}
