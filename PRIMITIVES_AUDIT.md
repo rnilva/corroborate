@@ -1,6 +1,6 @@
 # Primitives audit — pythonic discipline
 
-Companion to `ADMISSION_GATES_DESIGN.md`. Catalogs framework
+Catalogs framework
 primitives (typed contracts, decorators, dataclasses) and asks
 "could this be plain Python?" for each. Ships a contributor-
 discipline meta-pattern: when to introduce a framework primitive
@@ -142,7 +142,7 @@ from corroborate_rl.scope import PREMISE_ACTIVE
 PREMISE_ACTIVE  # bare
 ```
 
-`ADMISSION_GATES_DESIGN.md` updated to reflect this convention
+the admission-gates design notes updated to reflect this convention
 when the gates implementation lands.
 
 ## Where primitives ARE the right answer
@@ -218,7 +218,7 @@ A framework primitive is unnecessary ceremony when it:
 Apply reductions 1 + 2 + 3 in one focused refactor PR. Add the
 meta-pattern as a contributor-discipline section in CLAUDE.md
 ("when to introduce a framework primitive"). Update
-ADMISSION_GATES_DESIGN.md to use plain-module `Scope` / `Gate`
+the admission-gates design notes to use plain-module `Scope` / `Gate`
 namespaces when that work lands.
 
 The patterns to **generalize for future framework work**:

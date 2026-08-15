@@ -22,7 +22,7 @@ Stricter assumptions, stronger conclusions.
 | `INVARIANT` (off-ladder) | "Does the substrate's precondition hold here?" | Substrate-axiom (e.g., bias premise is active when σ_Q√(2 log A) is exceeded) | `tier=Tier.INVARIANT` + threshold predicate |
 | `ASSOCIATIONAL` (rung 1) | "What co-varies with what?" | Sampling distribution; no causal claim | `tier=Tier.ASSOCIATIONAL` |
 | `INTERVENTIONAL` (rung 2) | "What if we do X?" | Causal graph + identification (backdoor / IV / frontdoor) | `tier=Tier.INTERVENTIONAL` + `DoEffect` |
-| Counterfactual (rung 3) | "What would have happened if Y had been Y'?" | Counterfactual identification (cross-world) | Not shipped — see `FUTURE_WORKS.md` |
+| Counterfactual (rung 3) | "What would have happened if Y had been Y'?" | Counterfactual identification (cross-world) | Not shipped (explicit deferral) |
 
 **Pick the lowest rung whose answer is strong enough for your
 claim.** Climbing unnecessarily is the same shape as overstating

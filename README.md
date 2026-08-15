@@ -613,5 +613,4 @@ verdict pattern across the canonical 12-env panel. Current state:
   (column-additive, closure-hash drift) vs per-hypothesis cache
   (atomically-rebuilt projection). `CORPUS_INTEGRITY.md` —
   the CI1–CI8 invariants the runner enforces on ingest.
-- `FUTURE_WORKS.md` — explicit deferrals and open questions.
 - `FINDINGS.md` — historical narrative log of empirical findings.
