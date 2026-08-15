@@ -1,55 +1,50 @@
 # corroborate
 
-Test the *mechanism* behind an RL algorithm, not just its score.
+A framework for testing the mechanism claims behind reinforcement
+learning algorithms.
 
-> **Paper artifact.** The frozen DDQN study that accompanies
-> *Corroborate: A Framework for Testing Mechanism Claims in
-> Reinforcement Learning* (Finding the Frame @ RLC 2026) —
-> including the paper PDF, its data, and its figure pipelines —
-> lives on the [**`submission` branch**](../../tree/submission).
-> `main` is the living framework.
+The frozen study accompanying the RLC 2026 workshop paper
+(*Corroborate: A Framework for Testing Mechanism Claims in
+Reinforcement Learning*), including the paper PDF, its data, and
+the figure pipelines, is on the
+[`submission` branch](../../tree/submission). `main` is the
+current framework.
 
-## The problem
+## Overview
 
-A paper that proposes a mechanism — say Double-DQN's *decoupled
-action selection reduces overestimation bias* — proves a theorem
-under conditions the implementation then relaxes. Whether the
-analytical prediction survives in the practical regime is an
-empirical question, and a hard one: the mechanism is entangled
-with the rest of the implementation, the relevant quantities are
-confounded, and the test is closer to causal inference than to
-plotting curves. The apparatus built for that test in one paper
-is rarely reusable by another.
+A paper that proposes a mechanism (for example, Double-DQN's
+claim that decoupled action selection reduces overestimation
+bias) proves a theorem under conditions the implementation then
+relaxes. Whether the prediction holds in practice is an empirical
+question, and testing it is closer to causal inference than to
+comparing learning curves: the mechanism is entangled with the
+rest of the implementation, and the relevant quantities are
+confounded.
 
-`corroborate` is a framework for exactly that part. It combines
-three principles:
+corroborate provides the apparatus for this kind of test:
 
-1. **Component boundaries drawn at theorems.** The mechanism is
+1. Component boundaries are drawn at theorems. A mechanism is
    isolated as a functional unit that can be swapped without
-   disturbing the rest of the algorithm, so a comparison is a
-   controlled causal contrast — an intervention, not an
-   observational reconstruction.
-2. **Hypotheses as executable claims.** Each edge of a
-   hypothesis is a small program called a **bridge**: its
-   decorator declares the claim's commitments — scope (which
-   environments and conditions it applies to), evidential tier
-   (associational vs interventional), predicted direction —
-   *before any data is seen*, and its body runs as a test that
-   returns a verdict.
-3. **"We cannot tell" is a verdict.** `POWER_INSUFFICIENT` is
-   first-class, distinct from both `HELD` and `NO_EFFECT`, and it
-   propagates through chains of composed claims instead of
-   collapsing into "no effect."
+   changing the rest of the algorithm, so a comparison between
+   conditions is a controlled contrast.
+2. Hypotheses are executable. Each edge of a hypothesis is a
+   small program called a bridge. Its decorator declares the
+   claim's commitments (scope, evidential tier, predicted
+   direction) before any data is seen; its body runs as a test
+   and returns a verdict.
+3. Inconclusive results are a distinct verdict.
+   `POWER_INSUFFICIENT` is separate from both `HELD` and
+   `NO_EFFECT`, and it propagates through chains of composed
+   claims rather than being collapsed into "no effect".
 
-The demonstration study renders the field's understanding of DDQN
-as explicit per-environment claims: bias reduction holds in most
-environments; the analytical prediction that it *improves
-outcomes* is where the chain breaks — and the framework says so
-without overclaiming.
+The demonstration study applies this to Double-DQN across twelve
+environments: the bias-reduction claim holds in most of them,
+while the further claim that bias reduction improves outcomes
+does not survive testing.
 
-## Terminology: paper ↔ code
+## Terminology
 
-The paper uses plain words; some code identifiers and logged
+The paper uses plain terms; some code identifiers and logged
 column names predate them and are kept for compatibility:
 
 | paper | code |
@@ -61,7 +56,7 @@ column names predate them and are kept for compatibility:
 | metric | `@measurable` |
 | the implementation under study | "substrate" (e.g. the `--substrate` CLI flag) |
 
-## A bridge, concretely
+## Example bridge
 
 ```python
 from functools import partial
@@ -70,7 +65,7 @@ from corroborate.bridge import Direction, Tier, Verdict
 from corroborate.core.intervention import DoEffect, Intervention
 
 # The mechanism as a unit of intervention: swap greedification,
-# leave everything else untouched.
+# leave everything else unchanged.
 DDQN_SWAP = Intervention(
     slot_path='bootstrap',
     replacement=partial(bootstrap, greedification=double_greedify),
@@ -79,11 +74,11 @@ INTERVENTION = DoEffect(arms=((), (DDQN_SWAP,)))  # baseline, treatment
 
 @claim_bridge(
     source=INTERVENTION,
-    target='jensen_gap',              # the bias the theorem talks about
+    target='jensen_gap',
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
-    predicted_direction='a_lt_b',     # committed before data is seen
-    stratify_by=('env_name',),        # per-environment claims
+    predicted_direction='a_lt_b',
+    stratify_by=('env_name',),
 )
 def ddqn_reduces_jensen_gap(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
@@ -91,57 +86,62 @@ def ddqn_reduces_jensen_gap(
     return stratified_arm_diff_pooled.verdict
 ```
 
-The decorator is the claim's declared commitments; the body maps
-statistics to a verdict. The named parameter is a registered
-analysis the framework runs against the scoped run set and
-injects by name. A **hypothesis** is a Python package exposing a
-tuple of bridges plus cluster-level **findings**; running it
-prints the verdict table.
+The decorator holds the claim's declared commitments; the body
+maps statistics to a verdict. The named parameter is a registered
+analysis that the framework runs against the scoped run set and
+injects by name. A hypothesis is a Python package exposing a
+tuple of bridges plus cluster-level findings; running it prints
+the verdict table:
 
 ```bash
 uv run corroborate hypothesis experiments.findings.<name>
+# Optionally render the evidence graph:
+uv run corroborate hypothesis experiments.findings.<name> --render evidence.svg
 ```
 
-## Use it on your own runs
+## Using external runs
 
-The framework is implementation-agnostic by construction: an
-external training codebase writes a small sealed bundle, and
-`corroborate.data.adapt_study` verifies it into a `Panel` with an
-admissibility receipt — statements the files can prove are
-VERIFIED, everything else stays honestly ATTESTED or UNVERIFIABLE.
+Training runs produced by other codebases can be ingested
+without modifying the training code. The producer writes a small
+bundle (run and evaluation records, resolved configurations, and
+a short `contract.json` describing the study);
+`corroborate.data.adapt_study` verifies the bundle and returns a
+`Panel` together with an admissibility receipt. Checks the files
+can prove are marked `VERIFIED`; producer statements remain
+`ATTESTED` or `UNVERIFIABLE`.
 
-[`examples/sb3_demo/`](examples/sb3_demo/) is the worked proof:
-ordinary stable-baselines3 DQN (zero corroborate imports on the
-training side), a ~25-line `contract.json`, and a pre-registered
-directional verdict at the end — run end-to-end on CPU in
-minutes, with the committed bundle letting you skip the training
-half entirely.
+[`examples/sb3_demo/`](examples/sb3_demo/) walks through this
+with stable-baselines3 DQN: training, bundle production,
+adaptation, and a pre-registered directional test. It runs on CPU
+in a few minutes, and a bundle from a real run is committed so
+the analysis half can be run without training.
 
-## What's in this repo
+## Repository layout
 
 | path | contents |
 |---|---|
 | `src/corroborate/` | the framework: claims, bridges, verdicts, causal-graph evaluation, registered analyses, run-set storage |
-| `src/corroborate_rl/` | the DQN/JAX implementation under study (plugs into the framework's sweep CLI) |
-| `docs/HYPOTHESIS_AS_GRAPH.md` | the organizing principle: a hypothesis is a causal graph, bridges are its edges |
-| `REPRODUCIBILITY.md` | what same-seed actually buys you: bitwise vs scientific reproducibility under XLA configuration |
-| `CLAUDE.md` | contributor doc: typing discipline, vocabulary, which analysis to reach for |
-| `tests/` | framework tests + a synthetic linear-Gaussian SCM positive control that recovers a known chain in closed form |
+| `src/corroborate_rl/` | the DQN/JAX implementation used by the frozen study |
+| `examples/sb3_demo/` | external-data walkthrough (stable-baselines3) |
+| `docs/HYPOTHESIS_AS_GRAPH.md` | authoring model: a hypothesis as a causal graph with bridges as edges |
+| `REPRODUCIBILITY.md` | bitwise vs scientific reproducibility under XLA configuration |
+| `CLAUDE.md` | contributor documentation: typing discipline, vocabulary, analysis catalogue |
+| `tests/` | framework tests, including a linear-Gaussian SCM control with closed-form expectations |
 
-Quality gates (both green on a clean checkout):
+Checks:
 
 ```bash
 uv run pyright          # strict mode, 0 errors
-uv run pytest tests/    # fast cohort; `-m ''` adds the slow DQN end-to-end tests
+uv run pytest tests/    # fast cohort; `-m ''` includes the slow end-to-end tests
 ```
 
 ## Running studies
 
-The framework is study-agnostic; an implementation plugs in
-through a typed entry-point module and a sweep YAML:
+An implementation plugs into the sweep CLI through a typed
+entry-point module and a YAML configuration:
 
 ```bash
-# Train the conditions across environments and seeds (GPU optional):
+# Train the conditions across environments and seeds:
 uv run corroborate sweep run --substrate corroborate_rl.dqn_sweep \
     --device gpu experiments/configs/<sweep>.yaml
 
@@ -149,15 +149,13 @@ uv run corroborate sweep run --substrate corroborate_rl.dqn_sweep \
 uv run corroborate hypothesis experiments.findings.<name> \
     --ingest <run-set-dir>
 
-# Inventory local + cloud-archived run sets:
+# Inventory local and cloud-archived run sets:
 uv run corroborate catalogue experiments/data --remote-prefix s3://<your-bucket>/
 ```
 
-Run sets archive to any S3-compatible store (credentials via
-botocore's standard chain); per-window trace columns are evicted
-locally once cloud-recoverable and restored on demand. The
-`submission` branch is the fully-worked example of all of this,
-with the shipped data to reproduce the paper offline.
+Run sets archive to any S3-compatible store using botocore's
+standard credential chain. Trace columns are evicted locally once
+cloud-recoverable and restored on demand.
 
 ## License
 

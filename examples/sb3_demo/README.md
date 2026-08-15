@@ -1,37 +1,38 @@
-# Corroborate on your own runs: an SB3 walkthrough
+# SB3 walkthrough: external runs to a verdict
 
-This demo answers one question: **how much work is it to point
-corroborate at training runs produced by an implementation it has
-never seen?** Here that implementation is ordinary
+This example measures the integration cost of using corroborate
+on training runs produced by an implementation it has never
+seen — here, ordinary
 [stable-baselines3](https://github.com/DLR-RM/stable-baselines3)
-DQN — no corroborate imports anywhere in the training code.
+DQN. The training script contains no corroborate imports.
 
-The study: does gamma = 0.99 beat gamma = 0.80 on CartPole-v1 at
-25k steps? (Spoiler: the honest answer is better than a yes.)
+The study: whether gamma = 0.99 outperforms gamma = 0.80 on
+CartPole-v1 at 25k steps.
 
-## 1. Train — pure SB3 (`train.py`)
+## 1. Train (`train.py`, pure SB3)
 
 ```bash
 uv run examples/sb3_demo/train.py --seeds 3 --steps 25000   # ~10 min on CPU
 ```
 
-Two conditions × 3 paired seeds; at five checkpoints each run is
-evaluated with five fixed evaluation seeds. Alongside the runs it
-writes the **bundle**: `contract.json` (the ~25-line study
-description — the only corroborate-specific thing the producer
+Two conditions, three paired seeds each. At five checkpoints,
+each run is evaluated once per fixed evaluation seed. The script
+writes the bundle: `contract.json` (the study description, about
+25 lines — the only corroborate-specific file the producer
 authors), `runs.jsonl`, `evaluations.jsonl`, `provenance.json`,
 and one resolved-config JSON per run.
 
-A committed bundle from a real run of this script is included, so
-you can skip training and go straight to step 2.
+A bundle from a real run of this script is committed, so step 2
+can be run without training.
 
-## 2. Verify, adapt, analyse — corroborate (`analyze.py`)
+## 2. Verify, adapt, analyse (`analyze.py`, corroborate only)
 
 ```bash
 uv run python examples/sb3_demo/analyze.py
 ```
 
-The adapter is a *verifier*, not a file reader. Real output:
+The adapter verifies the bundle before any analysis. Output from
+the committed bundle:
 
 ```text
 admissible: True
@@ -47,13 +48,13 @@ admissible: True
   [VERIFIED    ] rows_derived: derived 6 seeded-run rows
 ```
 
-Note what the receipt refuses to do: statements the files can
-prove are `VERIFIED` (the seal, pair completeness, that the
-configs differ in *only* gamma); statements only the producer can
-make stay `ATTESTED`/`UNVERIFIABLE` rather than being silently
-upgraded. A broken bundle fails closed with the same vocabulary.
+Statements the files can prove are `VERIFIED` (the seal, pair
+completeness, that the configurations differ only in gamma).
+Statements only the producer can make remain `ATTESTED` or
+`UNVERIFIABLE`. A malformed bundle raises with the same
+vocabulary instead of parsing permissively.
 
-Then the run set is a `Panel`:
+The adapted run set is a `Panel`:
 
 ```text
 panel: 6 seeded runs × 12 columns
@@ -69,9 +70,9 @@ panel: 6 seeded runs × 12 columns
 └─────────────┴──────────┴──────┴───────┴─────────────┘
 ```
 
-## 3. The verdict — and the point of the framework
+## 3. The pre-registered test
 
-The claim was declared *before* the outcomes were read
+The claim is declared before outcomes are read
 (`DirectionalDesign`: one-sided, alpha 0.05, SESOI dz = 0.5,
 3 planned pairs):
 
@@ -82,20 +83,16 @@ claim: gamma 0.99 > gamma 0.80 on return_mean
   verdict: POWER_INSUFFICIENT (UNDERPOWERED)
 ```
 
-The intuitive claim did not survive contact with the data — the
-point estimate runs the *other way* at this training length — and
-with three pairs the evidence settles nothing. A benchmark table
-would have printed two means and let the reader over-conclude;
-the framework's verdict is "we cannot tell yet", which is
-exactly what three seeds of evidence supports. Train more seeds
-(`--seeds 8`) and the verdict machinery will move to whatever the
-data actually earns — in the predicted direction or against it.
+At this training length the point estimate runs against the
+claim, and three pairs are not enough evidence to settle it
+either way. The verdict is therefore `POWER_INSUFFICIENT` rather
+than `NO_EFFECT`; with more seeds (`--seeds 8`) the verdict
+follows whatever the data supports.
 
-## What the producer had to author
+## Producer-side cost
 
-The entire corroborate-specific burden was `contract.json`:
-study id, which config key is the contrast (`gamma`), the two
-condition names and values, the pairing field (`seed`), the scope
-(`env_id`), and the evaluation extent. Everything else —
-sealing, verification, admissibility, Panel construction,
-analysis — is corroborate's side of the boundary.
+The corroborate-specific work in `train.py` is `contract.json`:
+study id, the contrast parameter (`gamma`) with its two condition
+names and values, the pairing field (`seed`), the scope
+(`env_id`), and the evaluation extent. Sealing, verification,
+Panel construction, and analysis happen on corroborate's side.
