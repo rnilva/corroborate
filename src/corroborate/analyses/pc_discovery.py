@@ -67,7 +67,7 @@ class PCDiscoveryResult:
 
     def is_in_skeleton(self, a: str, b: str) -> bool:
         """True if `{a, b}` is an edge in the discovered skeleton."""
-        return frozenset({a, b}) in self.skeleton.edges
+        return frozenset({a, b}) in self.skeleton
 
     def is_marginally_independent(self, a: str, b: str) -> bool:
         """True if PC found `a ⫫ b` unconditionally — `{}` is in
