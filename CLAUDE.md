@@ -839,8 +839,9 @@ mutations as wrap-broken, not real survivors.
 
 `v0` is acceptance-tested by reproducing the DDQN study frozen
 on the `submission` branch — mechanism HELD ↛ outcome
-HELD ↛ link HELD across 17 envs, with the methodological
-contribution living in keeping these three verdicts separate.
+HELD ↛ link HELD across the multi-environment panel, with the
+methodological contribution living in keeping these three
+verdicts separate.
 
 The framework's primary distinguishing feature lives at the
 verdict layer: `POWER_INSUFFICIENT` is a first-class verdict
