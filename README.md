@@ -102,6 +102,21 @@ prints the verdict table.
 uv run corroborate hypothesis experiments.findings.<name>
 ```
 
+## Use it on your own runs
+
+The framework is implementation-agnostic by construction: an
+external training codebase writes a small sealed bundle, and
+`corroborate.data.adapt_study` verifies it into a `Panel` with an
+admissibility receipt — statements the files can prove are
+VERIFIED, everything else stays honestly ATTESTED or UNVERIFIABLE.
+
+[`examples/sb3_demo/`](examples/sb3_demo/) is the worked proof:
+ordinary stable-baselines3 DQN (zero corroborate imports on the
+training side), a ~25-line `contract.json`, and a pre-registered
+directional verdict at the end — run end-to-end on CPU in
+minutes, with the committed bundle letting you skip the training
+half entirely.
+
 ## What's in this repo
 
 | path | contents |
