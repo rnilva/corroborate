@@ -39,7 +39,7 @@ from corroborate.analyses.dynamic_mediation import (
     dynamic_pc_adjacency,
 )
 from corroborate.analyses.dynamic_mediation import (
-    _classify_status,  # pyright: ignore[reportPrivateUsage]
+    classify_status,
 )
 
 
@@ -327,14 +327,14 @@ def test_sign_flip_status_fires_with_noise_floor() -> None:
     """Construct a hand-built ρ trajectory that flips sign at
     above-noise-floor magnitude → SIGN_FLIP_DETECTED. Uses the
     classifier directly because the PC primitive's status field
-    is driven by the same `_classify_status` shared with
+    is driven by the same `classify_status` shared with
     `dynamic_partial_spearman` — exercising the shared classifier
     is the simplest pin.
 
     Trajectory (+0.5, +0.5, −0.5): last burst opposes the
     majority at magnitude 0.5 (well above the 0.05 default floor).
     """
-    status = _classify_status(
+    status = classify_status(
         rho_marginal=(0.5, 0.5, -0.5),
         n_per_burst=(60, 60, 60),
         min_n_per_burst=20,
@@ -349,7 +349,7 @@ def test_sign_flip_below_floor_is_noise() -> None:
     must classify as CONSISTENT_DIRECTION (the noise floor swallows
     the flip). Parallel to the partial-Spearman primitive's
     noise-floor unit test."""
-    status = _classify_status(
+    status = classify_status(
         rho_marginal=(0.5, 0.5, -0.02),
         n_per_burst=(60, 60, 60),
         min_n_per_burst=20,

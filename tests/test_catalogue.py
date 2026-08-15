@@ -105,7 +105,7 @@ def test_classifier_truth_table(
 ) -> None:
     if expected == 'RAISE':
         with pytest.raises(AssertionError):
-            _ = catalogue._classify(  # pyright: ignore[reportPrivateUsage]
+            _ = catalogue._classify(
                 has_local_dir=local_dir,
                 has_local_manifest=local_manifest,
                 has_local_parquets=parquets,
@@ -113,7 +113,7 @@ def test_classifier_truth_table(
             )
     else:
         assert expected in _ALL_NAMED  # sanity on the parametrize itself
-        got = catalogue._classify(  # pyright: ignore[reportPrivateUsage]
+        got = catalogue._classify(
             has_local_dir=local_dir,
             has_local_manifest=local_manifest,
             has_local_parquets=parquets,

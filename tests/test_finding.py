@@ -14,7 +14,7 @@ refute/underpowered semantics across all of them.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import cast, ClassVar
 
 import pytest
 
@@ -28,7 +28,7 @@ from corroborate.graph.causal import (
     composed_verdict, evaluated_graph,
 )
 from corroborate.graph.graph import Graph
-from corroborate.runner.runner import _validate_hypothesis  # pyright: ignore[reportPrivateUsage]
+from corroborate.runner.runner import _validate_hypothesis
 
 
 # ============ Helpers: build typed bridges via @claim_bridge ============
@@ -246,7 +246,9 @@ def test_validate_accepts_finding_bridges_subset() -> None:
     class H:
         INTERVENTION: ClassVar[DoEffect] = _DOEFFECT
         BRIDGES: ClassVar[tuple[Bridge, ...]] = (_bridge_a, _bridge_b)
-        FINDINGS: ClassVar[tuple[Finding, ...]] = (GoodFinding,)
+        FINDINGS: ClassVar[tuple[Finding, ...]] = (
+            cast(Finding, GoodFinding),  # class satisfies the Protocol structurally
+        )
     out = _validate_hypothesis(H)
     assert out is H
 
@@ -266,7 +268,9 @@ def test_validate_rejects_finding_with_bridge_not_in_parent() -> None:
     class H:
         INTERVENTION: ClassVar[DoEffect] = _DOEFFECT
         BRIDGES: ClassVar[tuple[Bridge, ...]] = (_bridge_a, _bridge_b)
-        FINDINGS: ClassVar[tuple[Finding, ...]] = (BadFinding,)
+        FINDINGS: ClassVar[tuple[Finding, ...]] = (
+            cast(Finding, BadFinding),  # class satisfies the Protocol structurally
+        )
     with pytest.raises(TypeError, match='not in.*BRIDGES'):
         _validate_hypothesis(H)
 
@@ -298,7 +302,9 @@ def test_validate_rejects_blocked_on_with_terminal_expected() -> None:
     class H:
         INTERVENTION: ClassVar[DoEffect] = _DOEFFECT
         BRIDGES: ClassVar[tuple[Bridge, ...]] = (_bridge_a,)
-        FINDINGS: ClassVar[tuple[Finding, ...]] = (ContradictoryFinding,)
+        FINDINGS: ClassVar[tuple[Finding, ...]] = (
+            cast(Finding, ContradictoryFinding),  # class satisfies the Protocol structurally
+        )
     with pytest.raises(TypeError, match='BLOCKED_ON'):
         _validate_hypothesis(H)
 
@@ -317,5 +323,7 @@ def test_validate_accepts_blocked_on_with_non_terminal_expected() -> None:
     class H:
         INTERVENTION: ClassVar[DoEffect] = _DOEFFECT
         BRIDGES: ClassVar[tuple[Bridge, ...]] = (_bridge_a,)
-        FINDINGS: ClassVar[tuple[Finding, ...]] = (PendingFinding,)
+        FINDINGS: ClassVar[tuple[Finding, ...]] = (
+            cast(Finding, PendingFinding),  # class satisfies the Protocol structurally
+        )
     assert _validate_hypothesis(H) is H

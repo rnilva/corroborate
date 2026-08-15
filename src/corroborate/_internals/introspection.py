@@ -52,7 +52,7 @@ def get_param_annotation(p: inspect.Parameter) -> object:
     `inspect.Parameter.empty` when no annotation is declared, so
     callers can compare with `is`. Single-site Any laundering at
     the read; same shape as `get_param_default`."""
-    annotation: object = p.annotation  # pyright: ignore[reportAny]
+    annotation: object = p.annotation
     if annotation is inspect.Parameter.empty:
         return inspect.Parameter.empty
     return annotation
@@ -68,7 +68,7 @@ def get_param_default(p: inspect.Parameter) -> object:
     `p.default`'s `Any` type triggers `reportAny` even on the `is`
     comparison. Single-site laundering: capture once, then narrow
     via the sentinel check."""
-    default: object = p.default  # pyright: ignore[reportAny]
+    default: object = p.default
     if default is inspect.Parameter.empty:
         return inspect.Parameter.empty
     return default
@@ -139,4 +139,4 @@ def get_attr_obj(obj: object, name: str) -> object:
     (`fields(instance)` yields `Field.name: str`, not a literal);
     direct `instance.<name>` syntax is preferred everywhere else
     per CLAUDE.md's getattr/setattr rule."""
-    return getattr(obj, name)  # pyright: ignore[reportAny]
+    return getattr(obj, name)

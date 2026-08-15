@@ -18,7 +18,7 @@ reports per-burst EDGE PRESENCE:
   - `direct_edge[b]` = marginal_edge[b] AND p_conditional[b] <
     alpha → "partial mediation or direct effect at burst b".
 
-The same `TimeAggregationStatus` enum + `_classify_status` machinery
+The same `TimeAggregationStatus` enum + `classify_status` machinery
 from `_common.py` is reused — driven by the per-burst marginal
 partial-correlation magnitude (`rho_marginal[b]`) so the
 classifier's sign-flip / weak-time-varying / underpowered branches
@@ -50,19 +50,19 @@ from corroborate.analyses.dynamic_mediation._common import (
     FisherZDLPool,
     Stratum,
     TimeAggregationStatus,
-    _ColumnOrMeasurable,
-    _classify_status,
-    _cluster_bootstrap_edge_counts,
-    _cluster_bootstrap_edge_counts_multi,
-    _cluster_bootstrap_pool,
-    _cluster_bootstrap_pool_multi,
-    _collect_arm_and_per_burst_multi,
-    _encode_arm,
-    _fisher_z_dl_pool,
-    _gather_burst_b_multi,
-    _n_bursts_multi,
-    _source_name,
-    _stratum_key,
+    ColumnOrMeasurable,
+    classify_status,
+    cluster_bootstrap_edge_counts,
+    cluster_bootstrap_edge_counts_multi,
+    cluster_bootstrap_pool,
+    cluster_bootstrap_pool_multi,
+    collect_arm_and_per_burst_multi,
+    encode_arm,
+    fisher_z_dl_pool,
+    gather_burst_b_multi,
+    n_bursts_multi,
+    source_name,
+    stratum_key,
 )
 from corroborate.bridge.analysis import analysis
 from corroborate.graph.discovery import (
@@ -194,9 +194,9 @@ def dynamic_pc_adjacency(
     *,
     arm_field: str = 'arm_key',
     mediator_per_burst: (
-        _ColumnOrMeasurable | tuple[_ColumnOrMeasurable, ...]
+        ColumnOrMeasurable | tuple[ColumnOrMeasurable, ...]
     ),
-    outcome_per_burst: _ColumnOrMeasurable,
+    outcome_per_burst: ColumnOrMeasurable,
     stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
     alpha: float = 0.05,
     min_n_per_burst: int = 20,
@@ -277,7 +277,7 @@ def dynamic_pc_adjacency(
     cell contributes (missing arm tag, malformed per-burst columns,
     single-arm stratum) are absent from the result — the framework
     refuses to silently emit a NaN trajectory."""
-    mediators_tuple: tuple[_ColumnOrMeasurable, ...]
+    mediators_tuple: tuple[ColumnOrMeasurable, ...]
     if isinstance(mediator_per_burst, tuple):
         mediators_tuple = mediator_per_burst
         if len(mediators_tuple) == 0:
@@ -293,7 +293,7 @@ def dynamic_pc_adjacency(
 
     by_stratum: dict[Stratum, list[Mapping[str, object]]] = {}
     for cell in _to_dicts(cells):
-        key = _stratum_key(cell, stratify_by)
+        key = stratum_key(cell, stratify_by)
         if key is None:
             continue
         by_stratum.setdefault(key, []).append(cell)
@@ -323,8 +323,8 @@ def _compute_one_stratum_pc(
     cells: Sequence[Mapping[str, object]],
     *,
     arm_field: str,
-    mediators_per_burst: tuple[_ColumnOrMeasurable, ...],
-    outcome_per_burst: _ColumnOrMeasurable,
+    mediators_per_burst: tuple[ColumnOrMeasurable, ...],
+    outcome_per_burst: ColumnOrMeasurable,
     alpha: float,
     min_n_per_burst: int,
     sign_flip_min_abs_rho: float,
@@ -341,7 +341,7 @@ def _compute_one_stratum_pc(
     runs (closed-form `partial_spearman_rho`, Fisher-z df = n − 4)
     for bit-exact back-compat; at k≥2 the multi-Z primitive runs
     (`partial_spearman_rho_multi`, df = n − 3 − k)."""
-    collected = _collect_arm_and_per_burst_multi(
+    collected = collect_arm_and_per_burst_multi(
         cells,
         arm_field=arm_field,
         mediators_per_burst=mediators_per_burst,
@@ -354,11 +354,11 @@ def _compute_one_stratum_pc(
     if len(unique_arms) < 2:
         return None
 
-    n_bursts = _n_bursts_multi(mediator_lists, outcome_lists)
+    n_bursts = n_bursts_multi(mediator_lists, outcome_lists)
     if n_bursts == 0:
         return None
 
-    arm_codes = _encode_arm(arms)
+    arm_codes = encode_arm(arms)
     df_offset_partial = 3 + k
 
     p_marg: list[float] = []
@@ -371,7 +371,7 @@ def _compute_one_stratum_pc(
     n_direct = 0
 
     for b in range(n_bursts):
-        x_np, y_np, z_mat = _gather_burst_b_multi(
+        x_np, y_np, z_mat = gather_burst_b_multi(
             arm_codes, mediator_lists, outcome_lists, b,
         )
         n_b = int(x_np.size)
@@ -424,7 +424,7 @@ def _compute_one_stratum_pc(
                 # outcome at burst b.
                 n_dsep += 1
 
-    status = _classify_status(
+    status = classify_status(
         rho_marg, n_per_burst, min_n_per_burst,
         weak_time_varying_ratio,
         sign_flip_min_abs_rho,
@@ -433,8 +433,8 @@ def _compute_one_stratum_pc(
     # DerSimonian-Laird random-effects pool over the per-burst
     # (ρ, n) trajectory. df_offset accounting matches the
     # primitive: 3 for marginal, 3+k for the partial pool.
-    dl_marg = _fisher_z_dl_pool(rho_marg, n_per_burst, df_offset=3)
-    dl_part = _fisher_z_dl_pool(
+    dl_marg = fisher_z_dl_pool(rho_marg, n_per_burst, df_offset=3)
+    dl_part = fisher_z_dl_pool(
         rho_part, n_per_burst, df_offset=df_offset_partial,
     )
 
@@ -451,7 +451,7 @@ def _compute_one_stratum_pc(
             flat_med: list[Sequence[float]] = [
                 cell_meds[0] for cell_meds in mediator_lists
             ]
-            bootstrap_marg = _cluster_bootstrap_pool(
+            bootstrap_marg = cluster_bootstrap_pool(
                 arm_codes=arm_codes,
                 mediator_lists=flat_med,
                 outcome_lists=outcome_lists,
@@ -463,7 +463,7 @@ def _compute_one_stratum_pc(
                 alpha=bootstrap_alpha,
                 seed=bootstrap_seed,
             )
-            bootstrap_part = _cluster_bootstrap_pool(
+            bootstrap_part = cluster_bootstrap_pool(
                 arm_codes=arm_codes,
                 mediator_lists=flat_med,
                 outcome_lists=outcome_lists,
@@ -475,7 +475,7 @@ def _compute_one_stratum_pc(
                 alpha=bootstrap_alpha,
                 seed=bootstrap_seed,
             )
-            bootstrap_counts = _cluster_bootstrap_edge_counts(
+            bootstrap_counts = cluster_bootstrap_edge_counts(
                 arm_codes=arm_codes,
                 mediator_lists=flat_med,
                 outcome_lists=outcome_lists,
@@ -487,7 +487,7 @@ def _compute_one_stratum_pc(
                 seed=bootstrap_seed,
             )
         else:
-            bootstrap_marg = _cluster_bootstrap_pool_multi(
+            bootstrap_marg = cluster_bootstrap_pool_multi(
                 arm_codes=arm_codes,
                 mediator_lists=mediator_lists,
                 outcome_lists=outcome_lists,
@@ -499,7 +499,7 @@ def _compute_one_stratum_pc(
                 alpha=bootstrap_alpha,
                 seed=bootstrap_seed,
             )
-            bootstrap_part = _cluster_bootstrap_pool_multi(
+            bootstrap_part = cluster_bootstrap_pool_multi(
                 arm_codes=arm_codes,
                 mediator_lists=mediator_lists,
                 outcome_lists=outcome_lists,
@@ -511,7 +511,7 @@ def _compute_one_stratum_pc(
                 alpha=bootstrap_alpha,
                 seed=bootstrap_seed,
             )
-            bootstrap_counts = _cluster_bootstrap_edge_counts_multi(
+            bootstrap_counts = cluster_bootstrap_edge_counts_multi(
                 arm_codes=arm_codes,
                 mediator_lists=mediator_lists,
                 outcome_lists=outcome_lists,
@@ -537,8 +537,8 @@ def _compute_one_stratum_pc(
         n_bursts_direct_edge=n_direct,
         dl_marginal=dl_marg,
         dl_partial=dl_part,
-        mediator_names=tuple(_source_name(m) for m in mediators_per_burst),
-        outcome_name=_source_name(outcome_per_burst),
+        mediator_names=tuple(source_name(m) for m in mediators_per_burst),
+        outcome_name=source_name(outcome_per_burst),
         arm_field=arm_field,
         bootstrap_marginal=bootstrap_marg,
         bootstrap_partial=bootstrap_part,

@@ -33,8 +33,8 @@ if TYPE_CHECKING:
 # class-level constants), while script callers tend to build
 # `list[tuple[str, str]]` inline.
 type DAGLike = (
-    'nx.DiGraph[str] | CausalGraph '
-    '| list[tuple[str, str]] | tuple[tuple[str, str], ...]'
+    nx.DiGraph[str] | CausalGraph
+    | list[tuple[str, str]] | tuple[tuple[str, str], ...]
 )
 
 
@@ -65,7 +65,7 @@ def _to_networkx(graph: DAGLike) -> 'nx.DiGraph[str]':
     return g
 
 
-def _build_causal_model(
+def build_causal_model(
     df: 'pd.DataFrame', treatment: str, outcome: str, graph: DAGLike,
 ) -> 'CausalModel':
     """Construct a DoWhy `CausalModel`. Validates that treatment
@@ -89,7 +89,7 @@ def _build_causal_model(
     )
 
 
-def _refuter_effect(refuter: object) -> float:
+def refuter_effect(refuter: object) -> float:
     """Extract the post-refutation effect. DoWhy renamed this
     attribute between versions: older expose `estimated_effect`,
     newer expose `new_effect`. Try both."""
@@ -109,7 +109,7 @@ def _record_keys_for(graph: DAGLike) -> list[str]:
     return list(nx_graph.nodes)
 
 
-def _cells_to_dataframe(
+def cells_to_dataframe(
     cells: Iterable[Mapping[str, object]],
     keys: list[str],
 ) -> 'pd.DataFrame':
@@ -141,7 +141,7 @@ def _cells_to_dataframe(
     return pd.DataFrame(rows)
 
 
-def _backdoor_estimate(
+def backdoor_estimate(
     cells: Iterable[Mapping[str, object]],
     treatment: str,
     outcome: str,
@@ -155,8 +155,8 @@ def _backdoor_estimate(
     """Build DataFrame + CausalModel + run identification +
     (when identified) estimation. Helper shared by all DoWhy-
     consuming analyses so model construction is consistent."""
-    df = _cells_to_dataframe(cells, _record_keys_for(dag))
-    model = _build_causal_model(df, treatment, outcome, dag)
+    df = cells_to_dataframe(cells, _record_keys_for(dag))
+    model = build_causal_model(df, treatment, outcome, dag)
     identified = model.identify_effect(
         proceed_when_unidentifiable=False,
     )
@@ -223,11 +223,11 @@ if TYPE_CHECKING:
 
 __all__ = [
     'DAGLike',
-    '_backdoor_estimate',
-    '_build_causal_model',
-    '_cells_to_dataframe',
+    'backdoor_estimate',
+    'build_causal_model',
+    'cells_to_dataframe',
     '_record_keys_for',
-    '_refuter_effect',
+    'refuter_effect',
     '_to_networkx',
     'backdoor_with_refutations',
 ]

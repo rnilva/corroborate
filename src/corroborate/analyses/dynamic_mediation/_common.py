@@ -8,21 +8,21 @@ Fisher-z CI test) BOTH need:
     `mediation_dowhy`'s `LinearityStatus`. Surfaces "burst-pool
     aggregate is incoherent on this trajectory" as a typed value
     rather than a runtime gotcha.
-  - `_classify_status` — the sign-flip / weak-time-varying /
+  - `classify_status` — the sign-flip / weak-time-varying /
     underpowered classifier with noise-floor handling. The primitive
     that paired the trajectory with the classifier (the partial-
     Spearman primitive) provides the empirical motivation; the PC-
     based primitive reuses the same classifier driven by its own
     `rho_marginal[b]` trajectory.
-  - `_encode_arm` — sorted-unique str-to-int code (Spearman ρ is
+  - `encode_arm` — sorted-unique str-to-int code (Spearman ρ is
     invariant under monotone transform; only the *partition*
     matters).
-  - `_as_float_list` / `_resolve_per_burst` / `_source_name` —
+  - `_as_float_list` / `_resolve_per_burst` / `source_name` —
     cell-record → per-burst array adapter. Mirrors the static
     `partial_spearman`'s cache-first dispatch pattern via
     `evaluate_per_burst_source`.
-  - `_stratum_key` — stratify-by tuple builder.
-  - `FisherZDLPool` + `_fisher_z_dl_pool` — DerSimonian-Laird
+  - `stratum_key` — stratify-by tuple builder.
+  - `FisherZDLPool` + `fisher_z_dl_pool` — DerSimonian-Laird
     random-effects pool over per-burst Fisher-z-transformed ρ
     values. Wraps the framework's general-purpose
     `random_effects_summary` (the DL implementation lives in
@@ -32,7 +32,7 @@ Fisher-z CI test) BOTH need:
     measure of the heterogeneity that `TimeAggregationStatus` flags
     qualitatively.
   - Type aliases (`Stratum`, `_PerBurstMeasurable`,
-    `_ColumnOrMeasurable`).
+    `ColumnOrMeasurable`).
 
 The `FisherZDLPool` dataclass is public API (re-exported through
 the package `__init__.py`); the rest are package-internal helpers.
@@ -61,7 +61,7 @@ from corroborate.stats import random_effects_summary
 type _PerBurstMeasurable = Measurable[
     Mapping[str, object], npt.NDArray[np.floating],
 ]
-type _ColumnOrMeasurable = str | _PerBurstMeasurable
+type ColumnOrMeasurable = str | _PerBurstMeasurable
 
 
 # Stratum identity is a hashable tuple of the values at
@@ -110,7 +110,7 @@ class TimeAggregationStatus(Enum):
     the trajectory itself is too noisy to diagnose."""
 
 
-def _encode_arm(arms: Sequence[str]) -> npt.NDArray[np.float64]:
+def encode_arm(arms: Sequence[str]) -> npt.NDArray[np.float64]:
     """Map a sequence of string arm labels to a float64 vector of
     integer codes via sorted-unique. Spearman ρ is invariant under
     monotone transformations of either variable, so the specific
@@ -124,7 +124,7 @@ def _encode_arm(arms: Sequence[str]) -> npt.NDArray[np.float64]:
     return np.asarray([code[a] for a in arms], dtype=np.float64)
 
 
-def _stratum_key(
+def stratum_key(
     cell: Mapping[str, object], stratify_by: tuple[str, ...],
 ) -> Stratum | None:
     """Build the stratum-key tuple for `cell`. Returns None when
@@ -170,7 +170,7 @@ def _as_float_list(value: object) -> list[float] | None:
 
 def _resolve_per_burst(
     cell: Mapping[str, object],
-    source: _ColumnOrMeasurable,
+    source: ColumnOrMeasurable,
 ) -> list[float] | None:
     """Resolve a per-burst source to `list[float]`, dispatching on
     whether the caller passed a column name (str) or a Measurable
@@ -193,13 +193,13 @@ def _resolve_per_burst(
     return [float(v) for v in arr]
 
 
-def _source_name(source: _ColumnOrMeasurable) -> str:
+def source_name(source: ColumnOrMeasurable) -> str:
     """Stable provenance label for a per-burst source — the column
     name (str input) or the Measurable's `.name` attribute."""
     return source if isinstance(source, str) else source.name
 
 
-def _classify_status(
+def classify_status(
     rho_marginal: Sequence[float],
     n_per_burst: Sequence[int],
     min_n_per_burst: int,
@@ -267,8 +267,8 @@ def _collect_arm_and_per_burst(
     cells: Sequence[Mapping[str, object]],
     *,
     arm_field: str,
-    mediator_per_burst: _ColumnOrMeasurable,
-    outcome_per_burst: _ColumnOrMeasurable,
+    mediator_per_burst: ColumnOrMeasurable,
+    outcome_per_burst: ColumnOrMeasurable,
 ) -> tuple[list[str], list[list[float]], list[list[float]]] | None:
     """Shared first-pass cell-record extractor.
 
@@ -320,12 +320,12 @@ def _n_bursts(
     )
 
 
-def _collect_arm_and_per_burst_multi(
+def collect_arm_and_per_burst_multi(
     cells: Sequence[Mapping[str, object]],
     *,
     arm_field: str,
-    mediators_per_burst: Sequence[_ColumnOrMeasurable],
-    outcome_per_burst: _ColumnOrMeasurable,
+    mediators_per_burst: Sequence[ColumnOrMeasurable],
+    outcome_per_burst: ColumnOrMeasurable,
 ) -> tuple[
     list[str], list[list[list[float]]], list[list[float]],
 ] | None:
@@ -372,7 +372,7 @@ def _collect_arm_and_per_burst_multi(
     return arms, mediator_lists, outcome_lists
 
 
-def _n_bursts_multi(
+def n_bursts_multi(
     mediator_lists: Sequence[Sequence[Sequence[float]]],
     outcome_lists: Sequence[Sequence[float]],
 ) -> int:
@@ -391,7 +391,7 @@ def _n_bursts_multi(
     )
 
 
-def _gather_burst_b_multi(
+def gather_burst_b_multi(
     arm_codes: npt.NDArray[np.float64],
     mediator_lists: Sequence[Sequence[Sequence[float]]],
     outcome_lists: Sequence[Sequence[float]],
@@ -556,7 +556,7 @@ class FisherZDLPool:
     assumption_violations: tuple[str, ...] = ()
 
 
-def _fisher_z_dl_pool(
+def fisher_z_dl_pool(
     rhos: Sequence[float],
     ns: Sequence[int],
     df_offset: int,
@@ -678,13 +678,13 @@ def _pool_rhos_dl(
     rhos: Sequence[float], ns: Sequence[int], df_offset: int,
 ) -> float:
     """Compute the DL-pooled ρ from a per-burst (ρ, n) trajectory
-    via `_fisher_z_dl_pool`. Returns the inverse-Fisher-z'd point
+    via `fisher_z_dl_pool`. Returns the inverse-Fisher-z'd point
     estimate (`rho_pooled`). NaN propagates when DL is undefined
     (fewer than 2 valid bursts). Bootstrap iterations that
     resample to a degenerate panel (e.g. all-same-cell after
     replacement) get NaN, which the percentile reducer filters
     out."""
-    dl = _fisher_z_dl_pool(rhos, ns, df_offset)
+    dl = fisher_z_dl_pool(rhos, ns, df_offset)
     return dl.rho_pooled
 
 
@@ -785,7 +785,7 @@ def _per_burst_rhos_from_subset_multi(
     rho_list: list[float] = []
     n_list: list[int] = []
     for b in range(n_bursts):
-        x_np, y_np, z_mat = _gather_burst_b_multi(
+        x_np, y_np, z_mat = gather_burst_b_multi(
             sub_arm_codes, sub_mediator, sub_outcome, b,
         )
         n_b = int(x_np.size)
@@ -804,7 +804,7 @@ def _per_burst_rhos_from_subset_multi(
     return rho_list, n_list
 
 
-def _cluster_bootstrap_pool(
+def cluster_bootstrap_pool(
     *,
     arm_codes: npt.NDArray[np.float64],
     mediator_lists: Sequence[Sequence[float]],
@@ -880,7 +880,7 @@ def _cluster_bootstrap_pool(
     )
 
 
-def _cluster_bootstrap_pool_multi(
+def cluster_bootstrap_pool_multi(
     *,
     arm_codes: npt.NDArray[np.float64],
     mediator_lists: Sequence[Sequence[Sequence[float]]],
@@ -894,11 +894,11 @@ def _cluster_bootstrap_pool_multi(
     seed: int,
 ) -> ClusterBootstrapInterval:
     """Multi-mediator cluster bootstrap CI over the DL pool. Same
-    cell-resampling pattern as `_cluster_bootstrap_pool` but
+    cell-resampling pattern as `cluster_bootstrap_pool` but
     `kind='partial'` recomputes ρ via `partial_spearman_rho_multi`
     on the (n_b, k) z-matrix per burst per replica. `df_offset`
     should be `3 + k` to match the multi-Z Fisher-z df accounting
-    inside `_fisher_z_dl_pool`.
+    inside `fisher_z_dl_pool`.
 
     The marginal `kind='marginal'` path is identical to the
     depth-1 sibling (mediators don't enter the marginal ρ); we
@@ -1085,7 +1085,7 @@ def _per_burst_edge_counts_from_subset_multi(
     ]
     n_marg, n_dsep, n_direct = 0, 0, 0
     for b in range(n_bursts):
-        x_np, y_np, z_mat = _gather_burst_b_multi(
+        x_np, y_np, z_mat = gather_burst_b_multi(
             sub_arm_codes, sub_mediator, sub_outcome, b,
         )
         n_b = int(x_np.size)
@@ -1105,7 +1105,7 @@ def _per_burst_edge_counts_from_subset_multi(
     return n_marg, n_dsep, n_direct
 
 
-def _cluster_bootstrap_edge_counts_multi(
+def cluster_bootstrap_edge_counts_multi(
     *,
     arm_codes: npt.NDArray[np.float64],
     mediator_lists: Sequence[Sequence[Sequence[float]]],
@@ -1117,7 +1117,7 @@ def _cluster_bootstrap_edge_counts_multi(
     bootstrap_alpha: float,
     seed: int,
 ) -> ClusterBootstrapEdgeCounts:
-    """Multi-mediator sibling of `_cluster_bootstrap_edge_counts`.
+    """Multi-mediator sibling of `cluster_bootstrap_edge_counts`.
 
     Cell-resampling pattern identical; per-replica edge-count
     triple is recomputed via the multi-Z CI primitive. The "joint
@@ -1177,7 +1177,7 @@ def _cluster_bootstrap_edge_counts_multi(
     )
 
 
-def _cluster_bootstrap_edge_counts(
+def cluster_bootstrap_edge_counts(
     *,
     arm_codes: npt.NDArray[np.float64],
     mediator_lists: Sequence[Sequence[float]],
@@ -1208,7 +1208,7 @@ def _cluster_bootstrap_edge_counts(
     percentile result to the nearest integer (the percentile
     interpolation can land between integer counts).
 
-    Sibling to `_cluster_bootstrap_pool` (the ρ-pool variant);
+    Sibling to `cluster_bootstrap_pool` (the ρ-pool variant);
     same cell-resampling pattern, different inner computation. The
     two are independent — consumers that want both pay for both
     via two passes over the resampled panels.
@@ -1277,23 +1277,23 @@ __all__ = [
     'FisherZDLPool',
     'Stratum',
     'TimeAggregationStatus',
-    '_ColumnOrMeasurable',
+    'ColumnOrMeasurable',
     '_PerBurstMeasurable',
     '_as_float_list',
-    '_classify_status',
-    '_cluster_bootstrap_edge_counts',
-    '_cluster_bootstrap_edge_counts_multi',
-    '_cluster_bootstrap_pool',
-    '_cluster_bootstrap_pool_multi',
+    'classify_status',
+    'cluster_bootstrap_edge_counts',
+    'cluster_bootstrap_edge_counts_multi',
+    'cluster_bootstrap_pool',
+    'cluster_bootstrap_pool_multi',
     '_collect_arm_and_per_burst',
-    '_collect_arm_and_per_burst_multi',
-    '_encode_arm',
-    '_fisher_z_dl_pool',
+    'collect_arm_and_per_burst_multi',
+    'encode_arm',
+    'fisher_z_dl_pool',
     '_gather_burst_b',
-    '_gather_burst_b_multi',
+    'gather_burst_b_multi',
     '_n_bursts',
-    '_n_bursts_multi',
+    'n_bursts_multi',
     '_resolve_per_burst',
-    '_source_name',
-    '_stratum_key',
+    'source_name',
+    'stratum_key',
 ]

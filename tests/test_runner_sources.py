@@ -9,19 +9,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import cast, ClassVar
 
 import polars as pl
 
+from corroborate.core.hypothesis import Hypothesis
 from corroborate.bridge.bridge import Bridge
 from corroborate.core.finding import Finding
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.runner.runner import (
     CacheSourceEntry,
     CacheSources,
-    _read_sources,  # pyright: ignore[reportPrivateUsage]
-    _sources_path,  # pyright: ignore[reportPrivateUsage]
-    _write_sources,  # pyright: ignore[reportPrivateUsage]
+    _read_sources,
+    _sources_path,
+    _write_sources,
     evict,
 )
 
@@ -197,7 +198,7 @@ def test_evict_drops_sources_entry(tmp_path: Path) -> None:
     # Hypothesis's Protocol structurally.
 
     total, counts = evict(
-        _StubHypothesis,
+        cast(Hypothesis, _StubHypothesis),
         ['corpus_A'],
         cache_path=cache_path,
     )
@@ -228,7 +229,7 @@ def test_evict_removes_sidecar_when_all_entries_dropped(tmp_path: Path) -> None:
     ))
 
     _ = evict(
-        _StubHypothesis,
+        cast(Hypothesis, _StubHypothesis),
         ['corpus_A'],
         cache_path=cache_path,
     )
@@ -243,7 +244,7 @@ def test_evict_no_op_when_no_sidecar(tmp_path: Path) -> None:
     ])
 
     total, _counts = evict(
-        _StubHypothesis,
+        cast(Hypothesis, _StubHypothesis),
         ['corpus_A'],
         cache_path=cache_path,
     )
@@ -260,7 +261,7 @@ def test_evict_no_op_when_no_sidecar(tmp_path: Path) -> None:
 # is covered by the live smoke at the end of implementation.
 
 from corroborate.runner.runner import (  # noqa: E402
-    _update_sources_for_walk,  # pyright: ignore[reportPrivateUsage]
+    _update_sources_for_walk,
 )
 
 

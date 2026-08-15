@@ -15,7 +15,7 @@ import pytest
 from corroborate._internals.cloud_auth import (
     CloudAuthError,
     PreflightStage,
-    _bucket_from_prefix,  # pyright: ignore[reportPrivateUsage]
+    _bucket_from_prefix,
     preflight,
 )
 
@@ -250,7 +250,7 @@ def test_preflight_or_exit_exports_aws_profile_on_success(
     Without this, `archive --profile r2` would pass preflight via
     the r2 profile but fail the actual upload (default chain)."""
     import os
-    from corroborate.__main__ import _preflight_or_exit  # pyright: ignore[reportPrivateUsage]
+    from corroborate.__main__ import _preflight_or_exit
     monkeypatch.delenv('AWS_PROFILE', raising=False)
     _install_session(monkeypatch, client=_StubClient())
     rc = _preflight_or_exit('s3://my-bucket/', profile='r2')
@@ -264,7 +264,7 @@ def test_preflight_or_exit_no_profile_leaves_env_alone(
     """When --profile is not passed, don't clobber an existing
     AWS_PROFILE env var (or set one when none was set)."""
     import os
-    from corroborate.__main__ import _preflight_or_exit  # pyright: ignore[reportPrivateUsage]
+    from corroborate.__main__ import _preflight_or_exit
     monkeypatch.setenv('AWS_PROFILE', 'preexisting')
     _install_session(monkeypatch, client=_StubClient())
     rc = _preflight_or_exit('s3://my-bucket/', profile=None)
@@ -278,7 +278,7 @@ def test_preflight_or_exit_does_not_set_env_on_failure(
     """If preflight fails, the downstream cloud op never runs, so
     don't pollute the env with the profile that didn't authenticate."""
     import os
-    from corroborate.__main__ import _preflight_or_exit  # pyright: ignore[reportPrivateUsage]
+    from corroborate.__main__ import _preflight_or_exit
     monkeypatch.delenv('AWS_PROFILE', raising=False)
     _install_session(monkeypatch, creds_returned=False)
     rc = _preflight_or_exit('s3://my-bucket/', profile='broken')

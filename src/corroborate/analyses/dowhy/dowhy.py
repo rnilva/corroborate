@@ -32,9 +32,9 @@ from typing import TYPE_CHECKING
 from corroborate.bridge.analysis import analysis
 from corroborate.analyses._dowhy_internal import (
     DAGLike,
-    _backdoor_estimate,
-    _build_causal_model,
-    _refuter_effect,
+    backdoor_estimate,
+    build_causal_model,
+    refuter_effect,
 )
 
 
@@ -103,7 +103,7 @@ def backdoor_ate(
     under `dag`. Returns identified=False when the DAG admits
     no admissible adjustment."""
     cells_list = list(cells)
-    df, identified, estimate = _backdoor_estimate(
+    df, identified, estimate = backdoor_estimate(
         cells_list, treatment, outcome, dag, method_name,
     )
     if estimate is None:
@@ -148,7 +148,7 @@ def _run_refuter(
     cross-hypothesis test runs that consume the global RNG drift
     refuter outputs and flip downstream verdicts."""
     cells_list = list(cells)
-    df, identified, estimate = _backdoor_estimate(
+    df, identified, estimate = backdoor_estimate(
         cells_list, treatment, outcome, dag, method_name,
     )
     if estimate is None:
@@ -171,12 +171,12 @@ def _run_refuter(
     # DoWhy's typed stub doesn't declare `random_state` on
     # CausalModel.refute_estimate's signature — the keyword goes
     # through **kwargs to the refuter class init at runtime.
-    model = _build_causal_model(df, treatment, outcome, dag)
+    model = build_causal_model(df, treatment, outcome, dag)
     refuter = model.refute_estimate(
         identified, estimate, method_name=refuter_method,
         random_state=random_state,  # pyright: ignore[reportCallIssue]
     )
-    refuted_ate = _refuter_effect(refuter)
+    refuted_ate = refuter_effect(refuter)
     return RefutationResult(
         real_ate=real_ate,
         refuted_ate=refuted_ate,

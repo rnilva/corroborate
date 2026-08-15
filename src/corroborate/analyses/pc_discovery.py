@@ -35,7 +35,7 @@ within-stratum CI tests are pooled via Fisher z.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import polars as pl
@@ -171,7 +171,9 @@ def _cells_to_polars(
     if not rows:
         # Empty df with schema — polars accepts list[dict] but
         # crashes on empty list, so build explicitly.
-        schema = {k: pl.Float64 for k in keys}
+        schema: dict[str, pl.DataType | type[pl.DataType]] = {
+            k: pl.Float64 for k in keys
+        }
         if stratify_by is not None:
             schema[stratify_by] = pl.Utf8
         return pl.DataFrame(schema=schema)

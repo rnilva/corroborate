@@ -30,6 +30,7 @@ importing across module-private boundaries."""
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 import functools
 import inspect
 import types
@@ -50,7 +51,8 @@ if TYPE_CHECKING:
 
 
 def _is_at_declared_default(
-    value: object, declared_default: object, factory_default: object,
+    value: object, declared_default: object,
+    factory_default: 'Callable[[], object] | None',
 ) -> bool:
     """True iff `value` equals the field's / parameter's declared
     default. Handles three cases:

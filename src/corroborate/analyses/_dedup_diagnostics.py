@@ -9,7 +9,7 @@ the analysis, they're either:
   to add those columns to `pair_by` so each regime is its own
   stratum, OR scope-filter to one regime.
 
-`_distinguishing_columns` mechanically computes which path applies:
+`distinguishing_columns` mechanically computes which path applies:
 the columns whose values differ across the duplicate cells. The
 analyses use it to build error messages that point the author at
 the offending columns rather than just saying "duplicate".
@@ -60,7 +60,7 @@ _PROVENANCE_TAGS: frozenset[str] = frozenset({
 })
 
 
-def _distinguishing_columns(
+def distinguishing_columns(
     cells: Iterable[Mapping[str, object]],
     *,
     skip: frozenset[str] = frozenset(),
@@ -130,7 +130,7 @@ def _distinguishing_columns(
 
 
 def format_diff(diff: Mapping[str, list[object]]) -> str:
-    """Pretty-print a `_distinguishing_columns` result as a single
+    """Pretty-print a `distinguishing_columns` result as a single
     line for inclusion in error messages. Truncates each column's
     value list to 5 entries."""
     if not diff:
@@ -146,4 +146,4 @@ def format_diff(diff: Mapping[str, list[object]]) -> str:
     return '; '.join(parts)
 
 
-__all__ = ['_distinguishing_columns', 'format_diff']
+__all__ = ['distinguishing_columns', 'format_diff']

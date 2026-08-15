@@ -93,7 +93,7 @@ def _ingest(root: Path) -> pl.DataFrame:
     or parallel is governed by `CORROBORATE_CACHE_WORKERS` in the
     caller's environment."""
     from corroborate.runner.runner import (
-        _load_directory,  # pyright: ignore[reportPrivateUsage]
+        _load_directory,
     )
     return _load_directory(
         root,
@@ -376,10 +376,10 @@ def _registry_probe_child(
     import sys
     from corroborate.measurables import registered_names
     from corroborate.measurables.measurable import (
-        _REGISTRY,  # pyright: ignore[reportPrivateUsage]
+        _REGISTRY,
     )
     from corroborate.runner.runner import (
-        _reestablish_registry,  # pyright: ignore[reportPrivateUsage]
+        _reestablish_registry,
     )
     # Simulate a never-imported substrate: drop the cached module +
     # wipe the registry this process inherited via spawn-reimport,
@@ -387,7 +387,7 @@ def _registry_probe_child(
     # fresh import.
     for mod in init_modules:
         sys.modules.pop(mod, None)
-    _REGISTRY._entries.clear()  # pyright: ignore[reportPrivateUsage]
+    _REGISTRY._entries.clear()
     absent_after_clear = fix.MEASURABLE_NAME not in registered_names()
     _reestablish_registry(init_modules)
     present_after_init = fix.MEASURABLE_NAME in registered_names()

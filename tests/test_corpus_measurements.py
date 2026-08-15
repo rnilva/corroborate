@@ -1397,7 +1397,7 @@ def test_cli_recompute_targets_named_list_calls_recompute(
     import types
     import sys
     from corroborate.cli.hypothesis import (
-        _recompute_ingest_targets,  # pyright: ignore[reportPrivateUsage]
+        _recompute_ingest_targets,
     )
 
     corpus = tmp_path / 'corp_a'
@@ -1446,7 +1446,7 @@ def test_cli_recompute_targets_no_data_skips_with_log(
     """`--recompute-measurables` with no `--ingest` mode set is
     a no-op; the function logs the skip but doesn't raise."""
     from corroborate.cli.hypothesis import (
-        _recompute_ingest_targets,  # pyright: ignore[reportPrivateUsage]
+        _recompute_ingest_targets,
     )
 
     _recompute_ingest_targets(
@@ -1465,7 +1465,7 @@ def test_cli_recompute_targets_ingest_file_skips_with_log(
     the function logs the skip rather than crashing on the
     file-vs-dir mismatch."""
     from corroborate.cli.hypothesis import (
-        _recompute_ingest_targets,  # pyright: ignore[reportPrivateUsage]
+        _recompute_ingest_targets,
     )
 
     parquet = tmp_path / 'just_a_file.parquet'
@@ -1489,7 +1489,7 @@ def test_cli_recompute_targets_directory_walks_one_level(
     import types
     import sys
     from corroborate.cli.hypothesis import (
-        _recompute_ingest_targets,  # pyright: ignore[reportPrivateUsage]
+        _recompute_ingest_targets,
     )
 
     root = tmp_path / 'root'
@@ -1652,7 +1652,7 @@ def test_streaming_compute_single_row_group_takes_per_cell_fallback(
     # Spying on the private fallback is the most direct assertion
     # that the OOM-safe branch ran (matches this file's existing
     # `_stream_assemble_frames` private-access convention).
-    original = _m._compute_trace_measurables_per_id  # pyright: ignore[reportPrivateUsage]
+    original = _m._compute_trace_measurables_per_id
 
     def _spy(*args: object, **kwargs: object) -> pl.DataFrame:
         calls.append(1)
@@ -1876,10 +1876,10 @@ def test_streaming_ingest_streams_reads_of_current_measurable(
     set, so no warning fires and the value stays finite.
     """
     from corroborate.runner.runner import (
-        _drifted_or_missing_measurables,  # pyright: ignore[reportPrivateUsage]
-        _load_one_corpus,  # pyright: ignore[reportPrivateUsage]
-        _measurable_signature,  # pyright: ignore[reportPrivateUsage]
-        _required_record_keys,  # pyright: ignore[reportPrivateUsage]
+        _drifted_or_missing_measurables,
+        _load_one_corpus,
+        _measurable_signature,
+        _required_record_keys,
     )
 
     corpus = tmp_path / 'corp'

@@ -127,7 +127,7 @@ def paired_g_per_burst(
         )
 
     from corroborate.analyses._dedup_diagnostics import (
-        _distinguishing_columns, format_diff,
+        distinguishing_columns, format_diff,
     )
 
     # Group cells by (env_name, arm), key on pair_by. Carry the
@@ -155,7 +155,7 @@ def paired_g_per_burst(
         existing = bucket.setdefault(key, [])
         if existing and dedupe_strategy == 'raise':
             prior_cells = [c for c, _ in existing]
-            diff = _distinguishing_columns(
+            diff = distinguishing_columns(
                 [*prior_cells, cell],
                 skip=frozenset(pair_by) | {'env_name', arm_field},
             )
@@ -194,7 +194,7 @@ def paired_g_per_burst(
             shapes = {arr.shape for arr in arrays}
             if len(shapes) > 1:
                 cells_with_dup = [c for c, _ in items]
-                diff = _distinguishing_columns(
+                diff = distinguishing_columns(
                     cells_with_dup,
                     skip=frozenset(pair_by) | {'env_name', arm_field},
                 )

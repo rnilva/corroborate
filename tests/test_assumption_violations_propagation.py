@@ -146,7 +146,7 @@ def test_assumption_violations_propagate_through_bridge_report_entry() -> None:
     # exercises it directly to verify the runner-side wiring
     # without spinning up the full `run()` pipeline (which would
     # require a hypothesis module + cache writes + report writes).
-    from corroborate.runner.report import _build_bridge_entry  # pyright: ignore[reportPrivateUsage]
+    from corroborate.runner.report import _build_bridge_entry
 
     cells = _skewed_paired_cells(n_seeds=30)
     evaluation = evaluate(skew_bridge, cells)

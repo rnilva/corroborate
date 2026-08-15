@@ -32,7 +32,6 @@ import math
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import cast
 
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
@@ -90,7 +89,7 @@ def _pair_and_extract(
         key = tuple(cell.get(k) for k in pair_by)
         if any(v is None for v in key):
             continue
-        keyed[key][cast(str, arm)] = cell
+        keyed[key][arm] = cell
 
     rows: list[dict[str, float]] = []
     for key, arms in keyed.items():

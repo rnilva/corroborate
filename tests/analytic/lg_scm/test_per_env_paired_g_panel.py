@@ -9,7 +9,6 @@ extensively covered elsewhere; this file pins:
 - pair_by + arm_field kwargs propagate to `paired_g.fn`"""
 from __future__ import annotations
 
-import pytest
 
 from corroborate.analyses.paired.paired_g import per_env_paired_g_panel
 
@@ -24,7 +23,7 @@ def _scm() -> LinearGaussianSCM:
     )
 
 
-def _multi_env_corpus() -> list:
+def _multi_env_corpus() -> list[dict[str, object]]:
     """Three envs (env_A, env_B, env_C) × two arms × 10 seeds."""
     rows = []
     for env in ('env_A', 'env_B', 'env_C'):

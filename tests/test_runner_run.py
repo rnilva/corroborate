@@ -20,12 +20,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, cast
 
 import pytest
 
 from corroborate.bridge.bridge import Bridge
 from corroborate.core.finding import Finding
+from corroborate.core.hypothesis import Hypothesis
 from corroborate.core.intervention import DoEffect, Intervention
 
 # `_validate_hypothesis` / `_default_cache_path` are
@@ -36,8 +37,8 @@ from corroborate.core.intervention import DoEffect, Intervention
 # §heuristic, this is the third option ("the value's true type
 # requires a typed test path the public API doesn't expose").
 from corroborate.runner.runner import (
-    _default_cache_path,  # pyright: ignore[reportPrivateUsage]
-    _validate_hypothesis,  # pyright: ignore[reportPrivateUsage]
+    _default_cache_path,
+    _validate_hypothesis,
 )
 
 
@@ -143,7 +144,7 @@ def test_default_cache_path_bare_class_name() -> None:
         INTERVENTION: ClassVar[DoEffect] = _trivial_doeffect()
         BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
         FINDINGS: ClassVar[tuple[Finding, ...]] = ()
-    p = _default_cache_path(DDQNvsVanilla)
+    p = _default_cache_path(cast(Hypothesis, DDQNvsVanilla))
     assert p == Path('experiments/data/cache/DDQNvsVanilla.parquet')
 
 
@@ -162,8 +163,6 @@ def test_default_cache_path_dotted_module_name_uses_last_segment() -> None:
     # natural surrogate; types.ModuleType lets us set `__name__`
     # directly. Cast for the typed Hypothesis Protocol.
     import types
-    from typing import cast
-    from corroborate.core.hypothesis import Hypothesis
     mod = types.ModuleType('experiments.findings.dqn_bridges')
     # Module attribute writes via setattr — direct assignment trips
     # pyright's strict module-attribute-access mode.
@@ -342,7 +341,7 @@ def test_corpus_stamp_top_level_bare_name(tmp_path: Path) -> None:
     own) stamps `corpus` with just the leaf dirname — backward
     compatible with caches predating the nested-stamp fix."""
     from corroborate.runner.runner import (
-        _corpus_stamp,  # pyright: ignore[reportPrivateUsage]
+        _corpus_stamp,
     )
     container = tmp_path / 'data'
     container.mkdir()
@@ -452,7 +451,7 @@ def test_corpus_stamp_nested_uses_parent_name(tmp_path: Path) -> None:
     other from the cache on named-ingest."""
     import polars as pl
     from corroborate.runner.runner import (
-        _corpus_stamp,  # pyright: ignore[reportPrivateUsage]
+        _corpus_stamp,
     )
     parent = tmp_path / 'ddqn_axis_probes_mc_1m'
     parent.mkdir()

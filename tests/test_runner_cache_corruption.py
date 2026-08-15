@@ -10,7 +10,9 @@ the run rebuilds from scratch.
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from io import StringIO
+from typing import TextIO
 from pathlib import Path
 
 import pytest
@@ -18,7 +20,7 @@ import pytest
 from corroborate.runner.runner import _load_cache
 
 
-def _swap_stderr(buf: StringIO) -> StringIO:
+def _swap_stderr(buf: StringIO) -> TextIO:
     prev = sys.stderr
     sys.stderr = buf
     return prev
@@ -249,8 +251,6 @@ def test_invalidate_drifted_drops_orphan_measurable_columns(
     its column AS IF it had been required at the last build,
     then call `_invalidate_drifted` with an EMPTY required set.
     The orphan column should be dropped."""
-    from collections.abc import Mapping
-
     import polars as pl
 
     from corroborate.measurables import measurable
@@ -285,7 +285,7 @@ def test_invalidate_drifted_drops_orphan_measurable_columns(
 
 
 def test_estimate_max_workers_caps_by_largest_trace_size(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """**Disk-budget bound** (Phase 0 #5): worker count divides
     `(available_disk / safety_factor) // largest_trace_bytes`.
@@ -333,7 +333,7 @@ def test_estimate_max_workers_caps_by_largest_trace_size(
 
 
 def test_estimate_max_workers_caps_at_hard_limit(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """**Hard cap** (Phase 0 #5): even with infinite disk and tiny
     traces, the estimator returns at most `hard_cap` (default 4)
@@ -375,7 +375,7 @@ def test_estimate_max_workers_caps_at_hard_limit(
 
 
 def test_estimate_max_workers_respects_env_override(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`CORROBORATE_CACHE_WORKERS` env var bypasses the disk-budget
     calculation. Useful when the user knows their environment
@@ -389,7 +389,7 @@ def test_estimate_max_workers_respects_env_override(
 
 
 def test_estimate_max_workers_no_manifests_returns_hard_cap(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """No manifests → no traces to budget → returns hard_cap.
     Cache build is purely CPU-bound; disk-budget bound doesn't
@@ -631,7 +631,7 @@ def test_missing_for_restore_narrows_via_measurements_parquet(
         'mc_return_from_step', 'episode_length', 'gamma',
     ))
     def __test_p1_mc_return_raw_episodes(
-        record: 'Mapping[str, object]',
+        record: Mapping[str, object],
     ) -> list[float]:
         del record
         return []

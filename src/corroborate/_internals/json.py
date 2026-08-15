@@ -23,5 +23,5 @@ import json
 def loads(s: str) -> object:
     """Decode a JSON string to `object`. Downstream callers narrow
     further via TypeIs predicates / isinstance checks."""
-    raw = json.loads(s)  # pyright: ignore[reportAny]
-    return raw  # pyright: ignore[reportAny]
+    raw = json.loads(s)
+    return raw

@@ -179,6 +179,15 @@ reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 reportUnknownLambdaType = "none"
 reportUnusedFunction = "none"
+# `reportPrivateUsage = "none"` is the second test-specific
+# relaxation: white-box tests deliberately exercise framework
+# internals (`_default_cache_path`, `_estimate_max_workers`,
+# `_invalidate_drifted`, ...) — reaching past the public surface
+# is the point of a unit test on internals. The rule stays strict
+# in `src/`, where cross-module private usage indicates a missing
+# public seam (see the `_common.py` public-names-in-private-module
+# convention).
+reportPrivateUsage = "none"
 
 
 # ============ Mutation testing (mutmut) ============

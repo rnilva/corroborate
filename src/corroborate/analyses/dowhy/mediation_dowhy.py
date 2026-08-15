@@ -5,7 +5,7 @@ shape, ported forward with current framework conventions):
 
 1. **Total ATE** — backdoor identification + estimation of
    `treatment → outcome` under `dag`. Reuses
-   `corroborate.analyses.dowhy._backdoor_estimate`.
+   `corroborate.analyses.dowhy.backdoor_estimate`.
 2. **Direct ATE** — OLS of `outcome` on `(treatment, *mediators)`;
    the coefficient on `treatment` is the controlled direct
    effect (what's left after holding mediators fixed). This is
@@ -105,8 +105,8 @@ from enum import StrEnum
 
 from corroborate.analyses._dowhy_internal import (
     DAGLike,
-    _backdoor_estimate,
-    _cells_to_dataframe,
+    backdoor_estimate,
+    cells_to_dataframe,
 )
 from corroborate.bridge.analysis import analysis
 
@@ -215,7 +215,7 @@ def mediation_dowhy(
         )
 
     # Early empty-scope guard: bridge scopes that admit zero cells
-    # would otherwise crash `_build_causal_model`'s column-presence
+    # would otherwise crash `build_causal_model`'s column-presence
     # check on an empty DataFrame. Return POWER_INSUFFICIENT
     # cleanly so the cluster Finding's verdict aggregates as
     # UNDERPOWERED rather than the bridge erroring.
@@ -231,7 +231,7 @@ def mediation_dowhy(
         )
 
     # Stage 1: total ATE via backdoor
-    df, _identified_estimand, estimate = _backdoor_estimate(
+    df, _identified_estimand, estimate = backdoor_estimate(
         cells_list, treatment, outcome, dag, method_name,
     )
     n_rows = len(df)
@@ -248,7 +248,7 @@ def mediation_dowhy(
 
     # Stage 2: direct ATE via OLS with mediators as covariates.
     needed = [treatment, outcome, *mediators]
-    df_med = _cells_to_dataframe(cells_list, needed)
+    df_med = cells_to_dataframe(cells_list, needed)
     if df_med.empty or len(df_med) < 3:
         return MediationResult(
             total_ate=total_ate, direct_ate=float('nan'),

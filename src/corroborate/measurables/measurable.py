@@ -1017,7 +1017,10 @@ def _to_polars_series(name: str, vals: list[object]) -> pl.Series:
 @overload
 def measurable[R: Mapping[str, object], T](
     fn: Callable[..., T], /,
-) -> Measurable[R, T]: ...
+    # R is caller-directed: the record shape the measurable consumes
+    # is chosen at the annotation site, not inferable from `fn`'s
+    # (...) signature.
+) -> Measurable[R, T]: ...  # pyright: ignore[reportInvalidTypeVarUse]
 
 
 @overload
@@ -1025,7 +1028,8 @@ def measurable[R: Mapping[str, object], T](
     *,
     name: str | None = None,
     reads: tuple[str, ...] = (),
-) -> Callable[[Callable[..., T]], Measurable[R, T]]: ...
+    # Same caller-directed R as the positional overload.
+) -> Callable[[Callable[..., T]], Measurable[R, T]]: ...  # pyright: ignore[reportInvalidTypeVarUse]
 
 
 def measurable[R: Mapping[str, object], T](

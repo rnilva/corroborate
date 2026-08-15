@@ -358,17 +358,17 @@ def dispatch(args: argparse.Namespace) -> int:
 
     `args.audit_subcmd` is set by `add_args`'s subparser; only
     'pre-registration' is currently supported."""
-    sub_raw: object = args.audit_subcmd  # pyright: ignore[reportAny]
+    sub_raw: object = args.audit_subcmd
     if sub_raw != 'pre-registration':
         # Future-proofing: more audit subcommands will land here.
         raise ValueError(f'unknown audit subcommand: {sub_raw!r}')
-    corpus_path_raw: object = args.corpus_path  # pyright: ignore[reportAny]
+    corpus_path_raw: object = args.corpus_path
     if not isinstance(corpus_path_raw, Path):
         raise TypeError(
             f'corpus_path must be a Path; got '
             f'{type(corpus_path_raw).__name__}',
         )
-    report_path_raw: object = args.report_path  # pyright: ignore[reportAny]
+    report_path_raw: object = args.report_path
     report_path = (
         report_path_raw if isinstance(report_path_raw, Path) else None
     )

@@ -49,7 +49,9 @@ from corroborate.analyses.dowhy import backdoor_ate
 
 # Reuse the substrate from the existing dowhy test.
 sys.path.insert(0, 'tests/analytic/lg_scm')
-from test_dowhy import _build_observational_corpus, _EXPECTED_ATE  # noqa: E402
+from tests.analytic.lg_scm.test_dowhy import (  # noqa: E402
+    _EXPECTED_ATE, _build_observational_corpus,
+)
 
 
 _CELLS: list[Mapping[str, object]] = list(_build_observational_corpus())

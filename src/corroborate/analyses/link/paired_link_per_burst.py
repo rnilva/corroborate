@@ -146,7 +146,7 @@ def paired_link_per_burst(
         )
 
     from corroborate.analyses._dedup_diagnostics import (
-        _distinguishing_columns, format_diff,
+        distinguishing_columns, format_diff,
     )
 
     # Carry the cell mapping with each (target, predictor) pair so
@@ -175,7 +175,7 @@ def paired_link_per_burst(
         existing = bucket.setdefault(key, [])
         if existing and dedupe_strategy == 'raise':
             prior_cells = [c for c, _, _ in existing]
-            diff = _distinguishing_columns(
+            diff = distinguishing_columns(
                 [*prior_cells, cell],
                 skip=frozenset(pair_by) | {'env_name', arm_field},
             )
@@ -218,7 +218,7 @@ def paired_link_per_burst(
                 {p.shape for p in predictor_arrays},
             ) > 1:
                 cells_with_dup = [c for c, _, _ in items]
-                diff = _distinguishing_columns(
+                diff = distinguishing_columns(
                     cells_with_dup,
                     skip=frozenset(pair_by) | {'env_name', arm_field},
                 )

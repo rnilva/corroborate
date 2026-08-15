@@ -31,5 +31,5 @@ def safe_load(stream: IO[str] | str) -> object:
             "Install it with `pip install 'corroborate[yaml]'` "
             "(or add `pyyaml` to your environment)."
         ) from e
-    raw = yaml.safe_load(stream)  # pyright: ignore[reportAny]
-    return raw  # pyright: ignore[reportAny]
+    raw = yaml.safe_load(stream)
+    return raw

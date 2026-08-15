@@ -50,17 +50,17 @@ from corroborate.analyses.dynamic_mediation._common import (
     FisherZDLPool,
     Stratum,
     TimeAggregationStatus,
-    _ColumnOrMeasurable,
-    _classify_status,
-    _cluster_bootstrap_pool,
-    _cluster_bootstrap_pool_multi,
-    _collect_arm_and_per_burst_multi,
-    _encode_arm,
-    _fisher_z_dl_pool,
-    _gather_burst_b_multi,
-    _n_bursts_multi,
-    _source_name,
-    _stratum_key,
+    ColumnOrMeasurable,
+    classify_status,
+    cluster_bootstrap_pool,
+    cluster_bootstrap_pool_multi,
+    collect_arm_and_per_burst_multi,
+    encode_arm,
+    fisher_z_dl_pool,
+    gather_burst_b_multi,
+    n_bursts_multi,
+    source_name,
+    stratum_key,
 )
 from corroborate.bridge.analysis import analysis
 from corroborate.graph.discovery import (
@@ -166,9 +166,9 @@ def dynamic_partial_spearman(
     *,
     arm_field: str = 'arm_key',
     mediator_per_burst: (
-        _ColumnOrMeasurable | tuple[_ColumnOrMeasurable, ...]
+        ColumnOrMeasurable | tuple[ColumnOrMeasurable, ...]
     ),
-    outcome_per_burst: _ColumnOrMeasurable,
+    outcome_per_burst: ColumnOrMeasurable,
     stratify_by: tuple[str, ...] = ('env_name', 'gamma'),
     min_n_per_burst: int = 5,
     weak_time_varying_ratio: float = 2.0,
@@ -267,7 +267,7 @@ def dynamic_partial_spearman(
     # `rho_marginal`); raising here keeps the framework's two
     # surfaces typed-distinct and refuses a silently no-op
     # invocation.
-    mediators_tuple: tuple[_ColumnOrMeasurable, ...]
+    mediators_tuple: tuple[ColumnOrMeasurable, ...]
     if isinstance(mediator_per_burst, tuple):
         mediators_tuple = mediator_per_burst
         if len(mediators_tuple) == 0:
@@ -286,7 +286,7 @@ def dynamic_partial_spearman(
     # contributing to that stratum.
     by_stratum: dict[Stratum, list[Mapping[str, object]]] = {}
     for cell in _to_dicts(cells):
-        key = _stratum_key(cell, stratify_by)
+        key = stratum_key(cell, stratify_by)
         if key is None:
             continue
         by_stratum.setdefault(key, []).append(cell)
@@ -315,8 +315,8 @@ def _compute_one_stratum(
     cells: Sequence[Mapping[str, object]],
     *,
     arm_field: str,
-    mediators_per_burst: tuple[_ColumnOrMeasurable, ...],
-    outcome_per_burst: _ColumnOrMeasurable,
+    mediators_per_burst: tuple[ColumnOrMeasurable, ...],
+    outcome_per_burst: ColumnOrMeasurable,
     min_n_per_burst: int,
     weak_time_varying_ratio: float,
     sign_flip_min_abs_rho: float,
@@ -337,7 +337,7 @@ def _compute_one_stratum(
 
     Both paths feed into the same DL pool / cluster bootstrap with
     `df_offset = 3 + k`."""
-    collected = _collect_arm_and_per_burst_multi(
+    collected = collect_arm_and_per_burst_multi(
         cells,
         arm_field=arm_field,
         mediators_per_burst=mediators_per_burst,
@@ -360,11 +360,11 @@ def _compute_one_stratum(
     # from longer cells (truncate-to-min would discard every burst
     # past the shortest cell's tail, which is information loss in
     # the common case of one short cell in a stratum of long ones).
-    n_bursts = _n_bursts_multi(mediator_lists, outcome_lists)
+    n_bursts = n_bursts_multi(mediator_lists, outcome_lists)
     if n_bursts == 0:
         return None
 
-    arm_codes = _encode_arm(arms)
+    arm_codes = encode_arm(arms)
     df_offset_partial = 3 + k
 
     rho_marg: list[float] = []
@@ -377,7 +377,7 @@ def _compute_one_stratum(
             # z) tuple is bit-identical to what the depth-1
             # `_gather_burst_b` returns on the equivalent
             # single-mediator panel.
-            x_np, y_np, z_mat = _gather_burst_b_multi(
+            x_np, y_np, z_mat = gather_burst_b_multi(
                 arm_codes, mediator_lists, outcome_lists, b,
             )
             z_np = z_mat[:, 0] if z_mat.size else z_mat.reshape(-1)
@@ -390,7 +390,7 @@ def _compute_one_stratum(
             r_m = _marginal_spearman(x_np, y_np)
             r_p, _ = partial_spearman_rho(x_np, y_np, z_np)
         else:
-            x_np, y_np, z_mat = _gather_burst_b_multi(
+            x_np, y_np, z_mat = gather_burst_b_multi(
                 arm_codes, mediator_lists, outcome_lists, b,
             )
             n_b = int(x_np.size)
@@ -404,7 +404,7 @@ def _compute_one_stratum(
         rho_marg.append(r_m)
         rho_part.append(r_p)
 
-    status = _classify_status(
+    status = classify_status(
         rho_marg, n_per_burst, min_n_per_burst,
         weak_time_varying_ratio,
         sign_flip_min_abs_rho,
@@ -420,8 +420,8 @@ def _compute_one_stratum(
     )
     # DerSimonian-Laird random-effects pool — same df_offset
     # accounting as the FE pool. NEVER NaN'd by the diagnostic gate.
-    dl_marg = _fisher_z_dl_pool(rho_marg, n_per_burst, df_offset=3)
-    dl_part = _fisher_z_dl_pool(
+    dl_marg = fisher_z_dl_pool(rho_marg, n_per_burst, df_offset=3)
+    dl_part = fisher_z_dl_pool(
         rho_part, n_per_burst, df_offset=df_offset_partial,
     )
     if status is TimeAggregationStatus.SIGN_FLIP_DETECTED:
@@ -439,7 +439,7 @@ def _compute_one_stratum(
 
     # Cluster bootstrap CI on the DL pool — opt-in via
     # `n_bootstrap > 0`. The k=1 path uses the depth-1
-    # `_cluster_bootstrap_pool` (closed-form partial inside) so the
+    # `cluster_bootstrap_pool` (closed-form partial inside) so the
     # default behaviour remains bit-identical to pre-multi versions.
     # k≥2 uses the multi-mediator variant.
     bootstrap_marg: ClusterBootstrapInterval | None = None
@@ -453,7 +453,7 @@ def _compute_one_stratum(
             flat_med: list[Sequence[float]] = [
                 cell_meds[0] for cell_meds in mediator_lists
             ]
-            bootstrap_marg = _cluster_bootstrap_pool(
+            bootstrap_marg = cluster_bootstrap_pool(
                 arm_codes=arm_codes,
                 mediator_lists=flat_med,
                 outcome_lists=outcome_lists,
@@ -465,7 +465,7 @@ def _compute_one_stratum(
                 alpha=bootstrap_alpha,
                 seed=bootstrap_seed,
             )
-            bootstrap_part = _cluster_bootstrap_pool(
+            bootstrap_part = cluster_bootstrap_pool(
                 arm_codes=arm_codes,
                 mediator_lists=flat_med,
                 outcome_lists=outcome_lists,
@@ -478,7 +478,7 @@ def _compute_one_stratum(
                 seed=bootstrap_seed,
             )
         else:
-            bootstrap_marg = _cluster_bootstrap_pool_multi(
+            bootstrap_marg = cluster_bootstrap_pool_multi(
                 arm_codes=arm_codes,
                 mediator_lists=mediator_lists,
                 outcome_lists=outcome_lists,
@@ -490,7 +490,7 @@ def _compute_one_stratum(
                 alpha=bootstrap_alpha,
                 seed=bootstrap_seed,
             )
-            bootstrap_part = _cluster_bootstrap_pool_multi(
+            bootstrap_part = cluster_bootstrap_pool_multi(
                 arm_codes=arm_codes,
                 mediator_lists=mediator_lists,
                 outcome_lists=outcome_lists,
@@ -513,8 +513,8 @@ def _compute_one_stratum(
         dl_marginal=dl_marg,
         dl_partial=dl_part,
         aggregation_status=status,
-        mediator_names=tuple(_source_name(m) for m in mediators_per_burst),
-        outcome_name=_source_name(outcome_per_burst),
+        mediator_names=tuple(source_name(m) for m in mediators_per_burst),
+        outcome_name=source_name(outcome_per_burst),
         arm_field=arm_field,
         bootstrap_marginal=bootstrap_marg,
         bootstrap_partial=bootstrap_part,

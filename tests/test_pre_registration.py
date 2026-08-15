@@ -229,7 +229,7 @@ def test_source_hash_stable_across_cosmetic_changes() -> None:
     import hashlib
     import json
     from corroborate.core.pre_registration import (
-        _strip_docstrings,  # pyright: ignore[reportPrivateUsage]
+        _strip_docstrings,
     )
 
     # Construct two source strings whose bodies are semantically

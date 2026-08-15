@@ -128,7 +128,7 @@ def max_abs[R: Mapping[str, object]](
         # preserves dtype through numpy's stubs; `np.abs(arr)` itself
         # returns dtype[Any] for arbitrary inputs.
         arr = of(record)
-        return float(max(abs(np.max(arr)), abs(np.min(arr))))
+        return max(float(abs(np.max(arr))), float(abs(np.min(arr))))
     return Measurable(
         fn=fn, name=name, reads=of.reads,
         compose_of=(cast(
@@ -445,21 +445,19 @@ def reduce_axis[R: Mapping[str, object]](
         if arr.size == 0:
             return arr
         # `ndarray.mean(axis=...)` and friends are typed `Any` in
-        # numpy's stubs (the return is value-dependent: scalar for
-        # 1-D + axis=0, ndarray for N-D + axis<N). Cast at the
-        # boundary; the runtime invariant is "always an ndarray
-        # because we already short-circuited size==0 above."
+        # numpy >= 2.x stubs type axis-reductions precisely; no
+        # boundary cast needed (size==0 already short-circuited above).
         if op == 'mean':
-            return cast(npt.NDArray[np.floating], arr.mean(axis=axis))
+            return arr.mean(axis=axis)
         if op == 'var':
-            return cast(npt.NDArray[np.floating], arr.var(axis=axis))
+            return arr.var(axis=axis)
         if op == 'std':
-            return cast(npt.NDArray[np.floating], arr.std(axis=axis))
+            return arr.std(axis=axis)
         if op == 'max':
-            return cast(npt.NDArray[np.floating], arr.max(axis=axis))
+            return arr.max(axis=axis)
         if op == 'min':
-            return cast(npt.NDArray[np.floating], arr.min(axis=axis))
-        return cast(npt.NDArray[np.floating], arr.sum(axis=axis))
+            return arr.min(axis=axis)
+        return arr.sum(axis=axis)
     return Measurable(
         fn=fn, name=name, reads=of.reads,
         compose_of=(cast(

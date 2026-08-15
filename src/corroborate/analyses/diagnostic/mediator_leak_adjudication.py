@@ -300,7 +300,7 @@ def mediator_leak_adjudication(
     # → depth-k where k = len(tuple).
     sibling_res = dynamic_pc_adjacency.fn(
         cells,
-        mediator_per_burst=sibling_tuple if len(sibling_tuple) > 1 else sibling_tuple[0],
+        mediator_per_burst=sibling_tuple[0] if len(sibling_tuple) == 1 else sibling_tuple,
         **common_kwargs,
     )
     # Joint run: (mediator, *siblings) at depth-(k+1).

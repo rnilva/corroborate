@@ -53,7 +53,7 @@ def scalar_int(lf: pl.LazyFrame, expr: pl.Expr) -> int:
     Raises `TypeError` if the materialised cell isn't an int."""
     # `Any` source: polars' `Series.item() -> Any`. Laundered
     # immediately by the isinstance guard below.
-    v = lf.select(expr).collect().item()  # pyright: ignore[reportAny]
+    v = lf.select(expr).collect().item()
     if isinstance(v, bool) or not isinstance(v, int):
         raise TypeError(
             f'expected int scalar from polars LazyFrame, got '

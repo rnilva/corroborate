@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from typing import (
     Protocol,
     TypeIs,
+    cast,
     overload,
     override,
     runtime_checkable,
@@ -101,8 +102,13 @@ def record_call[**P, T](
     ctx = _TRACE.get()
     if ctx is None:
         return
+    # The trace is the heterogeneous container boundary: it holds
+    # Claim[P, T] calls of every shape at the `Claim[..., object]`
+    # upper bound (CLAUDE.md "generic upper-bound container").
+    # Safe at runtime: readers only touch `result` as `object`.
     ctx.append(CallRecord(
-        claim=claim_obj, args=args, kwargs=dict(kwargs), result=result,
+        claim=cast('Claim[..., object]', claim_obj),
+        args=args, kwargs=dict(kwargs), result=result,
     ))
 
 

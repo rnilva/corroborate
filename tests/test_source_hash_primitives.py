@@ -164,7 +164,7 @@ def test_bridge_source_hash_stable_across_cosmetic_changes() -> None:
     import json
 
     from corroborate.core.signature import (
-        _strip_docstrings,  # pyright: ignore[reportPrivateUsage]
+        _strip_docstrings,
     )
 
     src_a = (

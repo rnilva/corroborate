@@ -3,9 +3,7 @@ audit serializer."""
 from __future__ import annotations
 
 import json
-import math
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
@@ -24,7 +22,6 @@ from corroborate.bridge.admission import GateLevel, GateResult
 from corroborate.bridge.bridge import BridgeEvaluation
 from corroborate.runner.report import (
     BridgeReportEntry,
-    ErroredBridgeEntry,
     RunReport,
     _coerce_value,
     build_report,
@@ -219,8 +216,8 @@ def test_property_that_raises_yields_null_and_warns(capsys: pytest.CaptureFixtur
     """Properties that raise become null in the report; the
     failure surfaces as a one-time stderr warning so reviewers
     can spot real bugs (not silently masked as NaN data)."""
-    from corroborate.runner.report import _reset_warnings
-    _reset_warnings()
+    from corroborate.runner.report import reset_warnings
+    reset_warnings()
 
     @dataclass(frozen=True, slots=True)
     class _QuirkyDoublesOrDies:

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from corroborate.corpus.persistence import (
     read_runrows,
     write_runrows,
@@ -475,7 +477,7 @@ def test_stream_concat_atomicity_partial_file_absent_after_success(
 
 def test_stream_concat_atomicity_simulated_crash_leaves_no_torn_parquet(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Simulate a crash mid-write by monkeypatching `replace` to
     raise BEFORE the rename. The `.partial` file is left in place;

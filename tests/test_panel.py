@@ -744,7 +744,7 @@ def test_from_cache_round_trip_recovers_sources(
     # test exercise the read side without standing up a real
     # hypothesis module just to satisfy `from_cache`'s resolver.
     from corroborate.data.panel import CorpusSource
-    from corroborate.data.panel import _read_sources_for_panel as read  # pyright: ignore[reportPrivateUsage]
+    from corroborate.data.panel import _read_sources_for_panel as read
 
     cells = _make_cells_dataframe()
     panel = Panel(

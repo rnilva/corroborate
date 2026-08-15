@@ -141,8 +141,7 @@ def factorial_2x2_interaction(
         if not isinstance(env_v, str):
             continue
         envs_seen.add(env_v)
-        if arm_v not in (arm_a, arm_b, arm_c, arm_d) \
-                or not isinstance(arm_v, str):
+        if arm_v not in (arm_a, arm_b, arm_c, arm_d):
             continue
         try:
             fv = resolve_value(cell, source)

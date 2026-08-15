@@ -1930,8 +1930,8 @@ def _trace_is_cloud_recoverable(
     if entry is None:
         return False
     try:
-        from corroborate.corpus.cloud import _sha256_file
-        local_sha = _sha256_file(traces_path)
+        from corroborate.corpus.cloud import sha256_file
+        local_sha = sha256_file(traces_path)
     except OSError:
         return False
     return local_sha == entry.sha256

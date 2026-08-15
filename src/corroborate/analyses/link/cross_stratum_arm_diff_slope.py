@@ -76,8 +76,6 @@ def cross_stratum_arm_diff_slope(
         arm = c.get(arm_field)
         if arm not in (treatment_arm, baseline_arm):
             continue
-        if not isinstance(arm, str):
-            continue
         sk = tuple(c.get(k) for k in stratify_by)
         per_stratum_arm[sk][arm].append(c)
 

@@ -38,9 +38,6 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 
-import math
-import pytest
-
 from corroborate.analyses.paired.factorial_2x2 import (
     _g_paired_from_two_arms,
     factorial_2x2_interaction,
@@ -334,8 +331,8 @@ def test_g_paired_from_two_arms_returns_g_se_for_valid_pair() -> None:
     and `< 3` (would NaN at 3 pairs)."""
     # Vary deltas so variance is non-zero (else hedges_g_paired
     # returns g=0, se=NaN by zero-variance convention).
-    arm_x = {('k0',): 1.0, ('k1',): 2.0, ('k2',): 3.0}
-    arm_y = {('k0',): 1.5, ('k1',): 3.0, ('k2',): 5.0}    # deltas: 0.5, 1.0, 2.0
+    arm_x: dict[tuple[object, ...], float] = {('k0',): 1.0, ('k1',): 2.0, ('k2',): 3.0}
+    arm_y: dict[tuple[object, ...], float] = {('k0',): 1.5, ('k1',): 3.0, ('k2',): 5.0}    # deltas: 0.5, 1.0, 2.0
     g, se = _g_paired_from_two_arms(arm_x, arm_y, [('k0',), ('k1',), ('k2',)])
     assert math.isfinite(g)
     assert math.isfinite(se)
@@ -346,8 +343,8 @@ def test_g_paired_from_two_arms_returns_nan_below_n_2() -> None:
     """1 paired key → NaN g + NaN se. Pin every NaN-tuple element
     against `float(None)` (TypeError), `float('XXnanXX')`
     (ValueError), `float('NAN')` (equivalent — accepted)."""
-    arm_x = {('k0',): 1.0}
-    arm_y = {('k0',): 2.0}
+    arm_x: dict[tuple[object, ...], float] = {('k0',): 1.0}
+    arm_y: dict[tuple[object, ...], float] = {('k0',): 2.0}
     g, se = _g_paired_from_two_arms(arm_x, arm_y, [('k0',)])
     assert math.isnan(g)
     assert math.isnan(se)
@@ -358,8 +355,8 @@ def test_g_paired_from_two_arms_n_2_passes_below_guard() -> None:
     n<2 guard. hedges_g_paired returns finite g + finite se for
     n=2 with variance > 0. Pin `< 2` against `<= 2` and `< 3`
     mutants (both would NaN at n=2)."""
-    arm_x = {('k0',): 0.0, ('k1',): 1.0}
-    arm_y = {('k0',): 1.0, ('k1',): 5.0}    # deltas: 1.0, 4.0
+    arm_x: dict[tuple[object, ...], float] = {('k0',): 0.0, ('k1',): 1.0}
+    arm_y: dict[tuple[object, ...], float] = {('k0',): 1.0, ('k1',): 5.0}    # deltas: 1.0, 4.0
     g, se = _g_paired_from_two_arms(arm_x, arm_y, [('k0',), ('k1',)])
     assert math.isfinite(g)
     assert math.isfinite(se)

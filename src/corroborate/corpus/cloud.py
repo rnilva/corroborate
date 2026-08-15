@@ -419,7 +419,7 @@ def sniff_row_ids(source: Path | str) -> tuple[str, ...]:
     return tuple(str(x) for x in raw if isinstance(x, str))
 
 
-def _sha256_file(path: Path, *, chunk_size: int = 1 << 20) -> str:
+def sha256_file(path: Path, *, chunk_size: int = 1 << 20) -> str:
     """Compute sha256 of a local file. Streamed in 1 MiB chunks
     so memory stays bounded for arbitrarily large files."""
     h = hashlib.sha256()
@@ -697,7 +697,7 @@ def archive(
             ):
                 _warn_if_trace_schema_incomplete(local)
 
-        sha256 = _sha256_file(local)
+        sha256 = sha256_file(local)
         prior = by_relpath.get(relpath)
         remote_uri = _join_remote(remote_root, relpath)
         if prior is not None and prior.sha256 == sha256 and not force:
@@ -848,7 +848,7 @@ def restore(
     for entry in targets:
         local = sweep_dir / entry.relpath
         if local.exists():
-            local_sha = _sha256_file(local)
+            local_sha = sha256_file(local)
             if local_sha == entry.sha256:
                 continue  # already present, skip
             if not overwrite:
@@ -860,7 +860,7 @@ def restore(
 
         remote_uri = _join_remote(manifest.remote_root, entry.relpath)
         _fs.get_file(remote_uri, local)
-        got_sha = _sha256_file(local)
+        got_sha = sha256_file(local)
         if got_sha != entry.sha256:
             local.unlink(missing_ok=True)
             raise RuntimeError(

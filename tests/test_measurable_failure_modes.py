@@ -14,6 +14,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Mapping
 from io import StringIO
+from typing import TextIO
 
 import polars as pl
 import pytest
@@ -29,7 +30,7 @@ def stderr_capture() -> StringIO:
     return StringIO()
 
 
-def _swap_stderr(buf: StringIO) -> StringIO:
+def _swap_stderr(buf: StringIO) -> TextIO:
     """Context-manager-free helper: returns the previous stderr so
     the caller can restore."""
     prev = sys.stderr

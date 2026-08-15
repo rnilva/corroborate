@@ -40,10 +40,10 @@ from corroborate.analyses.dynamic_mediation import (
     dynamic_partial_spearman,
 )
 from corroborate.analyses.dynamic_mediation import (
-    _classify_status,  # pyright: ignore[reportPrivateUsage]
+    classify_status,
 )
 from corroborate.analyses.dynamic_mediation import (
-    _fisher_z_dl_pool,  # pyright: ignore[reportPrivateUsage]
+    fisher_z_dl_pool,
 )
 
 
@@ -514,11 +514,11 @@ def test_noise_level_opposite_signs_dont_flip_classifier_unit() -> None:
     default 0.05 noise floor. Classifier must return
     CONSISTENT_DIRECTION at the default floor.
 
-    Tested via the framework's `_classify_status` directly because
+    Tested via the framework's `classify_status` directly because
     `_build_panel`'s seed-coupled noise makes it hard to land the
     burst-2 empirical ρ in the tight `(-0.05, 0)` window the panel
     test would need."""
-    status = _classify_status(
+    status = classify_status(
         rho_marginal=(0.5, 0.5, -0.02),
         n_per_burst=(80, 80, 80),
         min_n_per_burst=5,
@@ -537,14 +537,14 @@ def test_noise_floor_zero_recovers_legacy_hairtrigger_behaviour() -> None:
     hair-trigger behaviour: any opposite-sign valid burst triggers
     SIGN_FLIP_DETECTED regardless of magnitude. Pins the
     direction-of-effect of the new parameter."""
-    status_default = _classify_status(
+    status_default = classify_status(
         rho_marginal=(0.5, 0.5, -0.02),
         n_per_burst=(80, 80, 80),
         min_n_per_burst=5,
         weak_time_varying_ratio=2.0,
         sign_flip_min_abs_rho=0.05,
     )
-    status_zero = _classify_status(
+    status_zero = classify_status(
         rho_marginal=(0.5, 0.5, -0.02),
         n_per_burst=(80, 80, 80),
         min_n_per_burst=5,
@@ -1010,7 +1010,7 @@ def test_accepts_measurable_inputs_for_mediator_and_outcome() -> None:
 # ============ DerSimonian-Laird random-effects pool ============
 #
 # These tests verify the DL pool wired into `DynamicMediationResult`
-# via `_fisher_z_dl_pool`. The DL pool is computed alongside the FE
+# via `fisher_z_dl_pool`. The DL pool is computed alongside the FE
 # Fisher-z pool — it's NEVER NaN'd by the diagnostic gate; its
 # τ²/I² ARE the quantitative signal of the heterogeneity that
 # `aggregation_status` flags qualitatively.
@@ -1272,7 +1272,7 @@ def test_dl_pool_pi_undefined_at_g_two() -> None:
     # G=2 bursts: each ρ=0.3 at n=80. Direct helper call to
     # avoid the need for a panel that aligns to exactly G=2
     # ragged-tail-wise.
-    dl = _fisher_z_dl_pool(rhos=[0.3, 0.35], ns=[80, 80], df_offset=3)
+    dl = fisher_z_dl_pool(rhos=[0.3, 0.35], ns=[80, 80], df_offset=3)
     assert dl.n_bursts_used == 2
     # Pooled estimate defined (DL needs G ≥ 2 for τ² estimation).
     assert not math.isnan(dl.rho_pooled)
@@ -1291,19 +1291,19 @@ def test_fisher_z_dl_pool_is_frozen_dataclass() -> None:
     raise. Pinned for the same reason `DynamicMediationResult`
     is frozen: bridge consumers / verdict renderers must not be
     able to mutate the typed result."""
-    dl = _fisher_z_dl_pool(rhos=[0.3, 0.3, 0.3], ns=[80, 80, 80], df_offset=3)
+    dl = fisher_z_dl_pool(rhos=[0.3, 0.3, 0.3], ns=[80, 80, 80], df_offset=3)
     assert isinstance(dl, FisherZDLPool)
     with pytest.raises((AttributeError, TypeError)):
         dl.tau2 = 0.0  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_fisher_z_dl_pool_helper_nan_under_g_lt_2() -> None:
-    """`_fisher_z_dl_pool` propagates `random_effects_summary`'s
+    """`fisher_z_dl_pool` propagates `random_effects_summary`'s
     `n < 2` NaN-filling. Below-floor n bursts are filtered before
     DL — they don't count toward `n_bursts_used`."""
     # n=5 with df_offset=3 → n−df=2 → SE_z = 1/sqrt(2) (valid),
     # but only ONE burst → `n_bursts_used=1`, DL undefined.
-    dl = _fisher_z_dl_pool(rhos=[0.5], ns=[5], df_offset=3)
+    dl = fisher_z_dl_pool(rhos=[0.5], ns=[5], df_offset=3)
     assert dl.n_bursts_used == 1
     assert math.isnan(dl.rho_pooled)
     assert math.isnan(dl.tau2)
@@ -1312,7 +1312,7 @@ def test_fisher_z_dl_pool_helper_nan_under_g_lt_2() -> None:
 
     # n=3 with df_offset=3 → n−df=0 → SE_z = 1/sqrt(0) undefined,
     # burst filtered → `n_bursts_used=0`.
-    dl2 = _fisher_z_dl_pool(rhos=[0.5, 0.5], ns=[3, 3], df_offset=3)
+    dl2 = fisher_z_dl_pool(rhos=[0.5, 0.5], ns=[3, 3], df_offset=3)
     assert dl2.n_bursts_used == 0
     assert math.isnan(dl2.rho_pooled)
 
@@ -1782,7 +1782,7 @@ def test_depth_2_vs_depth_1_dsep_proxy_via_partial_magnitudes() -> None:
 
 def test_depth_2_dl_pool_uses_df_offset_3_plus_k() -> None:
     """The DL pool df_offset = 3 + k at depth-k. Verify by
-    comparing `_fisher_z_dl_pool(rho_partial, n, df_offset=5)`
+    comparing `fisher_z_dl_pool(rho_partial, n, df_offset=5)`
     against the framework's reported `dl_partial.rho_pooled`."""
     df = _build_two_mediator_panel(n_bursts=4, seed=702)
     result = _get_single_stratum(dynamic_partial_spearman.fn(
@@ -1792,11 +1792,11 @@ def test_depth_2_dl_pool_uses_df_offset_3_plus_k() -> None:
         stratify_by=('env_name', 'gamma'),
     ))
     # k=2 → df_offset = 5.
-    expected_dl = _fisher_z_dl_pool(
+    expected_dl = fisher_z_dl_pool(
         list(result.rho_partial), list(result.n_per_burst),
         df_offset=5,
     )
-    # `_fisher_z_dl_pool` is the same primitive used inside the
+    # `fisher_z_dl_pool` is the same primitive used inside the
     # framework; results must be bit-identical.
     assert result.dl_partial.rho_pooled == expected_dl.rho_pooled
     assert result.dl_partial.tau2 == expected_dl.tau2

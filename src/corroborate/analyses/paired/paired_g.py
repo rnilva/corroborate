@@ -187,7 +187,7 @@ def paired_g(
         )
 
     # Collect cells alongside values so duplicate-bucket inspection
-    # can call `_distinguishing_columns` on the actual cells (not
+    # can call `distinguishing_columns` on the actual cells (not
     # just values). Under `dedupe_strategy='raise'`, a duplicate
     # bucket whose cells differ ONLY on framework-provenance tags
     # / None-vs-explicit-default columns is a TRUE replicate — the
@@ -196,7 +196,7 @@ def paired_g(
     # count alone, falsely flagging cross-sub-sweep replicate
     # aliases (cf. `findings_dqn_bridges_regime_mixing.md`).
     from corroborate.analyses._dedup_diagnostics import (
-        _distinguishing_columns, format_diff,
+        distinguishing_columns, format_diff,
     )
     treatment_buckets: dict[
         tuple[object, ...], list[tuple[Mapping[str, object], float]],
@@ -229,7 +229,7 @@ def paired_g(
             if len(items) <= 1:
                 continue
             cells_in_bucket = [c for c, _ in items]
-            diff = _distinguishing_columns(
+            diff = distinguishing_columns(
                 cells_in_bucket,
                 skip=frozenset(pair_by) | {arm_field},
             )

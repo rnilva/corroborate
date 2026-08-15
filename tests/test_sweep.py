@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+import pytest
+
 from corroborate.bridge.bridge import Bridge
 from corroborate.bridge.verdict import Verdict
 from corroborate.core.claim import claim
@@ -307,9 +309,10 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
     )
 
     # All four replicates present, both arms each.
-    replicates = sorted(
-        {r.measurements.get('replicate') for r in rows}
-    )
+    replicates = sorted({
+        rep for rep in (r.measurements.get('replicate') for r in rows)
+        if isinstance(rep, int)
+    })
     assert replicates == [0, 1, 2, 3]
     baseline_key, treatment_key = _StubHypothesis.INTERVENTION.arm_keys()
     for rep in replicates:
@@ -397,7 +400,7 @@ def test_run_intervention_reruns_cell_when_tmp_parquet_is_zero_bytes(
 
 def test_merge_integrity_check_raises_when_manifest_filter_drops_shards(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """**Cross-check for I3 + force=True risk**: if
     `archived_shard_uris` returns a SUBSET of the manifest's
@@ -447,8 +450,8 @@ def test_merge_integrity_check_raises_when_manifest_filter_drops_shards(
     real_archived_shard_uris = cloud_mod.archived_shard_uris
 
     def buggy_archived_shard_uris(
-        out_dir, *, prefix, suffix,
-    ):
+        out_dir: Path, *, prefix: str, suffix: str,
+    ) -> list[str]:
         full = real_archived_shard_uris(
             out_dir, prefix=prefix, suffix=suffix,
         )

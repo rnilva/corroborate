@@ -109,7 +109,7 @@ def _warn_once(key: str, message: str) -> None:
     print(f'runner/report: {message}', file=sys.stderr)
 
 
-def _reset_warnings() -> None:
+def reset_warnings() -> None:
     """Clear the warn-once dedupe set. Test fixtures call this so
     test order doesn't determine which warnings fire (a warning
     emitted by an earlier test would silence the same path in a
@@ -241,6 +241,10 @@ def _coerce_dataclass(v: object) -> dict[str, object]:
     sentinels would break typed downstream readers, see
     `_coerce_value` float-branch docstring).
     """
+    # Runtime invariant: callers dispatch here only after an
+    # `is_dataclass` check on the instance; assert re-narrows for
+    # the type checker without changing the contract.
+    assert dataclasses.is_dataclass(v) and not isinstance(v, type)
     out: dict[str, object] = {}
     cls = type(v)
     for f in dataclasses.fields(v):

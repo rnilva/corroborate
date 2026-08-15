@@ -567,14 +567,14 @@ def test_trace_is_cloud_recoverable_with_matching_sha(
     when the manifest's sha256 matches the local file's sha256.
     The runner can safely evict the local copy.
     """
-    from corroborate.corpus.cloud import _sha256_file
+    from corroborate.corpus.cloud import sha256_file
     from corroborate.runner.runner import _trace_is_cloud_recoverable
 
     corpus = tmp_path / 'corp'
     corpus.mkdir()
     traces = corpus / 'traces.parquet'
     _write_traces(traces, ['a', 'b', 'c'])
-    sha = _sha256_file(traces)
+    sha = sha256_file(traces)
 
     # Stamp a manifest claiming the file at this sha256.
     m = RemoteManifest(

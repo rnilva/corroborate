@@ -14,8 +14,8 @@ def _reset_runner_report_warnings() -> None:
 
     Autouse: applies to every test. Cheap (set.clear() on a set
     that's almost always empty)."""
-    from corroborate.runner.report import _reset_warnings
-    _reset_warnings()
+    from corroborate.runner.report import reset_warnings
+    reset_warnings()
 
 
 @pytest.fixture(autouse=True)
