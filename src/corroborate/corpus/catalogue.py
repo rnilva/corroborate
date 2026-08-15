@@ -511,8 +511,8 @@ from corroborate.corpus.schema import (  # noqa: E402,PLC0415
 # Default substrate-exogenous keys for the RL substrate. Mirrors
 # the `Annotated[..., Exogenous]` set declared on the `dqn` claim
 # (corroborate_rl.dqn.dqn:dqn). The framework doesn't hardcode RL
-# keys; this default is a convenience for the only substrate that
-# currently uses this view. Callers with other substrates pass
+# keys; this default is a convenience for the only implementation that
+# currently uses this view. Callers with other implementations pass
 # their own `exogenous_keys` + `exogenous_prefixes`. NOTE: keys
 # like `total_steps`, `eval_every`, `n_episodes` are NOT in this
 # set — they're plain int defaults on the dqn claim, NOT
@@ -628,7 +628,7 @@ def arm_leaves(
 
     `exogenous_keys` and `exogenous_prefixes` let the caller
     override the default RL substrate's exogenous-key set
-    (cf. CLAUDE.md: substrate declares exogenous via
+    (cf. CLAUDE.md: implementation declares exogenous via
     `Annotated[T, Exogenous]`; framework doesn't hardcode).
     """
     ex_keys = (exogenous_keys
@@ -755,7 +755,7 @@ def arm_leaves_to_polars_wide(
     Useful for at-a-glance scan; long-format is better for queries.
 
     Leaf and exogenous columns share the same flat namespace
-    (substrate convention precludes collision — exogenous keys
+    (implementation convention precludes collision — exogenous keys
     like `env_name` don't overlap with leaf paths like
     `optimizer.inner.lr`)."""
     all_paths: list[str] = []

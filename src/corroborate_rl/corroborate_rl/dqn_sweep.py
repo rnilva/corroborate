@@ -57,7 +57,7 @@ type Device = Literal['cpu', 'gpu']
 _DEFAULT_DEVICE: Final[Device] = 'cpu'
 
 
-# ============ CLI extensions (substrate-specific argparse args) ============
+# ============ CLI extensions (implementation-specific argparse args) ============
 
 
 def _add_args(parser: argparse.ArgumentParser) -> None:
@@ -124,7 +124,7 @@ def _resolve_deterministic(
     flag + YAML's optional `deterministic:` top-level field.
 
     CLI > YAML > default-True. The YAML peek uses plain
-    `yaml.safe_load` — no JAX, no substrate-specific dataclass
+    `yaml.safe_load` — no JAX, no implementation-specific dataclass
     parsing — so it's safe to call before
     `corroborate_rl.dqn.yaml_sweep` is imported."""
     if no_det_cli:
@@ -301,7 +301,7 @@ def _expand_sweep_lazy(
     sweep: Sweep, *, reg: Registry,
 ) -> tuple[ConfigName, ...]:
     """Lazy proxy: resolves intervention templates against the
-    registry. Returns substrate-specific `InterventionConfig`
+    registry. Returns implementation-specific `InterventionConfig`
     instances, which structurally satisfy `ConfigName` via
     `.name: str`."""
     from corroborate_rl.dqn.yaml_sweep import DQNSweep, expand_sweep
@@ -317,13 +317,13 @@ def _format_dry_run_summary_lazy(
     sweep: Sweep,
     configs: Sequence[ConfigName],
 ) -> str:
-    """Lazy proxy: substrate-specific dry-run summary matching
+    """Lazy proxy: implementation-specific dry-run summary matching
     `scripts/run_sweep.py:_dry_run` output. Surfaces
     `env_binding` + envs (count + per-env n_seeds / chunk_size)
     + intervention list with arm counts + measurables.
 
     Imports `InterventionConfig` lazily for the arm-count narrow
-    (substrate-specific attribute beyond the framework's
+    (implementation-specific attribute beyond the framework's
     `ConfigName` Protocol)."""
     from corroborate_rl.dqn.config_loader import InterventionConfig
     from corroborate_rl.dqn.yaml_sweep import DQNSweep

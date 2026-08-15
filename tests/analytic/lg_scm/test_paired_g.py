@@ -64,7 +64,7 @@ def _expected_mean_diff(*, beta_xz_t: float, beta_xz_b: float) -> float:
     cancels both epsilon_z and epsilon_y; what remains is
     `Delta_beta_xz * beta_zy * x_mean(seed)`. Taking the
     expectation over seeds gives the product above (E[x_mean] =
-    mu_x because the substrate uses unit-variance epsilon with
+    mu_x because the implementation uses unit-variance epsilon with
     zero mean)."""
     return (beta_xz_t - beta_xz_b) * _BETA_ZY * _MU_X
 

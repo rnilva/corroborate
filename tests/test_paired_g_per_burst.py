@@ -2,7 +2,7 @@
 analysis.
 
 The synthetic-input + composition tests previously living here
-were superseded by the closed-form analytic substrate at
+were superseded by the closed-form analytic implementation at
 `tests/analytic/lg_scm/test_paired_g_per_burst.py`, which exercises
 the full `Measurable → reduce_axis → paired_g_per_burst` pipeline
 on real LG-SCM cells with `rel_err` bounds against

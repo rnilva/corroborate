@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-import corroborate_rl.dqn.measurables  # noqa: F401 — ensures substrate measurables registered
+import corroborate_rl.dqn.measurables  # noqa: F401 — ensures implementation measurables registered
 from corroborate.measurables.measurable import get_registered
 from corroborate_rl.dqn._temporal_reduction import temporal_reduction
 

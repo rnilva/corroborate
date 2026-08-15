@@ -1,6 +1,6 @@
 """Production-gate end-to-end smoke: Adam ≥ SGD on CartPole.
 
-Drives the canonical analysis pipeline at minimal scale — substrate
+Drives the canonical analysis pipeline at minimal scale — implementation
 sweep (`run_dqn_arm` × 2 arms) → cell records → registered
 `paired_g` analysis — and asserts a directional verdict against
 a known-result anchor: Adam dominates plain SGD on DQN-CartPole at
@@ -11,7 +11,7 @@ better than vanilla SGD's single global lr).
 
 This test is a regression net for the analysis-pipeline plumbing,
 not a scientific result:
-- Did the substrate sweep run at all?
+- Did the implementation sweep run at all?
 - Did the runner stamp arms with stable `arm_key` values?
 - Did the registered `eval_best_burst_mean` measurable surface
   a usable scalar in `cell.run.measurements`?
@@ -31,7 +31,7 @@ from functools import partial
 
 import pytest
 
-# Side-effect imports: register substrate measurables (so
+# Side-effect imports: register implementation measurables (so
 # `eval_best_burst_mean` resolves through the registry inside
 # `paired_g.fn`) and framework analyses (so the @analysis-decorated
 # `paired_g` is wired into the registry).

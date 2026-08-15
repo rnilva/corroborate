@@ -9,7 +9,7 @@ the per-burst marginal ρ(arm, Ȳ_b) is non-zero with closed-form
 prediction, and the per-burst partial ρ(arm, Ȳ_b | Z̄_b) is zero
 in population (Z d-separates arm from Y in the LG-SCM chain).
 
-Substrate parameters at the test point:
+Implementation parameters at the test point:
   mu_x = 1.0, sigma_x = 0.5, sigma_z = 0.4, sigma_y = 0.4,
   beta_zy = 1.0, n_steps = 20, n_seeds_per_arm = 80
   beta_xz_T = 0.6, beta_xz_B = 0.4
@@ -61,7 +61,7 @@ This is layer B per the test design: the layer-A sibling at
 `tests/test_dynamic_mediation.py` covers (a) per-burst ρ matches
 scipy exactly and (b) all four `TimeAggregationStatus` branches.
 Layer B anchors the primitive against a closed-form population
-value derived from the substrate parameters.
+value derived from the implementation parameters.
 """
 from __future__ import annotations
 
@@ -282,7 +282,7 @@ def test_closed_form_r_matches_empirical_within_bound() -> None:
     # 2.5σ bound: per-burst Pearson r at n=160, ρ ≈ 0.58 has
     # SE ≈ (1-ρ²)/sqrt(n-1) ≈ 0.053. Across 3 bursts mean: SE ≈ 0.031.
     # 0.10 covers 2.5σ + Pearson-vs-population-r sampling drift.
-    # This test exists to fire when substrate parameters drift,
+    # This test exists to fire when implementation parameters drift,
     # not to test the framework itself.
     assert abs(empirical - expected) < 0.10, (
         f'empirical r={empirical:.4f} closed-form={expected:.4f} — '

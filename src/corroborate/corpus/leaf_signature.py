@@ -40,7 +40,7 @@ def non_leaf_names(
     `catalogue.arm_leaves` (which filters parquet column lists).
 
     Computed lazily via `measurables.registered_names()` so newly-
-    imported substrate measurables get picked up."""
+    imported implementation measurables get picked up."""
     from corroborate.measurables import registered_names
     return (
         _FRAMEWORK_EXCLUDED_KEYS
@@ -64,11 +64,11 @@ def leaf_signature(
       narrative prefixes are gone).
     - Legacy `intervention_name` (excluded for old parquets that
       still carry the column; new corpora use `arm_key`).
-    - Substrate-supplied exogenous keys: keys the substrate
+    - Substrate-supplied exogenous keys: keys the implementation
       declared via `Annotated[T, Exogenous]` on its `@claim`'s
       kwargs. Caller passes those names as `exogenous_keys` (e.g.
       `frozenset({'env_name', 'seed', 'total_steps'})` for the RL
-      substrate). The framework does NOT hardcode RL key names.
+      implementation). The framework does NOT hardcode RL key names.
 
     What remains is the configurational leaves at their dotted
     topology paths. "Leaf" rather than "HP": a leaf-regime kwarg

@@ -54,7 +54,7 @@ from corroborate import claim
 
 
 class OptimizerFactory(Protocol):
-    """Constructs an `optax.GradientTransformation`. Substrate
+    """Constructs an `optax.GradientTransformation`. Implementation
     authors compose via `partial(adam, lr=...)` etc. — the partial
     is itself a callable matching this Protocol; calling it builds
     the optax `(init, update)` pair.

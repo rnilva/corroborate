@@ -2,7 +2,7 @@
 
 `canonical_str(v)` produces a deterministic, process-portable
 string form of a leaf value (FnClaim, partial, primitive,
-dataclass, tuple, function, type) — the substrate for
+dataclass, tuple, function, type) — the implementation for
 mechanism-key fingerprints, arm-key derivation, and trace-leaf
 encoding.
 

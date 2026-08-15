@@ -160,7 +160,7 @@ def yaml_interventions(
 # ---------- _resolve_measurables (defaults + YAML extras) ----------
 
 def test_resolve_measurables_empty_returns_defaults() -> None:
-    """No YAML-declared extras → identity with substrate defaults.
+    """No YAML-declared extras → identity with implementation defaults.
     Preserves the canonical column order downstream consumers
     expect."""
     from corroborate_rl.dqn.measurables import dqn_default_measurables

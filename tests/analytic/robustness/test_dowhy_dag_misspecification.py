@@ -8,7 +8,7 @@ misspecifies the DAG gets a silently-biased ATE estimate with
 trustworthy effect.
 
 This probe quantifies the bias under three categories of DAG
-authoring error, against the LG-SCM substrate where the structural
+authoring error, against the LG-SCM implementation where the structural
 ATE = β_xz · β_zy = 0.75:
 
 1. **Correct DAG** (`X → Y`): baseline. ATE recovered within
@@ -28,7 +28,7 @@ ATE = β_xz · β_zy = 0.75:
 
 Substrate-author guidance: DoWhy's `identified=True` + a
 plausible-looking ATE is NOT a guarantee that the DAG is right.
-The framework cannot verify DAG correctness; substrate authors
+The framework cannot verify DAG correctness; implementation author
 must validate the DAG against domain knowledge BEFORE trusting
 the ATE. The silent-wrong-verdict case (#2) is the most
 dangerous because it produces a confident-looking 0 estimate.
@@ -47,7 +47,7 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.dowhy import backdoor_ate
 
-# Reuse the substrate from the existing dowhy test.
+# Reuse the implementation from the existing dowhy test.
 sys.path.insert(0, 'tests/analytic/lg_scm')
 from tests.analytic.lg_scm.test_dowhy import (  # noqa: E402
     _EXPECTED_ATE, _build_observational_corpus,
@@ -77,7 +77,7 @@ def test_correct_dag_recovers_structural_ate() -> None:
 
 
 def test_mediator_treated_as_confounder_silently_zeroes_ate() -> None:
-    """**The dangerous case**: substrate author treats Z (a
+    """**The dangerous case**: implementation author treats Z (a
     mediator) as a confounder. DAG `Z → X, Z → Y, X → Y` tells
     DoWhy to adjust for Z when computing the X → Y effect.
 
@@ -91,7 +91,7 @@ def test_mediator_treated_as_confounder_silently_zeroes_ate() -> None:
     will silently miss the real total effect.
 
     Pin: ate < 0.05 (clearly close to zero) AND identified=True
-    (the silent-wrong-verdict mode). Substrate guidance: NEVER
+    (the silent-wrong-verdict mode). Implementation guidance: NEVER
     include the mediator in the adjustment set when computing
     total effect."""
     result = backdoor_ate.fn(
@@ -142,7 +142,7 @@ def test_mediator_as_collider_unaffected_by_misspecification() -> None:
     Pin: ate ≈ 0.75 (within sampling). This shows that not all
     DAG errors are catastrophic — getting the colliders/mediators
     right is what matters. The asymmetry reinforces the
-    substrate-author guidance: DAG correctness check should focus
+    implementation-author guidance: DAG correctness check should focus
     on identifying mediators."""
     result = backdoor_ate.fn(
         _CELLS, treatment='x_mean', outcome='y_mean',
@@ -167,7 +167,7 @@ def test_mediator_as_collider_unaffected_by_misspecification() -> None:
 
 def test_dag_misspecification_summary_table() -> None:
     """Self-documenting test: emits a stderr summary of the
-    bias map for the four DAG variants. Useful to substrate
+    bias map for the four DAG variants. Useful to implementation
     authors as a quick reference; the test asserts only that
     each DoWhy call returned a result (no crash) and the
     summary printed.
@@ -180,7 +180,7 @@ def test_dag_misspecification_summary_table() -> None:
         mediator-as-collider           0.752   True
         reversed treatment/outcome     nan     False
 
-    Substrate authors who run the test suite see this table and
+    Implementation authors who run the test suite see this table and
     know which DAG errors are dangerous."""
     variants = [
         ('correct', [('x_mean', 'y_mean')]),

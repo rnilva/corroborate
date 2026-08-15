@@ -3,7 +3,7 @@ fingerprinting + combined_arm_key.
 
 After Phase 6 the Hypothesis dataclass is gone — the framework's
 verdict-time contract is a runtime_checkable Protocol with three
-attributes (INTERVENTION + BRIDGES + __name__). Substrate
+attributes (INTERVENTION + BRIDGES + __name__). Implementation
 authoring uses module-level constants OR class-with-ClassVars
 to satisfy it. These tests cover:
 - The Protocol's runtime_checkable shape.

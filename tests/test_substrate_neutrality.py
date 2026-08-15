@@ -1,5 +1,5 @@
 """Architectural invariant: framework imports never pull in a
-substrate module.
+implementation module.
 
 The whole point of splitting `corroborate.rl` into a sibling
 `corroborate_rl` package is that the framework wheel installs
@@ -31,7 +31,7 @@ _FORBIDDEN_TOP_LEVEL_MODULES = (
 
 def test_framework_import_is_substrate_free() -> None:
     """`import corroborate` (and walking its public surface) must
-    not load any substrate module. A regression here means somebody
+    not load any implementation module. A regression here means somebody
     re-introduced a `from corroborate_rl import ...` (or `import
     jax`) inside `src/corroborate/`."""
     code = (

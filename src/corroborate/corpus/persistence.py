@@ -820,7 +820,7 @@ def write_graphs_sidecar(
 
 def read_graphs_sidecar(path: Path) -> dict[str, ComputationGraph]:
     """Inverse of `write_graphs_sidecar`. Returns an empty dict
-    when the sidecar is absent — substrates with no graph capture
+    when the sidecar is absent — implementations with no graph capture
     omit it transparently."""
     if not path.exists():
         return {}

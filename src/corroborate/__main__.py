@@ -180,10 +180,10 @@ def _cmd_catalogue(args: Mapping[str, object]) -> int:
     profile = optional_str(args, 'profile')
 
     if leaves_mode:
-        # Register substrate `@measurable` functions so
+        # Register implementation `@measurable` functions so
         # `registered_names()` filters them out of leaves.
-        # Caller-provided substrate modules (CLI flag or env
-        # var) take priority; the in-tree RL substrate is a
+        # Caller-provided implementation modules (CLI flag or env
+        # var) take priority; the in-tree RL implementation is a
         # fallback if neither is specified.
         substrate_modules = optional_str_list(args, 'substrate_modules')
         if substrate_modules is None:
@@ -244,9 +244,9 @@ def _build_parser(
     `argv`, when provided, is threaded into the `sweep` subparser
     so its substrate-CLI peek + extension loading happens at
     parser-build time (substrate's `add_args(p_run)` registers
-    substrate-specific options before `parser.parse_args(argv)`
+    implementation-specific options before `parser.parse_args(argv)`
     runs). When `argv` is None, the sweep subparser registers
-    only framework args; substrate extensions are skipped."""
+    only framework args; implementation extensions are skipped."""
     parser = argparse.ArgumentParser(
         prog='corroborate',
         description='cloud archive for sweep parquets + corpus '
@@ -432,7 +432,7 @@ def _build_parser(
 def main(argv: Sequence[str] | None = None) -> int:
     # Thread argv through the parser so the `sweep` subparser can
     # peek for `--substrate <name>` and load that substrate's CLI
-    # extensions BEFORE argparse runs (substrate-specific args
+    # extensions BEFORE argparse runs (implementation-specific args
     # then get validated alongside framework args in one parse).
     effective_argv: Sequence[str] = (
         argv if argv is not None else sys.argv[1:]

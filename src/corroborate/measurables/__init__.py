@@ -1,11 +1,11 @@
-"""Measurables — typed reductions of substrate records into
+"""Measurables — typed reductions of implementation records into
 scalar / array measurements consumed by analyses + bridges.
 
 Three sub-modules:
 - `measurables.measurable` — `Measurable[R, T]` type, `@measurable`
   decorator + registry, transitive read-resolution, evaluator
   that runs registered measurables on a corpus.
-- `measurables.reductions` — substrate-neutral reduction
+- `measurables.reductions` — implementation-neutral reduction
   factories (`from_key`, `reduce_axis`, `slice_axis`,
   `mean_window`, `late_window_mean`, `masked_window_mean`,
   `growth_window`, `max_abs`, `mean_peak_window`,

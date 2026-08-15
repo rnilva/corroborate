@@ -25,7 +25,7 @@ CI-test machinery (`_spearman_marginal`, `partial_spearman_rho`,
 `discover_adjacency`, `orient_adjacency`, `_detect_v_structures`,
 `_apply_meek_rules`).
 
-The substrate produces real LG-SCM cells across a multi-env panel
+The implementation produces real LG-SCM cells across a multi-env panel
 (varying mu_x for cross-cell variation in x_mean / z_mean / y_mean),
 PC operates on the polars DataFrame, and assertions check the
 recovered adjacency exactly matches the closed-form chain pattern.

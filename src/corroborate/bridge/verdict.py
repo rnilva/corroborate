@@ -36,8 +36,8 @@ prediction is confirmed (|stat| within the null band); NO_EFFECT
 (the "xpass" analog — an effect was observed when none was
 predicted) when |stat| exceeds the effect-observed threshold;
 POWER_INSUFFICIENT otherwise. The framework offers this so
-substrate bridges don't have to reimplement the (now uniform)
-HELD-means-confirmed convention; substrate `_verdicts.py`
+implementation bridges don't have to reimplement the (now uniform)
+HELD-means-confirmed convention; implementation `_verdicts.py`
 helpers (`partial_spearman_null_verdict`,
 `native_diff_null_verdict`, `spearman_rho_verdict(sign=0)`, …)
 are domain-specific dispatchers onto this same shape."""
@@ -141,7 +141,7 @@ def null_predict_verdict(
     See `_stamp_level` in `graph.causal` for the
     framework-side invariant: NO_EFFECT always stamps as
     `'refuted'`. The bridge body — through this helper or its
-    substrate-specific siblings — is responsible for mapping
+    implementation-specific siblings — is responsible for mapping
     `predicted_direction='null'` + observed-null to HELD."""
     if math.isnan(stat):
         return Verdict.POWER_INSUFFICIENT, None

@@ -402,7 +402,7 @@ def measurable_scope(
 
     Loud `KeyError` when `measurable_name` isn't registered —
     the measurable name is the framework's authority, asking
-    about an unknown name is a substrate bug."""
+    about an unknown name is an implementation bug."""
     from corroborate.measurables import get_registered, registered_names
     m = get_registered(measurable_name)
     if m is None:

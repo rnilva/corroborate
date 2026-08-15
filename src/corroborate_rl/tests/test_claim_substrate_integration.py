@@ -1,6 +1,6 @@
 """Substrate-side integration of the `@claim` machinery.
 
-Two cases that need the JAX/DQN substrate:
+Two cases that need the JAX/DQN implementation:
 
 1. JIT silence — `@claim`-decorated calls fire records even when
    their args are JAX Tracer objects. This is the structural-
@@ -58,7 +58,7 @@ def test_pickle_round_trip_function_claim() -> None:
 
 
 def test_pickle_round_trip_partial_over_claim() -> None:
-    """`functools.partial` over a substrate claim pickles natively."""
+    """`functools.partial` over an implementation claim pickles natively."""
     import pickle
     from functools import partial
     from corroborate_rl.dqn.claims.bootstrap import bootstrap as vanilla_bootstrap

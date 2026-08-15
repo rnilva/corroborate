@@ -34,7 +34,7 @@ y distribution better. The closed form / empirical match is:
     ρ_spearman_union ≈ 0.40-0.46  (rank-robust to bimodality)
 
 Empirical Spearman ρ across 15 replicates: mean 0.42, SD 0.025
-per env at this substrate (σ_z = σ_y = 0.1, β_zy = 1.5).
+per env at this implementation (σ_z = σ_y = 0.1, β_zy = 1.5).
 """
 from __future__ import annotations
 
@@ -205,7 +205,7 @@ def test_stratum_panel_within_stratum_spearman_recovers_closed_form() -> None:
     # The within-stratum Spearman pools BOTH arms' cells. Y is
     # bimodal across arms (β_xz_t vs β_xz_b cluster); Spearman ρ
     # is rank-robust to that bimodality and lands at ≈ 0.40-0.46
-    # at the higher-SNR substrate (σ_z = σ_y = 0.1, β_zy = 1.5).
+    # at the higher-SNR implementation (σ_z = σ_y = 0.1, β_zy = 1.5).
     # Empirical SD across 15 replicates is ≈ 0.025 per env →
     # 3σ window of width ≈ 0.075. Lower 3σ bound at the weakest
     # env (env_c, mean ρ ≈ 0.39) is ≈ 0.32 — bound at 0.25

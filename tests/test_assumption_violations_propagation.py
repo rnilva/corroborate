@@ -83,7 +83,7 @@ def test_skewed_delta_assumption_violation_propagates_to_bridge_evaluation() -> 
     fixture name `paired_g:`.
 
     The framework's contract: analysis-level flags propagate to
-    the bridge audit trail; substrate authors don't have to
+    the bridge audit trail; implementation author don't have to
     inspect each fixture result individually."""
     cells = _skewed_paired_cells(n_seeds=30)
     out = evaluate(skew_bridge, cells)

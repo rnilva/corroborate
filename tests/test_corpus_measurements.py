@@ -500,7 +500,7 @@ def test_build_measurements_runs_df_column_wins_on_collision(
     `existing.drop(overlap)` before the join makes the contract
     clear and removes the silent-data-discard seam.
 
-    Construction: substrate stamps `double_x = [99, 88, 77]`
+    Construction: implementation stamps `double_x = [99, 88, 77]`
     (which would NOT be the framework's `2 * x` recompute).
     Existing has `double_x = [0, 2, 4]` from the prior canonical
     build. After the rebuild, the persisted store has the
@@ -516,7 +516,7 @@ def test_build_measurements_runs_df_column_wins_on_collision(
     )
     assert canonical == [0.0, 2.0, 4.0]
 
-    # Substrate stamps double_x with values that disagree with the
+    # Implementation stamps double_x with values that disagree with the
     # framework's canonical recompute.
     runs_with_stamp = runs_df.with_columns(
         pl.Series('double_x', [99.0, 88.0, 77.0]),
@@ -549,7 +549,7 @@ def test_build_measurements_partial_stamp_recomputes_only_null_cells(
     values for collision columns are dropped at the join — they
     do NOT participate in the merge.
 
-    Probe: substrate stamps cell 0 = 99, leaves cell 1 null,
+    Probe: implementation stamps cell 0 = 99, leaves cell 1 null,
     stamps cell 2 = 77. Existing has [0, 2, 4]. Expected:
     [99, 2, 77] (cell 1 recomputed via `2 * x`).
     """
@@ -674,7 +674,7 @@ def test_check_drift_clean_corpus_returns_clean_report(
 
 
 def test_check_drift_detects_drifted_column(tmp_path: Path) -> None:
-    """**Phase 2**: when a measurable's signature changes (substrate
+    """**Phase 2**: when a measurable's signature changes (implementation
     edit) but the per-corpus sidecar still carries the old hash,
     the report flags the column as drifted."""
     runs = _runs_df(3)
@@ -916,7 +916,7 @@ def test_recompute_force_recomputes_sidecar_current_measurable(
 def test_recompute_force_overrides_stale_runs_stamped_measurable(
     tmp_path: Path,
 ) -> None:
-    """`force=` must recompute a measurable the substrate STAMPED
+    """`force=` must recompute a measurable the implementation STAMPED
     into `runs.parquet` (`RunRow.measurements`) with a stale value —
     not just one living in the existing measurements store. Sibling
     regression to the sidecar-current case above, exercising the
@@ -1251,7 +1251,7 @@ def test_recover_nan_auto_fixes_stale_nan_columns(
     assert result.recovered_nan == ('x_plus_y',), (
         f'expected x_plus_y in recovered_nan; got {result.recovered_nan}'
     )
-    assert result.recomputed == ()  # no substrate gap, just NaN recovery
+    assert result.recomputed == ()  # no implementation gap, just NaN recovery
     df_after = pl.read_parquet(meas_path)
     assert df_after['x_plus_y'].is_finite().all()
     # Values match the canonical x + y = 11·i.
@@ -1582,7 +1582,7 @@ def test_stream_assemble_frames_single_frame_fast_path(
 def _stream_mean_q(record: Mapping[str, object]) -> float:
     """Trace-reading measurable for the streaming-compute test: the
     mean of a per-step list column. Mirrors the shape of the real
-    substrate per-step reductions (e.g. `online_max_q_per_step`)
+    implementation per-step reductions (e.g. `online_max_q_per_step`)
     that blow up RAM when the whole trace file is read at once."""
     q = record.get('q_per_step')
     if not isinstance(q, (list, tuple)) or not q:
@@ -1691,7 +1691,7 @@ def test_streaming_compute_overrides_stale_runs_stamp(
 ) -> None:
     """`compute_trace_measurables_streaming` must compute `required`
     FRESH from traces even when `runs_df` carries a stale stamp for
-    that measurable (a substrate `RunRow.measurements` value, e.g.
+    that measurable (an implementation `RunRow.measurements` value, e.g.
     an eval-derived measurable carried forward from a re-eval at an
     OLD n_episodes). The per-batch `compute_missing_columns` SKIPS a
     column already present-and-non-null in its input frame, so

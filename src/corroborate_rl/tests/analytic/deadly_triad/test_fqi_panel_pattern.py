@@ -76,7 +76,7 @@ def test_long_sync_arm_has_lower_q_divergence_than_short_sync() -> None:
     arm's jensen_gap is strictly smaller — paired g on
     `q_divergence_score` should detect this with closed-form magnitude.
 
-    Substrate parameters (CartPole, γ=0.99):
+    Implementation parameters (CartPole, γ=0.99):
         bound      = r_max / (1 - γ) = 100
         short arm: τ=10,    jensen_0=120  → k = 10000
                    envelope ≈ 120 · 0.99^10000 ≈ 0 (already converged)

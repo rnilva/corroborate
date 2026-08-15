@@ -20,7 +20,7 @@ wrapper-level mask form.
 
 Envs without truncation (vanilla gymnax CartPole, MountainCar, …)
 don't publish the key; the default-branch returns
-`jnp.zeros_like(done)` so the substrate sees a uniform float32
+`jnp.zeros_like(done)` so the implementation sees a uniform float32
 scalar regardless of env."""
 from __future__ import annotations
 

@@ -28,7 +28,7 @@ are pinned as regression-style assertions — a future fix that
 narrows the bias would breach the "≥" bound; a regression that
 widens it would breach the "≤" bound.
 
-What the findings mean for substrate authors:
+What the findings mean for implementation author:
 
 1. On **normal Δ**, paired_g is unbiased (bias within MC SE) at
    any n ≥ 10. Trustworthy.

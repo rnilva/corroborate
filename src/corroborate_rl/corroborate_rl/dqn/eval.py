@@ -94,7 +94,7 @@ def eval_episode(
     overestimation, the Jensen-bias signature)."""
     reset_key, run_key = jax.random.split(rng_key)
     obs_0, env_state_0 = env.reset(reset_key, env_params)
-    # Substrate keeps obs at native shape; q_network handles its own
+    # Implementation keeps obs at native shape; q_network handles its own
     # input shape (MLP flattens trailing dims internally; CNN reads
     # spatial structure directly).
 

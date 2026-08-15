@@ -164,7 +164,7 @@ def _eval_gap[R: Mapping[str, object]](
     """Helper: evaluate a gap measurable through the resolver so
     its declared measurable-deps (e.g. `pearson_r_online_target`)
     auto-resolve from the registry. Generic in R because gap
-    measurables have substrate-specific record types
+    measurables have implementation-specific record types
     (`DQNTrajectoryRecord`); the resolver consumes the record
     structurally and is independent of R's nominal identity."""
     from corroborate.measurables import evaluate_with_measurables

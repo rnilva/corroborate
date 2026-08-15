@@ -1,7 +1,7 @@
 """Real-corpus smoke for `tautology_audit` + registry probe.
 
 The synthetic-input audit test previously living here was
-superseded by the closed-form analytic substrate at
+superseded by the closed-form analytic implementation at
 `tests/analytic/lg_scm/test_tautology_audit.py`, which
 constructs four mediator candidates (outcome_shadow, hp_shadow,
 hp_correlated, clean) on real LG-SCM cells and asserts each of

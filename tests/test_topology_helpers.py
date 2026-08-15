@@ -24,7 +24,7 @@ from corroborate.graph import Graph
 from corroborate.measurables import measurable
 
 
-# A graph that mirrors a tiny substrate: `bootstrap` emits
+# A graph that mirrors a tiny implementation: `bootstrap` emits
 # `mc_return` (read by an outcome measurable) and
 # `predicted_q_at_start` (read by a mechanism measurable). A
 # downstream `loss` claim consumes `td_error` from `bootstrap`.
@@ -47,7 +47,7 @@ def _t_mechanism_gap(record: Mapping[str, object]) -> float:
 
 @measurable(reads=('env_name', 'seed'))
 def _t_exogenous_only(record: Mapping[str, object]) -> float:
-    """Test-only measurable: reads only substrate exogenous
+    """Test-only measurable: reads only implementation exogenous
     keys (`env_name`, `seed`) — neither is emitted by any Claim
     in the graph."""
     del record

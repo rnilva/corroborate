@@ -10,9 +10,9 @@ on the `TimeAggregationStatus` classifier branches.
 
 The layer-B sibling at
 `tests/analytic/lg_scm/test_dynamic_partial_spearman.py` extends
-the LG-SCM substrate to per-burst arrays and tests recovery
+the LG-SCM implementation to per-burst arrays and tests recovery
 against a CLOSED-FORM (population-level) target derived from
-substrate parameters.
+implementation parameters.
 
 Bound discipline (CLAUDE.md §"Test principle"): every numeric
 assertion either (a) checks framework output against the exact

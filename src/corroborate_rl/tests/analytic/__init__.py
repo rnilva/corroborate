@@ -1,4 +1,4 @@
-"""Analytic substrate tests for the RL substrate's framework
+"""Analytic implementation tests for the RL substrate's framework
 contributions.
 
 Mirrors the framework-side `tests/analytic/lg_scm/` pattern:

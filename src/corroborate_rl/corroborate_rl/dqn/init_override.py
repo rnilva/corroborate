@@ -1,6 +1,6 @@
 """Override pytree for `init_state` resumption from a saved cell.
 
-The substrate accumulates "resumable state" fields one at a time:
+The implementation accumulates "resumable state" fields one at a time:
 online_params first (a89fe86 + ef2b889), with target_params, replay
 buffer, optimizer state, step counter, and RNG state queued by
 CHECKPOINT_RESUME_DESIGN.md §2. Threading each as a separate
@@ -52,7 +52,7 @@ class InitOverride:
     `init_online_params` path) plus `target_params` (which Phase 2
     decouples from online — the design's only confirmed near-term
     need). Phase 3 will extend with `opt_state`, `replay`, `step`,
-    `rng_key` as the substrate needs each capability."""
+    `rng_key` as the implementation needs each capability."""
     online_params: Params | None = None
     target_params: Params | None = None
 

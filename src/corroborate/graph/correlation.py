@@ -188,9 +188,9 @@ class DiffCategory(Enum):
       aggregate with no claim-node projection. Outcomes are
       Measurables (observation reductions), not Claims —
       mechanism-vs-observation is a framework-design separation.
-      The substrate is expected to project a Measurable to its
+      The implementation is expected to project a Measurable to its
       claim-graph entry points via `transitive_reads → claims
-      that write those keys`. Until the substrate supplies that
+      that write those keys`. Until the implementation supplies that
       projection, the diff cannot bridge namespaces.
 
     `UNMAPPED_DERIVED` — at least one endpoint is a derived

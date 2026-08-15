@@ -9,7 +9,7 @@ contract:
   - Each violation string includes the diagnostic + the predicted
     bias magnitude (so the reader can decide if it matters at
     their effect-size scale).
-  - String content is part of the contract (substrate authors
+  - String content is part of the contract (implementation author
     grep for keywords like 'skew_bias_likely' or
     'dl_small_g_unreliable_inference').
 """

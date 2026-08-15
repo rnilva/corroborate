@@ -83,7 +83,7 @@ def _registered(name: str) -> Measurable[Mapping[str, object], object]:
 
 # ============ Module-top shared sources ============
 #
-# Each trace column the substrate reads is declared once here so
+# Each trace column the implementation reads is declared once here so
 # every consumer shares the SAME `from_key` instance via Python
 # identity. Within this module, `compose_of` trees of downstream
 # Measurables (e.g., `mean_window(ONLINE_MAX_Q, ...)`) root at
@@ -1554,7 +1554,7 @@ def policy_churn_late(
 
     Lit positioning: see THEORY_bootstrap_dominance.md §11. This is
     the direct sibling for Schaul's `W(π,π')` on our existing
-    trace shape — no substrate change required, only the per-step
+    trace shape — no implementation change required, only the per-step
     argmax + state-hash columns that are already standard.
 
     **Caveat — degenerate `state_hash` envs.** When an env's
@@ -3925,7 +3925,7 @@ def plateau_slope_late(
 # already the existing `v_vs_max_delta_late` — same formula. A
 # *true* Q* − Q_2nd action-margin requires adding a per-step
 # second-max reduction to the collect harness; deferred until a
-# substrate change is forced.
+# implementation change is forced.
 
 
 def _state_distribution_late_half(
@@ -4049,7 +4049,7 @@ def outcome_native(record: Mapping[str, object]) -> float:
 # axis with `mean_window(..., lo, hi)`. Composed factories carry
 # `reads=('mc_return',)` automatically; cells without the column
 # fail at `from_key` and the cache builder NaN-stores them. Each
-# is rebound under a stable substrate name so existing bridges
+# is rebound under a stable implementation name so existing bridges
 # referencing 'mc_return_first_quarter' etc. resolve unchanged.
 
 mc_return_first_quarter = Measurable(
@@ -4233,7 +4233,7 @@ register(log_mc_cv_per_burst)
 #
 # Three eval-burst reductions persisted on every cell. Each is a
 # `@measurable` reading `mc_return` (and `eval_step_index` for the
-# step-provenance reduction). Substrates that want the standard set
+# step-provenance reduction). implementations that want the standard set
 # wire them via `dqn_default_measurables()` rather than naming each
 # explicitly.
 #
@@ -4251,7 +4251,7 @@ def late_window_mean(record: Mapping[str, object]) -> float:
     in the budget).
 
     Same formula as `masked_window_mean('ep_return', 'done', 0.1)`
-    in `reductions.py`; lifted here as a registered substrate
+    in `reductions.py`; lifted here as a registered implementation
     measurable so cell_runner persists it through the same
     channel as the rest of `dqn_default_measurables()`."""
     values = record.get('ep_return')
@@ -4322,7 +4322,7 @@ def mc_first_nonzero_burst(
     bias-dominance Q crossing.
 
     Threshold default 0.1 is appropriate for FR (positive bounded
-    [0,1] reward where 0.1 is meaningfully nonzero). Substrates
+    [0,1] reward where 0.1 is meaningfully nonzero). implementations
     with other reward scales should pass threshold explicitly.
 
     Returns NaN only if `mc_return` is missing or malformed."""
@@ -4522,7 +4522,7 @@ def policy_anchors_before_bias(
     commit hash records the prediction before resolution.
 
     Default thresholds (mc=0.1, q=9.2) appropriate for FR γ=0.999;
-    substrates at other γ or reward scales pass explicitly."""
+    implementations at other γ or reward scales pass explicitly."""
     mc_first = mc_first_nonzero_burst.fn(record, threshold=mc_threshold)
     q_first = q_first_cross_burst.fn(record, threshold=q_threshold)
     if np.isnan(mc_first) or np.isnan(q_first):
@@ -4552,7 +4552,7 @@ def mc_burst_trend(record: Mapping[str, object]) -> float:
     bursts (e.g., truly flat). Zero-variance cells are NOT
     re-coded to ρ=0 — NaN signals "no trend signal" rather than
     "flat trend signal," letting analyses decide how to handle.
-    Substrates wanting flat-as-zero can post-process."""
+    implementations wanting flat-as-zero can post-process."""
     if 'mc_return' not in record:
         return float('nan')
     mc = np.asarray(record['mc_return'], dtype=np.float64)
@@ -5281,7 +5281,7 @@ def effective_alpha(record: Mapping[str, object]) -> float:
 # Theorem-gap measurables that previously lived as factory-returned
 # `Measurable[..., float]` instances attached via `attach_invariant`
 # to specific Claims. Phase 4 of the Bridge-collapse refactor moves
-# these into the registry-based measurable channel — substrate
+# these into the registry-based measurable channel — implementation
 # enumerates them on `Hypothesis.measurables` and cell_runner
 # persists each as a named scalar column.
 
@@ -5525,7 +5525,7 @@ def jensen_floor_measurable(record: Mapping[str, object]) -> float:
 # `jensen_dormancy_gap`, and the bridge's name (which becomes the
 # emitted column name) all sit on Bridge fields rather than
 # encoded in a measurable function body. The framework synthesizes
-# the per-cell verdict measurable from the bridge — the substrate
+# the per-cell verdict measurable from the bridge — the implementation
 # registers the synthesized one; the bridge's metadata is what
 # carries the predicate.
 jensen_dormancy_premise_active_bridge: Bridge = Bridge(
@@ -5542,14 +5542,14 @@ jensen_dormancy_premise_active: Measurable[Mapping[str, object], object] = (
 register(jensen_dormancy_premise_active)
 
 
-# ============ Substrate helper — default measurable set ============
+# ============ Implementation helper — default measurable set ============
 
 def dqn_default_measurables() -> tuple[
     Measurable[Mapping[str, object], object], ...,
 ]:
     """The standard pre-registered measurable set every DDQN
     Hypothesis includes: three outcome reductions + Jensen-gap +
-    Jensen-dormancy invariant verdict. Substrates that want the
+    Jensen-dormancy invariant verdict. implementations that want the
     full set call this; ad-hoc hypotheses can construct a custom
     tuple instead.
 
@@ -5586,7 +5586,7 @@ def dqn_default_measurables() -> tuple[
         # rebuild gap (cf. `feedback_cache_trace_dependent_measurables`).
         target_staleness_late,
         target_staleness_early,
-        # CLAIM 15 substrate variables.
+        # CLAIM 15 implementation variables.
         log_tau,
         # `q_late_mean` is the endogenous Q-regime indicator:
         # sign(q_late_mean) > 0 ⇔ r_min ≥ 0 ⇔ vanilla bias direction

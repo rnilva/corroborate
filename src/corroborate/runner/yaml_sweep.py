@@ -1,7 +1,7 @@
 """Framework-side YAML sweep machinery.
 
 Substrate-agnostic primitives for loading YAML-configured sweeps:
-the `Sweep` Protocol (read-only shape that substrate sweep
+the `Sweep` Protocol (read-only shape that implementation sweep
 dataclasses satisfy structurally), YAML scalar parsers
 (`require_sweep_str`, `build_archive_remote`, `build_merge_top_level`,
 `build_pre_registered_bridges`, `require_predicted_direction`,
@@ -10,9 +10,9 @@ uniqueness check (`assert_unique_cfg_names`), and the
 pre-registration manifest writer
 (`write_pre_registration_manifest_for_sweep`).
 
-Substrate sweep modules (`corroborate_rl.dqn.yaml_sweep`) compose
+Implementation sweep modules (`corroborate_rl.dqn.yaml_sweep`) compose
 these for their own YAML loader + dispatch path. The substrate's
-sweep dataclass adds substrate-specific fields (envs, agent HPs)
+sweep dataclass adds implementation-specific fields (envs, agent HPs)
 and satisfies the framework `Sweep` Protocol structurally — no
 inheritance friction.
 
@@ -41,11 +41,11 @@ from corroborate.runner.registry import Registry
 class Sweep(Protocol):
     """Framework-visible shape of a configured sweep.
 
-    Substrate sweep dataclasses (e.g.,
+    Implementation sweep dataclasses (e.g.,
     `corroborate_rl.dqn.yaml_sweep.DQNSweep`) satisfy this Protocol
     structurally — no inheritance. The framework's primitives
     (manifest write, archive-remote handling, top-level merge
-    gating) read these fields; the substrate adds its own fields
+    gating) read these fields; the implementation adds its own fields
     (envs, agent HPs) without inheritance friction.
 
     Read-only `@property` declarations match frozen-dataclass
@@ -72,7 +72,7 @@ class Sweep(Protocol):
 class ConfigName(Protocol):
     """Structural shape for `assert_unique_cfg_names` and the CLI
     dry-run print loop — anything with a `.name: str` attribute
-    that the substrate uses as a per-config output subdirectory.
+    that the implementation uses as a per-config output subdirectory.
 
     Public so `corroborate.cli.sweep._print_dry_run` can be typed
     against it without cross-module private import (CLAUDE.md's
@@ -264,7 +264,7 @@ def write_pre_registration_manifest_for_sweep(
 class _LoadSweep[S: Sweep](Protocol):
     """Callable shape `(path, *, reg) -> S`. Defined as a Protocol
     (not plain `Callable[...]`) so the keyword-only `reg`
-    parameter is part of the typed contract; substrates that
+    parameter is part of the typed contract; implementations that
     accept positional `reg` would not match.
 
     PEP 695 generic over `S: Sweep` so the substrate's
@@ -298,7 +298,7 @@ class _DefaultRegistry(Protocol):
 class _ExpandSweep[S: Sweep](Protocol):
     """Optional dry-run helper. Returns the substrate's resolved
     config tuple — element type satisfies `ConfigName` for the
-    CLI's print loop. Substrate may name elements anything (DQN's
+    CLI's print loop. Implementation may name elements anything (DQN's
     `InterventionConfig`), so the framework only sees `ConfigName`.
 
     Generic over `S: Sweep` for the same contravariance reason as
@@ -310,13 +310,13 @@ class _ExpandSweep[S: Sweep](Protocol):
 
 
 class _FormatDryRunSummary[S: Sweep](Protocol):
-    """Optional substrate-shaped dry-run summary printer.
+    """Optional implementation-shaped dry-run summary printer.
 
     `cli.sweep._print_dry_run` prints framework-visible fields
     (`name`, `out_dir`, `archive_remote`, `pre_registered_bridges`
-    count). When the substrate provides this callback, the CLI
-    routes the substrate-specific block through it — receiving
-    BOTH the sweep AND the resolved configs — so the substrate
+    count). When the implementation provides this callback, the CLI
+    routes the implementation-specific block through it — receiving
+    BOTH the sweep AND the resolved configs — so the implementation
     controls per-env summary AND the intervention list (with arm
     counts, measurable extras, etc.). The framework's default
     intervention loop runs only when this callback is `None`.
@@ -335,11 +335,11 @@ class _FormatDryRunSummary[S: Sweep](Protocol):
 class SweepEntryPoints[S: Sweep]:
     """Substrate registration for `corroborate sweep run`.
 
-    A substrate module exposes a module-level
+    A implementation module exposes a module-level
     `SWEEP_ENTRY_POINTS: SweepEntryPoints[<SubstrateSweep>] =
     SweepEntryPoints(...)` pointing at its own `load_sweep`,
     `dispatch_sweep`, `default_registry`, and `expand_sweep`
-    functions. The CLI imports the substrate module by
+    functions. The CLI imports the implementation module by
     `--substrate <module>` and reads this attribute — failure is
     a typed error pointing at the missing attribute or wrong
     shape.
@@ -351,7 +351,7 @@ class SweepEntryPoints[S: Sweep]:
     concrete to check against and the CLI a single `getattr` call
     to retrieve.
 
-    PEP 695 generic over `S: Sweep` so substrate-specific sweep
+    PEP 695 generic over `S: Sweep` so implementation-specific sweep
     types (e.g. `DQNSweep`) flow through `dispatch_sweep` /
     `expand_sweep` / `format_dry_run_summary` without contravariance
     bugs. The CLI's `_resolve_substrate` returns
@@ -359,9 +359,9 @@ class SweepEntryPoints[S: Sweep]:
     feeds `Sweep`-typed values back through those Callables.
 
     `expand_sweep` and `format_dry_run_summary` are optional —
-    only `--dry-run` calls them. A substrate that doesn't support
+    only `--dry-run` calls them. A implementation that doesn't support
     dry-run sets `expand_sweep=None`; the CLI emits a clear error
-    if dry-run is requested against such a substrate. Substrates
+    if dry-run is requested against such a substrate. implementations
     that don't add to the framework summary set
     `format_dry_run_summary=None`."""
 
@@ -374,7 +374,7 @@ class SweepEntryPoints[S: Sweep]:
 
 @runtime_checkable
 class _AddCliArgs(Protocol):
-    """Substrate hook to add substrate-specific argparse arguments
+    """Substrate hook to add implementation-specific argparse arguments
     to `corroborate sweep run`. Called by the framework BEFORE
     `parser.parse_args()` so the substrate's options appear in
     `--help` output and are validated by argparse alongside the
@@ -398,7 +398,7 @@ class _PreImportSetup(Protocol):
     `import jax` because JAX latches the backend on first init.
     The framework's CLI doesn't know about JAX; the substrate's
     pre-import hook does, and it runs at the right moment in the
-    import sequence. Substrates with heavy deps keep their
+    import sequence. implementations with heavy deps keep their
     `SWEEP_ENTRY_POINTS` Callables lazy so the actual heavy
     imports happen on first invocation — AFTER this hook ran."""
 
@@ -408,23 +408,23 @@ class _PreImportSetup(Protocol):
 @dataclass(frozen=True, slots=True)
 class SweepCliExtensions:
     """Substrate registration for `corroborate sweep run` CLI
-    extensions — substrate-specific argparse args + pre-import
+    extensions — implementation-specific argparse args + pre-import
     environment setup.
 
-    A substrate exposes a module-level
+    A implementation exposes a module-level
     `SWEEP_CLI_EXTENSIONS: SweepCliExtensions` on the SAME
     module the framework reads `SWEEP_ENTRY_POINTS` from. The
-    framework's single `importlib.import_module(<substrate>)`
-    reads both attributes; substrates that need to stay
-    lightweight at import-time (e.g. JAX-using substrates that
+    framework's single `importlib.import_module(<implementation>)`
+    reads both attributes; implementations that need to stay
+    lightweight at import-time (e.g. JAX-using implementations that
     must set `JAX_PLATFORMS` before any heavy import) keep
     their `SWEEP_ENTRY_POINTS` Callables lazy.
 
     The framework's `corroborate.cli.sweep`:
 
-    1. Calls `add_args(p_run)` to register substrate-specific
+    1. Calls `add_args(p_run)` to register implementation-specific
        options (e.g. `--device cpu|gpu` for the JAX-using RL
-       substrate). These appear in `corroborate sweep run --help`.
+       implementation). These appear in `corroborate sweep run --help`.
     2. After `parser.parse_args(argv)` produces the Namespace,
        calls `pre_import_setup(args)` to stamp env vars (e.g.
        `JAX_PLATFORMS`, `XLA_FLAGS`).
@@ -432,7 +432,7 @@ class SweepCliExtensions:
        lazy proxies now import heavy deps with correct env.
 
     Construction enforces a runtime shape check on both fields
-    (the dataclass is constructed once per substrate, at module
+    (the dataclass is constructed once per implementation, at module
     load) — non-Callable values fail loud here rather than at
     first invocation."""
 

@@ -311,7 +311,7 @@ def _n_bursts(
     their tail.
 
     Picks max(mediator_len, outcome_len) per cell to handle the
-    rare case where the two are unaligned (substrate bug or
+    rare case where the two are unaligned (implementation bug or
     Measurable-fallback corner case); in well-formed input the two
     are equal per cell."""
     return max(

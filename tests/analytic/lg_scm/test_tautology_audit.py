@@ -24,7 +24,7 @@ on a shared HP. Under stratified Spearman ρ within a fixed `mu_x`,
 the residual correlation collapses to zero — and the framework
 must catch that.
 
-Substrate: 5 envs × 30 seeds × one arm. Each env has its own
+Implementation: 5 envs × 30 seeds × one arm. Each env has its own
 `mu_x`. Mediator candidates are injected post-hoc into each
 cell's measurements (the audit reads `mediator.<name>` paths)
 since they're not part of the structural SCM."""
@@ -220,7 +220,7 @@ def test_hp_correlated_caught_by_stratified_rho_check() -> None:
     by_name = _audit()
     r = by_name['mediator.hp_correlated']
     # R² should be moderate (mu_x explains some but not most of the
-    # variance — substrate parameters are tuned so noise dominates
+    # variance — implementation parameters are tuned so noise dominates
     # over the HP signal).
     r2 = r.hp_r_squared['mu_x']
     assert r2 < 0.95, (
@@ -247,7 +247,7 @@ def test_clean_mediator_passes_all_three_checks() -> None:
 
     - Structural: reads=('z_per_episode',) — disjoint from
       outcome_reads=('y_per_episode',) → jaccard=0
-    - HP-R²: substrate tuned so within-env z_mean noise is large
+    - HP-R²: implementation tuned so within-env z_mean noise is large
       relative to between-env mean spread → R² < 0.95
     - Stratified-ρ: within a fixed mu_x, both z_mean and y_mean
       depend on the same X(seed) realisation → ρ ≈ +1 → no flag
@@ -319,7 +319,7 @@ def test_tautology_audit_forwards_mediator_path_for_to_audit_panel() -> None:
 
     The default path resolution looks up each mediator's value at
     `record[f'mediator.{name}']` (or `record[name]` when name has
-    a dot). Substrate authors whose cells expose mediator scalars
+    a dot). Implementation authors whose cells expose mediator scalars
     under BARE names (no `mediator.` prefix and no dots) would
     silently get all-NaN audits without the forwarding kwarg.
 

@@ -79,7 +79,7 @@ def test_corroboration_pipeline_recovers_closed_form_pooled_g() -> None:
     A panel-builder regression that dropped envs, mis-keyed strata,
     or returned NaN g/se for valid cells would shift `pooled_g`
     measurably away from the closed form OR change `n_cells` —
-    failing the test in a substrate-specific way the synthetic-
+    failing the test in a implementation-specific way the synthetic-
     input verdict tests can't catch."""
     envs: dict[str, tuple[LinearGaussianSCM, LinearGaussianSCM]] = {
         f'env_mu_{mu:g}': (

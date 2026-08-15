@@ -6,7 +6,7 @@ DoEffect's Intervention tuples + a substrate-supplied `base`,
 iterates the Cartesian product of the exogenous grid, and
 dispatches both arms per grid point. Pairing is intrinsic.
 
-These tests use a synthetic substrate: a tiny `base` callable
+These tests use a synthetic implementation: a tiny `base` callable
 plus a stub Runner that produces deterministic SweepCellResults.
 The framework's job (claim composition, arm_key derivation,
 parquet persistence) gets exercised end-to-end without an RL

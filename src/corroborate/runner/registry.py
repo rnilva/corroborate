@@ -29,7 +29,7 @@ get auto-discovery for free; explicit `add_class` remains for
 cross-module imports.
 
 Name collisions raise `ValueError` at registration time; the
-substrate fixes the ambiguity by renaming. Lookups raise
+implementation fixes the ambiguity by renaming. Lookups raise
 `KeyError` with the missing name; YAML loaders surface this as
 a config error pointing at the offending token.
 """
@@ -52,7 +52,7 @@ class Registry:
     `fns` and `classes` each wrap `corroborate._registry.Registry`
     so collision and lookup discipline is centralised in one
     place; this class adds the `add_module` walker and the
-    loud-`KeyError` accessors substrate code consumes."""
+    loud-`KeyError` accessors implementation code consumes."""
 
     fns: _Registry[FnClaim[..., object]] = field(
         default_factory=_Registry,
@@ -107,7 +107,7 @@ class Registry:
         same class; raises on a different class at the same key.
 
         Used both by `add_module` (auto-discovered config-bundle
-        classes) and by the substrate (manual cross-module
+        classes) and by the implementation (manual cross-module
         registration when a bundle lives outside the substrate's
         claim modules)."""
         self.classes.register(cls.__name__, cls)

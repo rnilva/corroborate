@@ -46,7 +46,7 @@ from corroborate.runner.yaml_sweep import (
 @dataclass(frozen=True, slots=True)
 class _MinimalSweep:
     """Bare frozen dataclass with exactly the Sweep Protocol's
-    five fields. No substrate-specific add-ons. Tests use this to
+    five fields. No implementation-specific add-ons. Tests use this to
     prove the framework primitives work without DQN coupling."""
     name: str
     out_dir: Path

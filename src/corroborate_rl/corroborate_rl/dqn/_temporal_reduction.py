@@ -1,7 +1,7 @@
 """`@temporal_reduction` — pair-registers `<base>_late` + `<base>_per_burst`
 measurables from a single window-reduction function.
 
-The substrate has two complementary aggregations of any per-step trace
+The implementation has two complementary aggregations of any per-step trace
 column:
 
 - **`<name>_late`**: scalar from the late-50% slice of the per-step

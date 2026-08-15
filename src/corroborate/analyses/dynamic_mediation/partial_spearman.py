@@ -79,7 +79,7 @@ class DynamicMediationResult:
     `burst_steps` is the burst-index axis (0..n_bursts-1); the
     framework doesn't try to recover wall-clock training-step
     counts at the primitive level (that would require trace-store
-    introspection that's substrate-specific).
+    introspection that's implementation-specific).
 
     `rho_marginal[b]` and `rho_partial[b]` are NaN at bursts where
     fewer than `min_n_per_burst` cells contributed — consumers

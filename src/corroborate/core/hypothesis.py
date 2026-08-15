@@ -29,7 +29,7 @@ satisfies the Protocol via duck-typing.
 
 `MEASURABLES` is NOT on the Protocol. Pre-registered measurables
 are a sweep-time concern: `runner.sweep.run_intervention` takes
-them as an explicit parameter, and substrates that compute
+them as an explicit parameter, and implementations that compute
 mediators post-sweep from raw traces leave the parameter empty.
 Bridges that consume measurables import them by name (typed
 `Measurable` instance) at module load — the registry resolves
@@ -124,7 +124,7 @@ class Hypothesis(Protocol):
     threads to `evaluate(..., claim=...)`. Hypotheses that omit
     it fall back to `None`; the gates short-circuit on the
     endogeneity check (still correct for typo/contract-shape
-    gates). New substrate hypothesis modules should declare
+    gates). New implementation hypothesis modules should declare
     `CLAIM = dqn` (or their substrate's outermost claim) at
     module level.
 

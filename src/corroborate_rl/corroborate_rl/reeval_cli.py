@@ -22,7 +22,7 @@ Example — Breakout γ=0.99 n_eps1 → n_eps20:
         --out-dir experiments/data/breakout_g099_canonical_reeval_n20_ckpt \\
         --device gpu
 
-This module is substrate code; the framework knows nothing about
+This module is implementation code; the framework knows nothing about
 re-eval. The reeval transform is corpus-shaped, not sweep-shaped
 (no Hypothesis, no arms grid), so it gets its own console entry
 rather than a `corroborate sweep run` hook."""

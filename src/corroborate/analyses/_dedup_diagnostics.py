@@ -24,7 +24,7 @@ canonical_str default-elision (`_internals/canonical.py`): both
 layers treat default-equal-or-implicit as equivalent, so
 regime-mismatch reports only fire on substantive HP differences.
 
-Domain-agnostic: the helper doesn't know what RL or any substrate
+Domain-agnostic: the helper doesn't know what RL or any implementation
 considers a 'regime'. It just lists columns. The substrate's own
 notion of regime emerges from the report — e.g. RL sweeps will
 typically surface `total_steps` and `eval_every`."""
@@ -38,7 +38,7 @@ from collections.abc import Iterable, Mapping
 # report so authors aren't told "the timestamps differ".
 #
 # `intervention_name` is in the legacy-author-label position:
-# substrate stopped emitting it in Phase 6 (cells carry typed
+# implementation stopped emitting it in Phase 6 (cells carry typed
 # `arm_key = canonical_str(intervention)` instead), but old cache
 # parquets still have the column with sub-sweep aliases like
 # `'ddqn'` / `'ddqn_n1'` / `'ddqn_g099'` — all canonicalising to

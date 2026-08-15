@@ -4,9 +4,9 @@ for-loop impl + `iterate` claim wrapper.
 A `Loop[C, T, Idx]` is the iteration-backend contract: run
 `step(state, idx)` for `length` iterations, return
 `(final_state, aggregated_outputs)`. `Idx` is parameterized so
-substrates pick the form that fits their backend:
+implementations pick the form that fits their backend:
 
-- `int` for substrate-agnostic Python (`python_loop` here).
+- `int` for implementation-agnostic Python (`python_loop` here).
 - A traced array index for jax-flavored backends (a substrate's
   `scan_loop` over `lax.scan`, or jax-stacked `python_loop`).
 
@@ -20,7 +20,7 @@ indices (its scan body is traced; `int(...)` on a tracer is a
 type error inside jit). Substrate-agnostic Python loops produce
 plain `int`. The two can't share a step-fn signature without the
 parameter; without it, either the framework primitive depends on
-jax (wrong) or the rl substrate has its own duplicated `Loop`
+jax (wrong) or the rl implementation has its own duplicated `Loop`
 Protocol that drifts (the original sin this redesign closes).
 
 **Trace-context behaviour.** Under an active `trace_context()`:
@@ -56,12 +56,12 @@ class Loop[C, T, Idx](Protocol):
     Implementations:
     - `python_loop` (this module): `Loop[C, T, int]`, returns
       `tuple[C, list[T]]`.
-    - A jax-flavored substrate may provide `Loop[C, T, jax.Array]`
+    - A jax-flavored implementation may provide `Loop[C, T, jax.Array]`
       backends — typically a `lax.scan` wrapper returning a
       stacked T pytree, plus a Python-fallback that produces the
       same shape under tracing.
 
-    Substrates structurally satisfy this Protocol via their
+    implementations structurally satisfy this Protocol via their
     chosen `Idx` binding; no inheritance required."""
     def __call__(
         self,
@@ -77,11 +77,11 @@ def python_loop[C, T](
     length: int,
 ) -> tuple[C, list[T]]:
     """Pure Python `for`-loop. Substrate-agnostic — no jax dep.
-    Per-step outputs collected as `list[T]`; the substrate
+    Per-step outputs collected as `list[T]`; the implementation
     stacks if it wants array-typed aggregation.
 
     Under `trace_context()`, every iteration fires `@claim`
-    records — exhaustive trace coverage. Use for substrates
+    records — exhaustive trace coverage. Use for implementations
     without a fast backend, or for probe runs where every
     iteration's call sequence matters.
 
@@ -121,7 +121,7 @@ def iterate[C, T, Idx](
         final_state → outcome_aggregator
     where the integration over `length` iterations is captured
     structurally by the iterate node, not erased by dedup. Any
-    substrate composing with this primitive gets the loop axis
+    implementation composing with this primitive gets the loop axis
     in its claim graph for free — no per-substrate ad-hoc node
     needed.
 

@@ -18,9 +18,9 @@ import polars as pl
 # canonical location in `corpus.catalogue` so the data subpackage
 # can't silently drift from the rest of the framework's leaf
 # semantics. Both surfaces are RL-substrate-shaped today; the
-# substrate-author can override per-call via the diagnostics
+# implementation-author can override per-call via the diagnostics
 # helper (Phase 1 doesn't expose the override on the public API
-# — adds it when the next substrate needs different exogenous
+# — adds it when the next implementation needs different exogenous
 # keys).
 from corroborate.corpus.catalogue import (
     DEFAULT_EXOGENOUS_KEYS as _DEFAULT_EXOGENOUS_KEYS,
@@ -61,7 +61,7 @@ class DerivedSpec:
 
     Supersedes `analyses.link.cross_stratum_property_slope.
     DerivedCovariateSpec`'s `arm_filter: Literal[...]` with a full
-    `cell_filter: pl.Expr` so substrate-author can express any
+    `cell_filter: pl.Expr` so implementation-author can express any
     filter (e.g. `pl.col('arm_key') == 'baseline'` for the
     σ_Λ_a-of-vanilla case, or `pl.col('lambda_a_late').is_finite()`
     to drop NaN cells before aggregating).
@@ -90,7 +90,7 @@ class DerivedSpec:
 class MeasurableAvailability:
     """P6 — typed per-env-per-measurable availability matrix.
 
-    `availability`: outer key is env value (substrate-specific —
+    `availability`: outer key is env value (implementation-specific —
     typically env_name string); inner key is measurable name;
     value is the fraction of cells in that env where the column
     is non-null + non-NaN. Range [0.0, 1.0].
@@ -140,7 +140,7 @@ def _compute_availability_matrix(
         )
     if env_column not in cells.columns:
         # Treat the whole panel as one env when the stratification
-        # column doesn't exist. Avoids forcing the substrate-author
+        # column doesn't exist. Avoids forcing the implementation-author
         # to special-case panels without env_name.
         env_values: tuple[object, ...] = ('__panel__',)
         subs = [cells]
@@ -503,7 +503,7 @@ class Panel:
             #   the registry; non-registered overlap is the
             #   defensive CI6 fallback)
             # - here: `'meas_wins'` (Panel is an exploration
-            #   entry point where substrate may not be imported;
+            #   entry point where implementation may not be imported;
             #   trust the stamped measurements value over a
             #   runs-side NaN)
             from corroborate.corpus.measurements import (
@@ -809,7 +809,7 @@ class Panel:
         # `partition_by(..., as_dict=True)` returns a mapping
         # from stratum-key-tuple to sub-DataFrame in a single
         # scan. Stable sort over stratum keys for predictable
-        # iteration order (substrate consumers may rely on it).
+        # iteration order (implementation consumers may rely on it).
         partitions = self.cells.partition_by(
             keys_list, as_dict=True, maintain_order=False,
         )
@@ -916,7 +916,7 @@ class Panel:
         `self.cells` that names a registered `@measurable`).
 
         `env_column`: stratification key. Defaults to `env_name`;
-        substrate-author may override (`corpus`, `arm_key`, etc.)
+        implementation-author may override (`corpus`, `arm_key`, etc.)
         for finer-grained availability views.
 
         Pure read; no side effects."""

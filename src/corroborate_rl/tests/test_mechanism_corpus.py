@@ -72,7 +72,7 @@ def _strip_env_keys(
 ) -> dict[str, object]:
     """Remove all env-specific keys from a measurements dict.
 
-    The dqn substrate marks several params `Annotated[..., Exogenous]`:
+    The dqn implementation marks several params `Annotated[..., Exogenous]`:
     `env`, `env_params`, `env_name`, `seed`, `obs_shape`, `n_actions`,
     `state_hash` etc. Plus the framework's walker recurses into
     `env_params` dataclass fields, producing `env_params.*` keys.
@@ -81,7 +81,7 @@ def _strip_env_keys(
     fingerprint.
 
     `leaf_signature(..., exogenous_keys=...)` accepts only flat key
-    names; the substrate doesn't ship a canonical set yet. Strip
+    names; the implementation doesn't ship a canonical set yet. Strip
     inline by name + `env_params.` prefix.
     """
     assert isinstance(measurements, dict)

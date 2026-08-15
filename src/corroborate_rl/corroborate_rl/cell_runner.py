@@ -64,13 +64,13 @@ from corroborate.measurables import Measurable
 
 @lru_cache(maxsize=1)
 def _git_head_sha() -> str | None:
-    """Current substrate commit SHA, stamped on every RunRow this
+    """Current implementation commit SHA, stamped on every RunRow this
     process emits. Cached at module load — git HEAD shouldn't change
     mid-sweep; if it did, a fresh runner invocation would re-read it.
 
-    Returns `None` when the substrate isn't in a git checkout (e.g.,
+    Returns `None` when the implementation isn't in a git checkout (e.g.,
     pip-install, source tarball). Bridges that need a specific
-    substrate fix scope by `pl.col('substrate_commit_sha').is_in([
+    implementation fix scope by `pl.col('substrate_commit_sha').is_in([
     sha1, sha2, ...])`; cells with `None` are pre-versioning and
     fall outside any such scope. See `docs/SUBSTRATE_FIXES.md`."""
     try:
@@ -296,7 +296,7 @@ def run_dqn_arm(
     `claim` is the substrate's theory composed with one arm's
     Intervention tuple — typically `apply_interventions(base,
     intervention.treatment)` where `base = partial(dqn, **HPs)`.
-    The framework's `run_intervention` builds it; substrate
+    The framework's `run_intervention` builds it; implementation
     callers pass it through.
 
     `arm_key` is the framework-derived canonical fingerprint of

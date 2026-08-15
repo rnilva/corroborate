@@ -12,7 +12,7 @@ silently combine causally opposite phases when training has a
 phase transition. The trajectory-averaged scalar slope ≈ 0
 because the two phases cancel. Per-burst link unmasks this.
 
-Per-burst is the canonical form for any substrate where the
+Per-burst is the canonical form for any implementation where the
 mediator's dynamics aren't monotone across training (phase-
 transition-prone runs). The strata returned (env, burst → r,
 p, n_pairs) feed bridges that assert phase-structured claims
@@ -129,7 +129,7 @@ def paired_link_per_burst(
     mediator reduction → more outcome gain." Positive r at burst
     b means: at this training stage, the predicted causal arrow
     holds. Negative r means the relationship has flipped
-    (substrate-specific phase-transition).
+    (implementation-specific phase-transition).
 
     `env_name`, when supplied, restricts the analysis to one env.
 

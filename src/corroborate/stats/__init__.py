@@ -2,7 +2,7 @@
 verdicts from corpus measurements.
 
 Hedges' g (paired and pooled), random-effects pooling, meta-
-regression. All substrate-neutral — operates on numeric arrays
+regression. All implementation-neutral — operates on numeric arrays
 and stratum keys, doesn't know what the substrate's
 measurables mean.
 

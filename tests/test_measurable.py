@@ -621,7 +621,7 @@ def test_audit_measurable_registry_flags_unregistered_param() -> None:
     forgotten-import. The audit returns a non-empty warning list."""
     from corroborate.measurables import audit_measurable_registry
 
-    # Distinctive name unlikely to clash with substrate measurables.
+    # Distinctive name unlikely to clash with implementation measurables.
     @measurable
     def __p1p4_audit_typo(
         record: Mapping[str, object], totally_unregistered_xyz: int,

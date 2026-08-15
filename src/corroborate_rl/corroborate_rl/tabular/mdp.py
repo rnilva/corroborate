@@ -123,7 +123,7 @@ def bellman_backup(
 
     `transitions` and `rewards` are passed explicitly (rather
     than packed into a TabularMDP arg) so this Claim composes
-    cleanly with substrate-author hooks that mutate dynamics
+    cleanly with implementation-author hooks that mutate dynamics
     (e.g., a partial reward shaping). Plain functions of arrays
     are easier to canonicalise + record than dataclass-receivers."""
     # Expected next-state value: sum_s' P(s'|s,a) * V(s'). Shape (S, A).

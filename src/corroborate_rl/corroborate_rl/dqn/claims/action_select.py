@@ -41,7 +41,7 @@ class EpsilonSchedule(Protocol):
     """Schedule mapping global step → ε. Linear / exponential /
     constant implementations all conform to this shape. Lives as
     a kwarg on `epsilon_greedy` (slot Claim), not as a top-level
-    slot of `dqn` — substrate-author authors swap via
+    slot of `dqn` — implementation-author authors swap via
     `partial(epsilon_greedy, schedule=...)`."""
     def __call__(self, step: jax.Array) -> jax.Array: ...
 

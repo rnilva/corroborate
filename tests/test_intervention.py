@@ -84,7 +84,7 @@ def _make_claim(label: str) -> FnClaim[..., str]:
     """Build a unique `@claim`-wrapped callable carrying `label` as
     its `__name__` — satisfies the `Replacement` callable contract
     while remaining identity-comparable in assertions. The shape
-    matches how authored substrates compose: `replacement=` always
+    matches how authored implementations compose: `replacement=` always
     receives a Claim, never a stringly-typed sentinel.
 
     The typed first overload of `claim` returns `FnClaim[P, T]`;

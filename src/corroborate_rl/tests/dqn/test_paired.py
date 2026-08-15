@@ -134,7 +134,7 @@ def test_paired_dqn_full_run_produces_dqn_shaped_record() -> None:
 
 @pytest.mark.slow
 def test_paired_dqn_runs_through_runner_cell() -> None:
-    """Integration: the substrate runner's cell path (`run_dqn_cell`,
+    """Integration: the implementation runner's cell path (`run_dqn_cell`,
     same entry the sweep dispatches through) invokes `paired_dqn`
     exactly as it does `dqn` — the Exogenous cell kwargs + `seed`,
     no `init_override` — builds the trajectory record, walks the

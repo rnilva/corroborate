@@ -158,7 +158,7 @@ heterogeneity) than v3's uniform Δ_v = peak·(1-β) per env.
 
 API matches the gymnax `Env` Protocol: `reset(rng, params) →
 (obs, state)`, `step(rng, state, action, params) → (obs, state,
-reward, done, info)`. Per the substrate convention, the env is
+reward, done, info)`. Per the implementation convention, the env is
 config-free (no class fields).
 """
 from __future__ import annotations

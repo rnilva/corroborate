@@ -333,7 +333,7 @@ arms:
       replacement: 0.99
 """.strip())
     # Scalars (int/float) currently pass `is_replacement` because
-    # Replacement = object — substrate-agnostic by design. The
+    # Replacement = object — implementation-agnostic by design. The
     # framework's substrate-level type-checker catches slot/
     # replacement mismatches at call site; the loader accepts the
     # value as a typed Intervention. Confirming behavioural
@@ -350,7 +350,7 @@ def test_required_measurables_resolves_registered_names(
     """The YAML's `required_measurables` lookup goes through the
     global `@measurable` registry; valid names land on the
     `InterventionConfig` field as a typed tuple."""
-    # Importing the substrate registers the canonical measurable
+    # Importing the implementation registers the canonical measurable
     # set as a side effect — `eval_best_burst_mean` and
     # `jensen_gap` are stable framework-recognised names.
     import corroborate_rl.dqn.measurables  # noqa: F401

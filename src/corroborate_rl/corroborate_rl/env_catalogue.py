@@ -189,7 +189,7 @@ class ActionDiscretize:
     (endpoints included).
 
     Use to bring continuous-action gymnax envs (Pendulum,
-    MountainCarContinuous) into the discrete-action DQN substrate
+    MountainCarContinuous) into the discrete-action DQN implementation
     without re-engineering the agent. Provides REACH-polarity
     cohort additions where the discrete env catalogue is thin —
     DQN learning behavior is well-studied at modest n_bins (5-9)
@@ -1716,11 +1716,11 @@ def _register_jumanji(
     triggers a network call (e.g. Sokoban-v0 downloads its level
     dataset from HuggingFace Hub on first instantiation) — without
     explicit metadata the import-time HF call fires for every
-    sub-process loading the substrate, even when no jumanji cells
+    sub-process loading the implementation, even when no jumanji cells
     will run.
 
     The factory is stashed in `_JUMANJI_FACTORIES` for later
-    `make_env` calls — the substrate runs N seeds against the same
+    `make_env` calls — the implementation runs N seeds against the same
     EnvSpec and we want one freshly-constructed jumanji env per
     cell, not a shared singleton."""
     obs_type: ObservationType = (
@@ -2357,7 +2357,7 @@ def _register_synthetic_bias_typeb_panel() -> None:
 
     The γ axis is swept via the YAML intervention's
     `base: {gamma: ...}` mechanism, NOT baked into the env name —
-    γ is a substrate knob, not an env structural property.
+    γ is an implementation knob, not an env structural property.
 
     Reward bounds: per-step ∈ [-3·noise_sigma, peak_value +
     3·noise_sigma] ≈ [-0.06, 1.06]. Registered bounds rounded to

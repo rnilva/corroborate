@@ -364,8 +364,8 @@ def asdict_for_hash(sweep: object) -> Mapping[str, object]:
     # The runtime invariant (caller passes a DQNSweep) justifies
     # the suppression; redesigning to type `sweep` more strictly
     # would force this module to import DQNSweep from the
-    # substrate package (corroborate_rl), which would invert the
-    # framework / substrate dependency direction.
+    # implementation package (corroborate_rl), which would invert the
+    # framework / implementation dependency direction.
     return asdict(sweep)  # pyright: ignore[reportArgumentType]
 
 

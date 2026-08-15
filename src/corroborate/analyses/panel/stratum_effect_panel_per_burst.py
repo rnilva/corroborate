@@ -10,7 +10,7 @@ simple-mean-variance form, matching
 
 Existence rationale (closes CLAUDE.md §"Methodology debt"). The
 seed-paired form (`paired_g_per_burst`) pseudo-replicates seeds
-inside each (env, burst) stratum on RL substrates — CLAUDE.md
+inside each (env, burst) stratum on RL implementation — CLAUDE.md
 flags it as off-limits in RL bridges (`feedback_paired_g_in_rl`).
 Three bridges retained the paired form as a documented "principled
 exception" because they test phase consistency (per-burst sign-

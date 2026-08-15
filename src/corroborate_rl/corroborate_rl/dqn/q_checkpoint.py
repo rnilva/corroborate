@@ -3,7 +3,7 @@ for `Params` pytrees, plus the in-record sentinel-key conventions
 the cell runner uses to extract checkpoints from the per-cell record
 dict.
 
-**Why this exists.** Substrate authors increasingly want post-hoc
+**Why this exists.** Implementation authors increasingly want post-hoc
 per-state per-action Q evaluation at arbitrary observations (e.g.
 re-evaluating the trained policy on a held-out probe set, comparing
 Q surfaces across the burst trajectory). Storing the full per-step

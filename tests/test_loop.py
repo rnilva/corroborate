@@ -8,7 +8,7 @@ Verifies:
    satisfies the framework `Loop[C, T, int]` Protocol.
 2. Under an active `trace_context()`, `@claim`-decorated step
    bodies fire records on every iteration — the eager-trace
-   guarantee that `python_loop` provides for substrates without
+   guarantee that `python_loop` provides for implementations without
    a fast/jit backend.
 
 Substrate-side conformance cases (jax-flavoured `scan_loop` and
@@ -62,7 +62,7 @@ def test_python_loop_passes_step_index_to_step_fn() -> None:
 def test_python_loop_satisfies_loop_protocol() -> None:
     """Static + structural check: `python_loop` is assignable to
     a `Loop[int, int, int]`-typed slot — `Idx=int` because this is
-    the substrate-agnostic Python backend. The Protocol is
+    the implementation-agnostic Python backend. The Protocol is
     satisfied structurally — no explicit subclassing."""
     holder: Loop[int, int, int] = python_loop  # pyright/static check
     # Runtime structural sanity: holder is callable with the

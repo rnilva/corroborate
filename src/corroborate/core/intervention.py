@@ -141,7 +141,7 @@ class Intervention:
                          replacement=Replay(sample=X))
 
         The framework's config bundles are frozen dataclasses;
-        constructing the substituted parent is the substrate
+        constructing the substituted parent is the implementation
         author's idiom."""
         if '.' in self.slot_path:
             raise ValueError(

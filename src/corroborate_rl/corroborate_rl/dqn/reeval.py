@@ -311,7 +311,7 @@ def _build_q_network(row: Mapping[str, object]) -> QFunction:
     Discriminator: a CNN bundle surfaces `q_network.channels` /
     `q_network.kernel_size` / `q_network.obs_shape` leaves; an MLP
     surfaces only `q_network.hidden`. Reading the column presence
-    (finite string) is the type-honest detector — the substrate
+    (finite string) is the type-honest detector — the implementation
     walks the bundle's fields into these dotted paths at sweep
     time."""
     channels_raw = row.get('q_network.channels')

@@ -217,7 +217,7 @@ class RunRow:
     dotted topology paths, bridge/invariant results under
     `bridge.<name>.*` / `invariant.<name>.*`, outcome reductions
     under substrate-named keys (e.g. `late_window_mean`),
-    and substrate metadata (`env_name`, `seed`, `total_steps`).
+    and implementation metadata (`env_name`, `seed`, `total_steps`).
 
     `arm_key` defaults to `'baseline'` so hand-constructed
     fixtures and old parquets without the column read as the
@@ -237,11 +237,11 @@ class RunRow:
     timestamp: str
     verdict: Verdict
     arm_key: str = 'baseline'
-    # Git commit SHA the substrate was on when this cell was
+    # Git commit SHA the implementation was on when this cell was
     # produced. Stamped by the runner at sweep start (one SHA shared
     # across all cells in one runner invocation). `None` for cells
     # produced before this field existed; bridges that care about a
-    # specific substrate fix scope by SHA via
+    # specific implementation fix scope by SHA via
     # `pl.col('substrate_commit_sha').is_in([...])`. See
     # `docs/SUBSTRATE_FIXES.md` for the SHA → fix-name catalogue.
     substrate_commit_sha: str | None = None
@@ -334,7 +334,7 @@ LINEAGE_FIELDS: frozenset[str] = (
 class StratumG[K]:
     """Per-stratum paired Hedges' g result. `K` is the stratum-id
     type — `str` for env-strata, `tuple[str, int]` for (env,
-    burst), or whatever the substrate uses.
+    burst), or whatever the implementation uses.
 
     Per-stratum analyses (`paired_g_per_burst`, panel
     meta-regression) produce sequences of these. The sibling

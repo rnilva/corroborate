@@ -103,7 +103,7 @@ def hasselt_max_bias_asymptotic(
     correction term `−σ · ln(4π · ln |A|)/(2√(2 ln |A|))` brings
     it closer); for |A| ≥ 50 it's accurate to ~5%.
 
-    The framework's substrate uses this as the structural floor
+    The framework's implementation uses this as the structural floor
     in `jensen_dormancy_gap` — under-floor jensen_gap declares
     the Hasselt mechanism dormant on a cell."""
     if sigma < 0.0:

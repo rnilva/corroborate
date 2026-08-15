@@ -180,7 +180,7 @@ def build_measurements(
     hash is sidecar-current (the input traces changed but the
     formula didn't — e.g. a re-eval at a new n_episodes). Dropping
     only the existing store is insufficient: a measurable the
-    substrate stamped into `runs.parquet` survives on `runs_df` and
+    implementation stamped into `runs.parquet` survives on `runs_df` and
     `compute_missing_columns` skips it (present-and-non-null), so
     the stale stamp wins. The caller must guarantee the forced
     names' reads are on `runs_df`, else the rebuild null-pads.
@@ -206,7 +206,7 @@ def build_measurements(
         )
     # Force-recompute, runs_df side. The existing-store force-drop
     # (drift loop below) handles `measurements.parquet`; this handles
-    # a forced measurable the substrate STAMPED into `runs.parquet`
+    # a forced measurable the implementation STAMPED into `runs.parquet`
     # (`RunRow.measurements`). Such a stamp lands on `runs_df` →
     # `joined`, and `compute_missing_columns` SKIPS any column already
     # present-and-non-null in its input frame. So without this drop a
@@ -355,16 +355,16 @@ def build_measurements(
         # them.
         #
         # Substrate-stamped values are authoritative per Phase 3
-        # **only when the substrate had the inputs to compute
+        # **only when the implementation had the inputs to compute
         # them**. Trace-dependent measurables (`reads` references
         # per-step trace columns like `online_max_q_per_step`) are
         # stamped NaN at sweep time because traces don't exist yet
         # — runner adds them as a post-sweep reduction. For those,
         # runs_df's NaN stamp is NOT authoritative; the prior
         # per-corpus store's value (computed once traces were
-        # restored) is. Drop only when the substrate had all
+        # restored) is. Drop only when the implementation had all
         # inputs — preserve existing for trace-dependent stamps
-        # the substrate couldn't have computed.
+        # the implementation couldn't have computed.
         #
         # `unregistered_policy='runs_wins'`: post-CI6 orphan
         # eviction guarantees existing.columns are registered;
@@ -494,7 +494,7 @@ def build_measurements(
     # that (a) we did NOT recompute this round (not in
     # `to_compute_satisfied`) AND (b) carry only null/NaN values.
     # These typically arrive on `runs_df` as sweep-time NaN
-    # stamps (the substrate stamped them but couldn't compute —
+    # stamps (the implementation stamped them but couldn't compute —
     # injected dep missing at sweep time). Preserving them here
     # would persist a registered column + closure-hash for a
     # value the framework never actually computed, locking the
@@ -709,7 +709,7 @@ def compute_trace_measurables_streaming(
             f'compute_trace_measurables_streaming({traces_path}): '
             f'runs_df is missing the `id` column',
         )
-    # Drop any `required` measurable the substrate STAMPED into
+    # Drop any `required` measurable the implementation STAMPED into
     # runs.parquet (RunRow.measurements). The per-batch
     # `compute_missing_columns` below SKIPS a column already
     # present-and-non-null in its input frame, so a stale stamp
@@ -1040,7 +1040,7 @@ class RecomputeResult:
       satisfied locally — auto-recomputed when `recover_nan=True`
       was passed. Distinct from `recomputed` so callers can audit
       "what stale-NaN got fixed on this pass" separately from
-      "what changed because the substrate updated."
+      "what changed because the implementation updated."
     - `forced_recompute`: measurables that were sidecar-current
       but bypassed via the `force=` parameter (operator
       explicitly asked to recompute). Distinct from
@@ -1082,7 +1082,7 @@ def resolve_runs_meas_collision(
     For each name in `meas_cols ∩ runs_cols` (excluding `id`):
 
     - If the measurable IS registered AND its `transitive_reads`
-      are all in `runs_cols` → runs wins (the substrate had all
+      are all in `runs_cols` → runs wins (the implementation had all
       inputs at sweep time + its stamp is authoritative). Drop
       from meas.
     - If the measurable IS registered AND its reads aren't all
@@ -1097,7 +1097,7 @@ def resolve_runs_meas_collision(
           the runner has the registry import, non-registered
           overlap shouldn't happen in practice.
         * `'meas_wins'` (Panel.from_corpus default): for
-          exploration entry points where the substrate may not
+          exploration entry points where the implementation may not
           have been imported. The measurements file exists
           because SOME prior runner stamped a value; trust it
           over the runs-side NaN.
@@ -1127,7 +1127,7 @@ def resolve_runs_meas_collision(
                 drop_from_runs.add(c)
             continue
         if all(r in runs_cols for r in leaf_reads):
-            # Substrate could compute → runs wins.
+            # Implementation could compute → runs wins.
             drop_from_meas.add(c)
         else:
             # Trace-dependent → meas wins.

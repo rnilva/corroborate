@@ -1,4 +1,4 @@
-"""Importable substrate-shaped fixture for the parallel-ingest
+"""Importable implementation-shaped fixture for the parallel-ingest
 fork-safety tests (`test_runner_ingest_fork_safety.py`).
 
 This module MUST be importable by dotted name from a fresh
@@ -12,7 +12,7 @@ decorator.
 
 The measurable `trace_doubled_sum` reads a per-cell trace column
 (`signal`) and reduces it — exactly the shape that silently
-null-pads when the worker's registry is missing the substrate
+null-pads when the worker's registry is missing the implementation
 (the bug the equivalence test guards against)."""
 from __future__ import annotations
 

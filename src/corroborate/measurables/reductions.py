@@ -46,7 +46,7 @@ type _AxisOp = Literal['mean', 'var', 'std', 'max', 'min', 'sum']
 # `slice_axis`, `log_safe`, `cv_safe` — all conform without
 # inheritance (Python's structural Protocol matching).
 #
-# The Protocol formalises the substrate-authoring contract: new
+# The Protocol formalises the implementation-author contract: new
 # reductions written outside this module (e.g. for a non-RL
 # substrate's domain-specific shape) get type-checked against this
 # shape. Deviation from `(of: Measurable[R, T_in], *params) ->
@@ -256,7 +256,7 @@ def masked_window_mean(
     segment-end value appears at boundary indices marked by a
     binary `mask_key`. `masked_window_mean(value_key, mask_key,
     0.1)` averages the last 10% of boundary-marked values. The
-    binary indicator is whatever the substrate defines.
+    binary indicator is whatever the implementation defines.
 
     Returns NaN if no element survives the mask in the window —
     `0.0` would collide with a legitimate `value_key` of zero.
@@ -480,7 +480,7 @@ def select_at[R: Mapping[str, object]](
     of `indicator` along `axis`. Both measurables must produce
     arrays whose `axis`-dimension matches.
 
-    The "select-at-argmax" pattern surfaces whenever a substrate
+    The "select-at-argmax" pattern surfaces whenever an implementation
     needs "the value of X at the time-step / burst where Y peaked"
     — e.g., "the mechanism state at the burst where outcome was
     best", "the std of Q at the burst where bias was largest".

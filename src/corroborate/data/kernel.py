@@ -6,7 +6,7 @@ per-stratum primitives so that @analysis adapters and
 the aggregator semantics could drift between `Panel.derive`
 and `cross_stratum_property_slope._derive_per_stratum_covariate`
 (both compute per-(env, arm) aggregates) — and any new
-substrate-author primitive would reinvent the wheel.
+implementation-author primitive would reinvent the wheel.
 
 The kernel takes a `pl.DataFrame` + structured spec and returns
 typed results. `cells_to_dataframe` is the conversion boundary
@@ -16,7 +16,7 @@ DataFrame-canonical analysis surface.
 Functions in this module are framework-internal stable — the
 analysis primitives are the public surface, not the kernel. But
 the kernel is exposed as a single source of truth that
-substrate-author analysis-authoring can call directly when none
+implementation-author analysis-authoring can call directly when none
 of the canonical analyses fit."""
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def per_stratum_aggregate(
 
     Cells with non-finite `column` value are dropped before
     aggregation. Strata with fewer than `min_n` surviving cells
-    are skipped (SD undefined at n<2; substrate-author chooses
+    are skipped (SD undefined at n<2; implementation-author chooses
     a higher floor for power-sensitive uses).
 
     Shared kernel for `Panel.derive` and

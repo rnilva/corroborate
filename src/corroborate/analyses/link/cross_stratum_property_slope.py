@@ -147,10 +147,10 @@ def _derive_per_stratum_covariate(
         # picks ONE stratify key. Aggregate over the other
         # stratify dimensions when present (multiple sub-keys
         # share the same `covariate_key_field` value — rare in
-        # substrate use; substrate authors typically pass
+        # implementation use; implementation author typically pass
         # stratify_by=(covariate_key_field,) for cross-env panels.
         # When n_stratify > 1, take the first occurrence per
-        # key — deterministic + the substrate-author should
+        # key — deterministic + the implementation-author should
         # collapse upstream.
         out: dict[object, float] = {}
         for stratum_id, v in kernel_out.items():

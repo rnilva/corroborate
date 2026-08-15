@@ -12,7 +12,7 @@ PC primitive should report `mediator_dseparates[b] == True` at
 most bursts (within α-controlled type-I rate on the partial CI
 test).
 
-Substrate parameters at the test point:
+Implementation parameters at the test point:
   mu_x = 1.0, sigma_x = 0.5, sigma_z = 0.4, sigma_y = 0.4,
   beta_zy = 1.0, n_steps = 20, n_seeds_per_arm = 80
   beta_xz_T = 0.6, beta_xz_B = 0.4
@@ -22,7 +22,7 @@ Substrate parameters at the test point:
 Closed-form expectations:
 
 1. **Marginal edge always present**. Point-biserial Pearson r at
-   the substrate (from
+   the implementation (from
    `test_dynamic_partial_spearman.py`'s docstring derivation): r ≈
    0.585. At n=160 the Fisher-z CI test rejects null at α=0.05 with
    power ≈ 1.0 (z-stat ≈ 0.585·sqrt(157)·(1−0.585²)⁻¹ ≈ 11.1 →
@@ -197,7 +197,7 @@ def test_lg_scm_mediator_d_separates_at_most_bursts() -> None:
 
 def test_lg_scm_aggregation_status_consistent_direction() -> None:
     """All bursts have the same sign on `rho_marginal` (positive,
-    by the substrate construction). Magnitudes are close enough
+    by the implementation construction). Magnitudes are close enough
     (planted point-biserial r ≈ 0.585 ± SE ≈ 0.05 per burst) to
     sit below the default `weak_time_varying_ratio=2.0`. Status
     MUST be CONSISTENT_DIRECTION."""

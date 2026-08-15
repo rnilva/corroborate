@@ -3,35 +3,35 @@
 Currently one subcommand: `corroborate sweep run <yaml>
 --substrate <module>`. The flow:
 
-1. Framework parser registers substrate-agnostic args
+1. Framework parser registers implementation-agnostic args
    (`config`, `--substrate`, `--dry-run`, `--profile`,
    `--skip-preflight`).
 2. Before `parser.parse_args(argv)`, the framework PEEKS argv
-   for `--substrate <name>`. The substrate is expected to be a
+   for `--substrate <name>`. The implementation is expected to be a
    LIGHTWEIGHT module that exports `SWEEP_CLI_EXTENSIONS:
    SweepCliExtensions` (optional) AND
    `SWEEP_ENTRY_POINTS: SweepEntryPoints` (required) — both read
    from a SINGLE `importlib.import_module(substrate)`.
 3. If `SWEEP_CLI_EXTENSIONS` is present, the framework calls
    `ext.add_args(p_run)` so the substrate's own argparse options
-   (e.g. `--device cpu|gpu` for the JAX-using RL substrate)
+   (e.g. `--device cpu|gpu` for the JAX-using RL implementation)
    appear in `--help` and get validated alongside framework args.
 4. `parser.parse_args(argv)` produces the full Namespace.
 5. Framework calls `ext.pre_import_setup(args)` to stamp env
    vars (e.g. `JAX_PLATFORMS`) BEFORE any of `SWEEP_ENTRY_POINTS`'
-   lazy callables fire. Critical for JAX-using substrates —
+   lazy callables fire. Critical for JAX-using implementations —
    `import jax` latches the backend on first init.
 6. Framework calls `ep.default_registry()` /
    `ep.load_sweep(...)` etc. — these are LAZY proxies on the
-   substrate side; the heavy substrate module (which may pull
+   implementation side; the heavy implementation module (which may pull
    JAX) is imported on first invocation, AFTER env vars are
    stamped.
 
-The framework's substrate module path resolution single-imports
+The framework's implementation module path resolution single-imports
 — it does NOT use a `<substrate>_cli` sibling-suffix convention.
-The substrate is responsible for keeping its `--substrate`-named
+The implementation is responsible for keeping its `--substrate`-named
 module lightweight (no JAX-pulling imports at module-load time);
-the production DQN substrate at `corroborate_rl.dqn_sweep` is a
+the production DQN implementation at `corroborate_rl.dqn_sweep` is a
 deliberate lightweight wrapper around the heavy
 `corroborate_rl.dqn.yaml_sweep`.
 
@@ -70,13 +70,13 @@ _DEFAULT_SUBSTRATE: Final[str] = 'corroborate_rl.dqn_sweep'
 
 
 # Sentinel for `getattr` missing-attribute case. Using `None`
-# would collapse with a substrate that accidentally wrote
+# would collapse with an implementation that accidentally wrote
 # `SWEEP_ENTRY_POINTS = None` — the sentinel separates the two
 # failure modes for the error message.
 _MISSING: Final[object] = object()
 
 
-# Module-level cache: substrate import path → (entry_points,
+# Module-level cache: implementation import path → (entry_points,
 # cli_extensions_or_None). Populated by `load_substrate` during
 # `add_args` and reused by `dispatch` (one import per process).
 # Tests clear this via the `_clear_substrate_cache` fixture.
@@ -87,7 +87,7 @@ _substrate_cache: dict[
 
 def peek_substrate(argv: Sequence[str]) -> str:
     """Inspect argv for `--substrate <name>` or
-    `--substrate=<name>`, returning the resolved substrate
+    `--substrate=<name>`, returning the resolved implementation
     import path. Returns the LAST occurrence to match argparse's
     later-wins semantics (an earlier reviewer caught the
     first-wins mismatch — argparse takes the last duplicate, so
@@ -132,7 +132,7 @@ def _resolve_substrate_name(flag: str | None) -> str:
 
 
 def _import_substrate_module(module_path: str) -> ModuleType:
-    """Import the substrate module, raising `SystemExit` with a
+    """Import the implementation module, raising `SystemExit` with a
     typo-hint on ImportError. The hint surfaces the
     framework-side convention so a typo'd `--substrate` flag
     doesn't dead-end at argparse's generic 'unrecognized
@@ -169,14 +169,14 @@ def _import_substrate_module(module_path: str) -> ModuleType:
 def load_substrate(
     substrate: str,
 ) -> tuple[SweepEntryPoints[Sweep], SweepCliExtensions | None]:
-    """Import the substrate module ONCE and read both attributes.
+    """Import the implementation module ONCE and read both attributes.
 
     `SWEEP_ENTRY_POINTS` is REQUIRED; missing or wrong-typed
-    raises `SystemExit` with a typed shape error. The substrate
+    raises `SystemExit` with a typed shape error. The implementation
     might keep the heavy bits behind lazy proxies in its
-    `SWEEP_ENTRY_POINTS` Callables (the DQN substrate does this
+    `SWEEP_ENTRY_POINTS` Callables (the DQN implementation does this
     in `corroborate_rl/dqn_sweep.py`); the framework doesn't
-    care HOW the substrate stays lightweight, only that this
+    care HOW the implementation stays lightweight, only that this
     single import is cheap enough to run BEFORE
     `pre_import_setup`.
 
@@ -235,11 +235,11 @@ def _print_dry_run(
 ) -> None:
     """Echo the resolved sweep summary.
 
-    When `substrate_summary` is non-None (substrate provides
-    `format_dry_run_summary`), the substrate controls the entire
-    substrate-specific block — env layout AND intervention list
+    When `substrate_summary` is non-None (implementation provides
+    `format_dry_run_summary`), the implementation controls the entire
+    implementation-specific block — env layout AND intervention list
     AND arm counts. The framework's default intervention loop
-    runs only when the substrate doesn't provide a summary
+    runs only when the implementation doesn't provide a summary
     function (typed Protocol allows None)."""
     print(
         f'sweep: {sweep.name!r}\n'
@@ -267,10 +267,10 @@ def add_args(
     `argv`, when provided, is the post-`corroborate` argv slice
     used to peek at `--substrate <name>` so the substrate's
     `SWEEP_CLI_EXTENSIONS.add_args(p_run)` gets called BEFORE
-    `parser.parse_args(argv)` — substrate-specific args then
+    `parser.parse_args(argv)` — implementation-specific args then
     appear in `--help` and validate alongside framework args.
     When `argv` is None (programmatic API callers), only
-    framework args register; substrate extensions are skipped."""
+    framework args register; implementation extensions are skipped."""
     sub = parser.add_subparsers(
         dest='sweep_subcmd', required=True,
         title='sweep subcommands',
@@ -330,10 +330,10 @@ def add_args(
              'the archive step.',
     )
 
-    # Substrate extension discovery + registration. The argv peek
+    # Implementation extension discovery + registration. The argv peek
     # is what makes this two-phase parsing work: we resolve which
-    # substrate the user picked BEFORE argparse runs so the
-    # substrate's `add_args(p_run)` can append substrate-specific
+    # implementation the user picked BEFORE argparse runs so the
+    # substrate's `add_args(p_run)` can append implementation-specific
     # args (which argparse then validates as part of the same
     # parse pass).
     if argv is not None:
@@ -368,9 +368,9 @@ def dispatch(args: argparse.Namespace) -> int:
 
     ep, ext = load_substrate(substrate)
     if ext is not None:
-        # Substrate CLI extensions: pre_import_setup runs BEFORE
+        # Implementation CLI extensions: pre_import_setup runs BEFORE
         # any `SWEEP_ENTRY_POINTS` Callable. For JAX-using
-        # substrates this is where `JAX_PLATFORMS` gets stamped;
+        # implementations this is where `JAX_PLATFORMS` gets stamped;
         # the framework knows nothing about JAX.
         ext.pre_import_setup(args)
 

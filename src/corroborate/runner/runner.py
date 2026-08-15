@@ -2,7 +2,7 @@
 
 Each `experiments/findings/<name>.py` IS a hypothesis: it declares
 the bridges that test the claim (`BRIDGES` tuple) plus, via its own
-top-level imports, registers the substrate measurables required.
+top-level imports, registers the implementation measurables required.
 The runner imports the module, walks its bridges' measurable
 dependencies, populates / extends the per-module cache by
 computing missing measurables for each cell, and dispatches each
@@ -730,7 +730,7 @@ def check(
     not load runs.parquet, does not compute, does not touch
     cloud, does not run bridges. Useful for:
 
-    - "Did my substrate edit drift any column?" — yes if drift
+    - "Did my implementation edit drift any column?" — yes if drift
       report is non-empty.
     - "Which corpora do I need to `--ingest`?" — affected names
       are listed.
@@ -1063,7 +1063,7 @@ def _ingest_and_compute(
     drift-invalidate against `<cache>.hashes.json`, dedup new vs
     cache, concat — for incremental adds where `data` is a single
     parquet or DataFrame to be merged into an existing cache.
-    Tests exercise this path directly; substrate code paths a
+    Tests exercise this path directly; implementation code paths a
     directory."""
     required = sorted(
         measurable_names_for_bridges(bridges) | frozenset(extra_required)
@@ -1095,7 +1095,7 @@ def _ingest_and_compute(
             new_data = new_data.filter(module_scope)
         except pl.exceptions.ColumnNotFoundError as e:
             # Some MODULE_SCOPE expressions reference columns
-            # added by recent substrate updates that older corpora
+            # added by recent implementation updates that older corpora
             # don't carry. Silently keep cells in that case —
             # bridge-level scope filtering at evaluate time will
             # still catch them.
@@ -1356,7 +1356,7 @@ def _volatile_object_repr_columns(df: pl.DataFrame) -> list[str]:
 
     `env` is the historical canonical case (already hardcoded
     in `_PROVENANCE_TAGS`); this dynamic detection generalizes
-    so a future substrate column carrying e.g. `<Claim:…>`
+    so a future implementation column carrying e.g. `<Claim:…>`
     reprs gets caught the same way without a manual hardcode.
     Columns already in `_PROVENANCE_TAGS` are skipped to avoid
     redundant work."""
@@ -1857,7 +1857,7 @@ def _estimate_max_workers(
     CORROBORATE_CACHE_WORKERS to force a specific value.
 
     RAM caveat (forkserver): the parallel path runs workers under
-    `forkserver`, so each re-imports the substrate (incl. JAX)
+    `forkserver`, so each re-imports the implementation (incl. JAX)
     independently rather than sharing the parent's pages via
     fork-COW. K workers therefore hold K JAX runtimes; this budget
     is disk-only, so on a large-disk / small-RAM host the
@@ -1977,7 +1977,7 @@ def _drifted_or_missing_measurables(
     for name in required:
         live = _measurable_signature(name)
         if live is None:
-            # Substrate doesn't define this — it'll null-pad
+            # Implementation doesn't define this — it'll null-pad
             # downstream. Don't request its trace columns.
             continue
         if stored.get(name) != live:
@@ -2026,7 +2026,7 @@ def _measurements_sidecar_current(
             return False
         live = _measurable_signature(name)
         if live is None:
-            # Substrate doesn't define this measurable — it'll be
+            # Implementation doesn't define this measurable — it'll be
             # null-padded at projection. Don't gate restore on it.
             continue
         if stored.get(name) != live:
@@ -2061,7 +2061,7 @@ def _corpus_stamp(sub: Path) -> str:
 def _reestablish_registry(initializer_modules: tuple[str, ...]) -> None:
     """ProcessPoolExecutor `initializer` for the parallel ingest
     path. Runs ONCE per fresh worker (before any `_load_one_corpus`
-    task) and re-imports the substrate modules whose `@measurable`
+    task) and re-imports the implementation modules whose `@measurable`
     decorators populate the registry.
 
     Load-bearing for the `forkserver` / `spawn` start methods: a
@@ -2510,12 +2510,12 @@ def _load_directory(
     disk-budget calculation still uses `root` as the volume
     reference (the named dirs share a filesystem).
 
-    `initializer_modules`: the substrate modules each parallel
+    `initializer_modules`: the implementation modules each parallel
     worker re-imports to re-establish the `@measurable` registry
     (the multi-corpus path runs under `forkserver`, NOT `fork` —
     fork-after-threading deadlocks; see `_reestablish_registry`).
     Defaults to `registry_source_modules()` (every currently-
-    registered measurable's defining module) — substrate-agnostic,
+    registered measurable's defining module) — implementation-agnostic,
     no CLI plumbing. The single-worker sequential path never forks
     and ignores this entirely."""
     # corpus-integrity invariant CI1: refuse nested corpora at ingest
@@ -2618,7 +2618,7 @@ def _load_directory(
         # Parallel path — one ProcessPoolExecutor task per subdir.
         #
         # **Start method: `forkserver`, NOT `fork`.** The measurable
-        # registry is populated by importing substrate modules that
+        # registry is populated by importing implementation modules that
         # transitively import fork-UNSAFE libraries (numpy/OpenBLAS
         # thread pools, JAX's import-time thread pool, boto3/fsspec
         # sessions for cloud restore). The CLI imports the hypothesis
@@ -2636,11 +2636,11 @@ def _load_directory(
         # inherited. The trade-off — a forkserver worker starts with
         # an EMPTY registry (no COW inheritance) — is paid by the
         # `initializer=_reestablish_registry`, which re-imports the
-        # substrate modules in each fresh worker. `spawn` is the
+        # implementation modules in each fresh worker. `spawn` is the
         # fallback where `forkserver` is unavailable (non-POSIX);
         # both are fork-safe.
         #
-        # Because each worker re-imports the substrate, each re-imports
+        # Because each worker re-imports the implementation, each re-imports
         # JAX. The CLI stamps `JAX_PLATFORMS=cpu` before the pool (see
         # `cli/hypothesis.py`) and workers inherit `os.environ`, so they
         # init JAX CPU-only — no GPU probe. A LIBRARY caller of

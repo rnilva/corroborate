@@ -300,7 +300,7 @@ def test_hypothesis_corrupt_remote_json_fails_cleanly(
 
 # ============ corroborate sweep run preflight gating ============
 
-# Substrate dispatch is heavier — `corroborate_rl.dqn.yaml_sweep`
+# Implementation dispatch is heavier — `corroborate_rl.dqn.yaml_sweep`
 # pulls JAX via the eager `from corroborate_rl.dqn import
 # measurables` in `corroborate_rl.dqn.__init__`. Tests here mock
 # the substrate's `load_sweep` / `dispatch_sweep` via the lazy

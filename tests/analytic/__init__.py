@@ -1,4 +1,4 @@
-"""Analytic substrates for testing corroborate's framework primitives
+"""Analytic implementations for testing corroborate's framework primitives
 against closed-form ground truth.
 
 Two siblings (built incrementally; only `lg_scm/` is present at the
@@ -16,7 +16,7 @@ first slice):
   (mech / link / outcome) and `POWER_INSUFFICIENT` discrimination
   behave as the contributors intend.
 
-Pattern: substrate produces `RunRow` instances whose `measurements`
+Pattern: implementation produces `RunRow` instances whose `measurements`
 are closed-form functions of a small set of structural coefficients;
 tests run framework primitives on `[r.as_dict() for r in rows]` and
 assert against the closed form within an analytical SE bound. When a

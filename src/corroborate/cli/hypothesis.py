@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import os as _os
 
-# Force JAX onto CPU before any substrate import. The bridge-eval /
-# ingest paths don't need GPU — they're numpy/polars work. Substrate
+# Force JAX onto CPU before any implementation import. The bridge-eval /
+# ingest paths don't need GPU — they're numpy/polars work. Implementation
 # modules unavoidably `import jax.numpy as jnp` at module-load time
 # (Replay, MLP, train_phase, ...), which probes the GPU and
 # pre-allocates ~80% of VRAM via XLA's default preallocator, starving

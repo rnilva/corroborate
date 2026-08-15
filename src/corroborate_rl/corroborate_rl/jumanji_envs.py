@@ -11,8 +11,8 @@ env construction.
 calls on first instantiation — Sokoban downloads its level
 dataset from HuggingFace Hub via `hf_hub_download`. With the
 factory called at module-import time (the prior shape), every
-substrate import fired the HF Hub download regardless of whether
-any jumanji cell would run. The lazy form keeps substrate import
+implementation import fired the HF Hub download regardless of whether
+any jumanji cell would run. The lazy form keeps implementation import
 free of jumanji's network behaviour; jumanji is only imported
 when `make_env(env_spec)` actually constructs a jumanji-backed
 env.
@@ -316,7 +316,7 @@ def _make_sokoban() -> tuple[JumanjiEnv[object, object], GymnaxEnvParams]:
     **Network call on first construction.** `jumanji.make('Sokoban-v0')`
     downloads its level dataset from HuggingFace Hub. The factory
     is intentionally lazy (called only by `make_env`); registration
-    uses explicit metadata so substrate import doesn't trigger the
+    uses explicit metadata so implementation import doesn't trigger the
     download.
     """
     import jumanji

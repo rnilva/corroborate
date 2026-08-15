@@ -146,7 +146,7 @@ def init_state(
         target = online
     opt_state = optimizer.init(online)
     obs, env_state = env.reset(env_key, env_params)
-    # Substrate stores obs at native shape — q_network handles the
+    # Implementation stores obs at native shape — q_network handles the
     # input shape (MLP flattens trailing dims internally; CNN reads
     # the spatial structure directly). Replay stores at native
     # shape too, so the rank flowing through training is consistent.
@@ -334,7 +334,7 @@ def dqn(
     diagnostic = adding a key in the owning phase's dict
     (rollout / train / eval).
 
-    Each kwarg of `dqn` is a Claim-graph slot the substrate may
+    Each kwarg of `dqn` is a Claim-graph slot the implementation may
     intervene on. `Annotated[..., Exogenous]` markers declare which
     kwargs are NOT intervention surface (env, rng_key, etc.);
     everything else is interventionable.

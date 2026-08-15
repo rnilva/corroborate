@@ -195,7 +195,7 @@ def test_manual_dataclass_satisfies_claim_protocol() -> None:
 
 def test_manual_dataclass_is_frozen() -> None:
     """Frozen-dataclass discipline: post-construction mutation
-    fails. Substrate authors using the escape hatch get the
+    fails. Implementation authors using the escape hatch get the
     same immutability guarantees as `@claim`-wrapped Free
     Claims."""
     @dataclass(frozen=True, slots=True)
@@ -339,7 +339,7 @@ def test_pickle_round_trip_function_claim() -> None:
 def test_pickle_round_trip_partial_over_claim() -> None:
     """`functools.partial` over a claim pickles natively, including
     its baked float kwargs — the shape `partial(claim, kw=0.95)`
-    that substrate sweep authoring uses for topology-leaf
+    that implementation sweep authoring uses for topology-leaf
     binding."""
     import pickle
     from functools import partial

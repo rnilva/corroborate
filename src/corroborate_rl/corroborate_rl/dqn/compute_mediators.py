@@ -55,7 +55,7 @@ from corroborate.corpus.schema import RunRow
 
 # All record-only measurables (not requiring leaf injection).
 # fill_ratio_late requires a `capacity` kwarg → handled by the
-# substrate at construction time if needed.
+# implementation at construction time if needed.
 DEFAULT_PANEL: tuple[Measurable[Mapping[str, object], float], ...] = (
     q_gap_late, q_gap_growth, q_max_growth,
     v_vs_max_delta_late,

@@ -168,7 +168,7 @@ def test_mundlak_recovers_between_slope_and_zero_within() -> None:
     Hausman test rejects beta_b == beta_w (the two channels are
     structurally distinct).
 
-    The substrate sets up:
+    The implementation sets up:
     - target g varies BETWEEN env (with mu_x), constant within env
     - predictor x varies BETWEEN env (with mu_x) AND within env
       (with burst index)

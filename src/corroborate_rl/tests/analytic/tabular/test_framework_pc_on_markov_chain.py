@@ -1,5 +1,5 @@
 """Framework-as-instrument: `discover_adjacency` (PC) recovers
-the Markov-chain CI structure — the canonical RL substrate
+the Markov-chain CI structure — the canonical RL implementation
 property `s_{t+1} ⫫ s_{t-1} | s_t`.
 
 The Markov property is the SUBSTRATE-DEEPEST closed-form

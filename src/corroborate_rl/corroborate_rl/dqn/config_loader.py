@@ -1,7 +1,7 @@
 """YAML → InterventionConfig builder, registry-resolved.
 
 Substrate-coupled: the YAML schema (`name`, `base`, `arms`) is a
-substrate-authoring convention, not a framework typed contract.
+implementation-author convention, not a framework typed contract.
 The framework's hypothesis surface is the `Hypothesis` Protocol
 (`INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`);
 `InterventionConfig` is the intermediate the substrate's

@@ -59,7 +59,7 @@ def test_underpowered_real_cells_resolve_to_power_insufficient_not_no_effect() -
     the test lacked resolution), and NOT HELD (g << MDE).
 
     Why a substrate-grounded test instead of feeding (g=0.025,
-    se=large, n=5) directly: the substrate verifies the upstream
+    se=large, n=5) directly: the implementation verifies the upstream
     Hedges' g computation actually returns ~0.025 from real
     cells. A regression in Bessel correction or c_4 could shift
     the empirical g across the MDE boundary, which the

@@ -1,5 +1,5 @@
 """`stratum_effect_panel` — per-stratum treatment-effect Δs on
-N measurables, as a shared substrate for downstream stratum-
+N measurables, as a shared implementation for downstream stratum-
 level analyses (regression, partial correlation, mediation,
 DoWhy backdoor, DerSimonian-Laird pool).
 
@@ -37,11 +37,11 @@ trajectories. Downstream consumers operate on the panel of
 stratum-level effect estimates — the inferentially-honest
 form for cross-stratum claims about treatment effects.
 
-The framework stays substrate-neutral here: this primitive
-knows nothing about RL, envs, or any substrate-specific
+The framework stays implementation-neutral here: this primitive
+knows nothing about RL, envs, or any implementation-specific
 measurable. The substrate's bridge declares which measurables
 to populate and what stratify_by to use. Same primitive
-serves any substrate whose cells admit (treatment, baseline,
+serves any implementation whose cells admit (treatment, baseline,
 strata) decomposition.
 """
 from __future__ import annotations

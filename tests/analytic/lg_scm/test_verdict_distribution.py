@@ -9,7 +9,7 @@ held/violation fractions. Those are I/O — the test would just
 read back what the test stamped, exercising no framework logic.
 The audit pass dropped them.
 
-The substrate produces real LG-SCM cells; only the categorical
+The implementation produces real LG-SCM cells; only the categorical
 verdict column is synthetic (the analysis takes verdict strings
 as opaque categories — the LG-SCM doesn't structurally produce
 verdict mixes, so synthetic stamping IS the test setup, not a

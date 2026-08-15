@@ -78,7 +78,7 @@ API: matches `gymnax.environments.environment.Environment`'s
 runtime contract structurally — `reset(rng, params) → (obs,
 state)` and `step(rng, state, action, params) → (obs, state,
 reward, done, info)`. The `EnvParams` carries
-`max_steps_in_episode` (substrate convention).
+`max_steps_in_episode` (implementation convention).
 """
 from __future__ import annotations
 

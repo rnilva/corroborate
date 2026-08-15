@@ -38,7 +38,7 @@ truncated-Q neighbourhood — so the test pins the BEHAVIOURAL
 distinction the Pardo fix introduces, not just the per-step mask.
 
 **Why this lives in `analytic/truncation/` rather than `lg_scm/`
-or `deadly_triad/`.** Both existing analytic substrates skip actual
+or `deadly_triad/`.** Both existing analytic implementations skip actual
 RL training: lg_scm runs a Linear-Gaussian SCM with no MDP layer,
 deadly_triad constructs synthetic cells from the FQI envelope
 formula without running rollout/train. The truncation fix is in the

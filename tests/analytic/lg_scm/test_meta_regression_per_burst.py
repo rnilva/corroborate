@@ -141,7 +141,7 @@ def test_per_burst_meta_regression_resolves_covariates_from_cells() -> None:
     `covariates_per_env`) tells the analysis to pull covariate
     values from the cells themselves (env-mean of the named columns).
 
-    Each cell carries `mu_x` in its measurements (the substrate
+    Each cell carries `mu_x` in its measurements (the implementation
     stamps it). The analysis should resolve the env-level covariate
     by averaging mu_x across each env's cells — yielding the same
     panel as supplying `covariates_per_env={mu_x: ...}` explicitly.

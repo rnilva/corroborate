@@ -21,8 +21,8 @@ the self-contained-contrast discipline (see
 `project_multi_arm_intervention_primitive` memory).
 
 The framework knows nothing about RL concepts (`env`, `seed`,
-`total_steps`). Those are exogenous *names the substrate chose*.
-A non-RL substrate sweeping over (`patient_id`, `dose`,
+`total_steps`). Those are exogenous *names the implementation chose*.
+A non-RL implementation sweeping over (`patient_id`, `dose`,
 `measurement_day`) uses the same primitive — different
 `exogenous_grid` and `Runner`.
 
@@ -77,7 +77,7 @@ class SweepCellResult:
     """One runner-call's output: per-seed records + the
     arm-level computation graph captured during the call.
 
-    Substrates that don't capture a graph (non-RL, or substrates
+    implementations that don't capture a graph (non-RL, or implementations
     without `@claim` records) emit an empty `Graph()`; the
     optionality is 'graph has nodes', not 'graph is None'."""
     runs: tuple[RunRow, ...]
@@ -108,14 +108,14 @@ class Runner[R: Mapping[str, object]](Protocol):
     pre-register + one exogenous-grid point; returns a
     `SweepCellResult` with per-cell records + captured graph.
 
-    Protocol (not a bare Callable alias) so substrates can hold
+    Protocol (not a bare Callable alias) so implementations can hold
     init state — e.g. the RL runner caches the env catalogue and
     JIT-compiles once per arm, not once per grid point.
 
-    `measurables` is OPTIONAL: substrates that want certain
+    `measurables` is OPTIONAL: implementations that want certain
     scalars baked into RunRow.measurements at sweep time pass them
     here (the runner computes each per-record and persists them
-    under the measurable's `.name`). Substrates that compute
+    under the measurable's `.name`). implementations that compute
     mediators post-sweep from raw traces leave it empty.
 
     The cell runner's contract:
@@ -136,7 +136,7 @@ class Runner[R: Mapping[str, object]](Protocol):
 
 
 def empty_graph() -> ComputationGraph:
-    """Convenience for substrates that don't capture a graph.
+    """Convenience for implementations that don't capture a graph.
     Returns a fresh empty `Graph[str, ComputationEdge]`."""
     return Graph()
 
@@ -259,14 +259,14 @@ def run_intervention[R: Mapping[str, object]](
     the substrate's runner persists per cell at sweep time
     (typically used to bake outcome reductions or cheap-to-compute
     scalars into RunRow.measurements alongside the leaf
-    fingerprint). Substrates that compute mediators post-sweep
-    from raw traces leave this empty; substrates that want
+    fingerprint). implementations that compute mediators post-sweep
+    from raw traces leave this empty; implementations that want
     eagerly-computed scalars baked into the corpus pass them.
 
     `grid_points` is a discrete sequence of grid_point dicts —
-    NOT a Cartesian-product mapping. Substrates that want
+    NOT a Cartesian-product mapping. implementations that want
     Cartesian product compose `itertools.product` themselves;
-    substrates with heterogeneous-shape grids (e.g. different
+    implementations with heterogeneous-shape grids (e.g. different
     chunk_sizes per env) emit the flat list directly. Empty
     sequence runs zero cells; `[{}]` runs one cell per arm with
     an empty grid_point.
@@ -280,7 +280,7 @@ def run_intervention[R: Mapping[str, object]](
     per the leaves-as-covariates discipline. When `base` is itself a
     *distinct program* (a different root claim, e.g. `paired_dqn` vs
     `dqn`), that program identity is NOT part of the arm_key — the
-    substrate records it on the typed `RunRow.program` column (see
+    implementation records it on the typed `RunRow.program` column (see
     `signature.root_claim_name`), keeping arm identity and program
     identity on separate, independently-queryable axes.
 
@@ -413,15 +413,15 @@ def run_intervention[R: Mapping[str, object]](
                 flush=True,
             )
             try:
-                # Inject the framework's cell_idx so the substrate can
+                # Inject the framework's cell_idx so the implementation can
                 # name per-cell sidecars consistently across runs that
                 # include skips (resume after a partial sweep). Without
-                # this, substrates that maintain their own call counter
+                # this, implementations that maintain their own call counter
                 # diverge from `cell_idx` here because skipped iterations
                 # don't bump their counter, leading to sidecar filename
                 # collisions on subsequent cells. The sentinel key
                 # `__framework_cell_idx__` is stripped from `unexpected`
-                # checks by the substrate runner; old substrates that
+                # checks by the implementation runner; old implementations that
                 # ignore it keep their pre-fix behavior unchanged.
                 grid_point_with_cell_idx: dict[str, object] = {
                     **grid_point,

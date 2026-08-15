@@ -2,7 +2,7 @@
 
 `runner._load_directory` parallelises multi-corpus ingest across a
 `ProcessPoolExecutor`. The measurable registry is populated by
-importing substrate modules that transitively import fork-UNSAFE
+importing implementation modules that transitively import fork-UNSAFE
 libraries (numpy/OpenBLAS thread pools, JAX's import-time thread
 pool, boto3/fsspec sessions). The CLI imports the hypothesis
 module — and thus those libraries — in the PARENT. Forking workers
@@ -13,7 +13,7 @@ in `futex_wait`.
 
 The fix switches the parallel path to `forkserver` (workers forked
 from a clean server process that never imported the heavy libs)
-with an `initializer` that re-imports the substrate module(s) so a
+with an `initializer` that re-imports the implementation module(s) so a
 fresh worker's registry matches the parent's.
 
 Three guards here:
@@ -34,7 +34,7 @@ Three guards here:
    The parallel path must produce the SAME cells + measurable
    values as the sequential path; this catches the registry NOT
    being re-established in workers (which would silently null-out
-   the substrate measurable).
+   the implementation measurable).
 """
 from __future__ import annotations
 
@@ -371,7 +371,7 @@ def _registry_probe_child(
     cache the spawn-reimport populated), we evict the fixture from
     `sys.modules` first. This reproduces a genuine `forkserver`
     worker, whose clean server-process parent never imported the
-    substrate, so the worker's first import runs the module body
+    implementation, so the worker's first import runs the module body
     and re-fires the `@measurable` decorators."""
     import sys
     from corroborate.measurables import registered_names
@@ -381,7 +381,7 @@ def _registry_probe_child(
     from corroborate.runner.runner import (
         _reestablish_registry,
     )
-    # Simulate a never-imported substrate: drop the cached module +
+    # Simulate a never-imported implementation: drop the cached module +
     # wipe the registry this process inherited via spawn-reimport,
     # so the only path back to the measurable is the initializer's
     # fresh import.
@@ -397,11 +397,11 @@ def _registry_probe_child(
 def test_worker_initializer_reestablishes_registry(tmp_path: Path) -> None:
     """Directly verify the worker-side contract: after the
     `_reestablish_registry` initializer runs in a fresh
-    interpreter, the substrate measurable is back in the registry
+    interpreter, the implementation measurable is back in the registry
     (the `forkserver`/`spawn` worker would otherwise start empty).
 
     Uses the registry's own `registry_source_modules()` as the
-    default re-import set — the substrate-agnostic recovery surface
+    default re-import set — the implementation-agnostic recovery surface
     the parallel path defaults to — to prove that default actually
     re-registers the fixture measurable in a clean process."""
     from corroborate.measurables import (
@@ -451,7 +451,7 @@ def test_worker_initializer_reestablishes_registry(tmp_path: Path) -> None:
 def test_register_as_only_module_in_source_modules() -> None:
     """A module registering measurables ONLY via `register_as` (no
     plain `@measurable`) must appear in `registry_source_modules()` —
-    the substrate-agnostic re-import set a `forkserver` / `spawn`
+    the implementation-agnostic re-import set a `forkserver` / `spawn`
     worker runs to rebuild its (initially empty) registry.
 
     A `register_as` alias carries the *factory's* `fn.__module__`

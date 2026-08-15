@@ -2,7 +2,7 @@
 
 Jumanji uses a dm_env-style API (`env.reset(key) → (state, timestep)`,
 `env.step(state, action) → (state, timestep)` with no key on step
-because state carries the RNG); the corroborate_rl substrate calls
+because state carries the RNG); the corroborate_rl implementation calls
 the gymnax-style API
 (`env.reset(rng, params) → (obs, state)`,
 `env.step(rng, state, action, params) → (obs, state, reward, done, info)`).

@@ -13,11 +13,11 @@ idioms over invented framework primitives.
 
 `Claim[**P, T]` is the structural Protocol — anything with a
 `name: str` property and a `__call__` matches. `FnClaim` is the
-sole built-in shape; substrate authors who need a class-based
+sole built-in shape; implementation author who need a class-based
 Claim with stateful `__call__` write a frozen dataclass exposing
 `name` and call `record_call(self, args, kwargs, result)` inside
 `__call__` (escape hatch — see `tests/test_claim.py` for the
-canonical example). Most substrate authoring goes through
+canonical example). Most implementation authoring goes through
 `@claim` on free functions plus frozen-dataclass config bundles
 that delegate to Free Claims; the escape hatch is genuinely
 rare.
@@ -193,7 +193,7 @@ def claim(target: object) -> object:
     `claim(f) is claim(f)`.
 
     `@claim` decorates free functions only — there is no class-
-    decorator path. Substrate authors who need a class-based
+    decorator path. Implementation authors who need a class-based
     Claim (rare) write a frozen dataclass exposing `name: str`
     and call `record_call(self, args, kwargs, result)` inside
     `__call__`. Bake-in via `functools.partial`.

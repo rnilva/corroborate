@@ -1,4 +1,4 @@
-"""Per-cell solve-status classification — substrate utility for
+"""Per-cell solve-status classification — implementation utility for
 post-sweep stratified analysis.
 
 Lifted from the deprecated `experiments/analyze_link_by_solved.py`

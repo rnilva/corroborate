@@ -2,7 +2,7 @@
 
 The happy-path coverage of `paired_g.fn` and
 `per_env_paired_g_panel` is now centralized at the closed-form
-analytic substrate:
+analytic implementation:
 
 - `tests/analytic/lg_scm/test_paired_g.py` — closed-form
   `mean_diff` and Hedges' `g` recovery on real LG-SCM cells.
@@ -10,7 +10,7 @@ analytic substrate:
   `per_env_paired_g_panel` driven through the corroboration
   pipeline with closed-form pooled g check.
 
-What stays here: edge cases the analytic substrate can't
+What stays here: edge cases the analytic implementation can't
 naturally reach — empty cell-sets (NaN g/se contract) and
 `meta_regress_panel`'s underpowered/missing-covariate dropping
 policy on hand-built panels."""

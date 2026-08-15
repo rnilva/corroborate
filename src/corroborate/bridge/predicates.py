@@ -17,8 +17,8 @@ trip on when authoring `Bridge.scope=` predicates:
 
 These helpers wrap both pitfalls so bridge authors compose
 predicates without remembering the guards. Substrate-neutral:
-callers pick partition keys appropriate to their substrate (RL
-uses `'env_name'`; other substrates use their own).
+callers pick partition keys appropriate to their implementation (RL
+uses `'env_name'`; other implementations use their own).
 
 Mirrors the framework's typed-discipline: every helper returns a
 `pl.Expr` that composes via `&` / `|` with other scope predicates.
@@ -101,9 +101,9 @@ def partition_aggregate(
     aggregate as `pl.col(x).mean()` would.
 
     `by` is a single column name or a sequence of names for
-    multi-key partitioning. The framework stays substrate-neutral
-    — callers pick partition keys appropriate to their substrate
-    (RL substrate uses `'env_name'`; other substrates use their
+    multi-key partitioning. The framework stays implementation-neutral
+    — callers pick partition keys appropriate to their implementation
+    (RL implementation uses `'env_name'`; other implementations use their
     own).
 
     Example:

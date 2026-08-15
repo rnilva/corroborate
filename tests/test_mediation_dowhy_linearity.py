@@ -169,7 +169,7 @@ def _build_linear_mediation_cells(
     treatment → outcome path. With same-signed coefficients +
     moderate noise + n=200 + a clean DAG, the OLS decomposition
     recovers RELIABLE status without multicollinearity-induced
-    sign flips. This is the substrate condition CLAUDE.md says
+    sign flips. This is the implementation condition CLAUDE.md says
     `mediation_dowhy` can be trusted at."""
     rng = np.random.default_rng(seed)
     cells: list[Mapping[str, object]] = []

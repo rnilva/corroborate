@@ -1,5 +1,5 @@
 """Closed-form assertions on `cross_env_probability_of_improvement`
-over the LG-SCM substrate + a hand-built saturation case.
+over the LG-SCM implementation + a hand-built saturation case.
 
 Aggregates per-stratum Mann-Whitney `P(X > Y)` via two
 complementary inference modes (exact sign-permutation + stratified

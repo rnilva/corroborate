@@ -11,7 +11,7 @@ Re-registering the same `(name, value)` pair is idempotent (the
 `@analysis` / `@measurable` decorators end up running once at
 import + once if a module is reloaded); re-registering a
 *different* value at an already-present name raises `ValueError`
-with the existing-vs-new mismatch surfaced — substrate authors
+with the existing-vs-new mismatch surfaced — implementation author
 fix the ambiguity by renaming.
 """
 from __future__ import annotations

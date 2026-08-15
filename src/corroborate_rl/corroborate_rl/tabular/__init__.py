@@ -1,4 +1,4 @@
-"""Tabular MDP substrate — finite states + actions, exact Bellman
+"""Tabular MDP implementation — finite states + actions, exact Bellman
 primitives, closed-form theorems testable to numerical precision.
 
 Sibling to `corroborate_rl.dqn` (function-approximation regime,

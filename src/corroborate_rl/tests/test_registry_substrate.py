@@ -40,7 +40,7 @@ def dqn_registry() -> Registry:
 def test_fn_discovery_covers_every_authored_claim(
     dqn_registry: Registry,
 ) -> None:
-    """Every `@claim`-decorated free function in the DQN substrate
+    """Every `@claim`-decorated free function in the DQN implementation
     is reachable by name."""
     expected_fns = {
         'max_greedify', 'double_greedify', 'expectile_greedify',
@@ -160,7 +160,7 @@ def test_unknown_name_raises_with_known_set(
 
 def test_collision_on_different_handle_raises() -> None:
     """Re-registering the *same* name with a *different* class
-    is a substrate-author error; the registry refuses."""
+    is a implementation-author error; the registry refuses."""
     reg = Registry()
 
     @dataclass(frozen=True)

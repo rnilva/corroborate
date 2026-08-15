@@ -174,7 +174,7 @@ type StepRecord = dict[str, jax.Array]
 
 
 # `EnvState` is re-exported from `gymnax` (the typed opaque base).
-# Substrate threads it through `DQNState.env_state` without
+# Implementation threads it through `DQNState.env_state` without
 # inspecting; the framework cannot constrain a third-party env's
 # pytree shape further than "opaque base class typed by gymnax".
 

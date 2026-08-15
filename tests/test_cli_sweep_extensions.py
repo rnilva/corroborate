@@ -2,7 +2,7 @@
 
 Exercises `corroborate.cli.sweep`'s two-phase argparse flow:
 `peek_substrate` parses `--substrate <name>` out of argv,
-`load_substrate` imports the substrate module and reads both
+`load_substrate` imports the implementation module and reads both
 `SWEEP_ENTRY_POINTS` (required) and `SWEEP_CLI_EXTENSIONS`
 (optional) from a single import, and the extensions'
 `add_args` / `pre_import_setup` callbacks are wired into the
@@ -153,7 +153,7 @@ def test_peek_substrate_last_wins_on_duplicate() -> None:
 
 
 def testload_substrate_in_tree_returns_both_attrs() -> None:
-    """The in-tree RL substrate `corroborate_rl.dqn_sweep` exports
+    """The in-tree RL implementation `corroborate_rl.dqn_sweep` exports
     BOTH `SWEEP_ENTRY_POINTS` and `SWEEP_CLI_EXTENSIONS` —
     `load_substrate` returns both from a single import."""
     ep, ext = load_substrate('corroborate_rl.dqn_sweep')
@@ -170,8 +170,8 @@ def testload_substrate_missing_module_raises_with_hint() -> None:
 
 
 def testload_substrate_missing_parent_raises_with_different_hint() -> None:
-    """A substrate with a missing parent package gets a distinct
-    hint ('also missing — check that the substrate package is
+    """A implementation with a missing parent package gets a distinct
+    hint ('also missing — check that the implementation package is
     installed') — different failure mode from a typo."""
     with pytest.raises(SystemExit, match='package is\\s+installed'):
         _ = load_substrate('definitely_not_a_real.substrate.module')
@@ -181,7 +181,7 @@ def testload_substrate_without_entry_points_raises(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A substrate module that imports cleanly but doesn't
+    """A implementation module that imports cleanly but doesn't
     export `SWEEP_ENTRY_POINTS` fails loud."""
     _ = (tmp_path / 'missing_ep_substrate.py').write_text(
         '# Substrate stub without SWEEP_ENTRY_POINTS\n',
@@ -238,9 +238,9 @@ def testload_substrate_without_cli_extensions_returns_none(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A substrate that exports `SWEEP_ENTRY_POINTS` but NOT
+    """A implementation that exports `SWEEP_ENTRY_POINTS` but NOT
     `SWEEP_CLI_EXTENSIONS` is valid — the framework just doesn't
-    register substrate-specific args. Closes review #10's
+    register implementation-specific args. Closes review #10's
     'no-cli-module' gap."""
     _write_minimal_substrate(tmp_path, 'no_cli_substrate')
     monkeypatch.syspath_prepend(str(tmp_path))
@@ -253,7 +253,7 @@ def testload_substrate_with_none_cli_extensions_returns_none(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A substrate that intentionally sets `SWEEP_CLI_EXTENSIONS =
+    """A implementation that intentionally sets `SWEEP_CLI_EXTENSIONS =
     None` (rather than omitting) is also accepted; treated the
     same as missing. Distinguishes the `_MISSING` sentinel's role
     (separates missing-from-None only in the wrong-type error
@@ -313,7 +313,7 @@ def test_sweep_cli_extensions_post_init_rejects_non_callable_setup() -> None:
         )
 
 
-# ============ End-to-end: substrate args appear in --help ============
+# ============ End-to-end: implementation args appear in --help ============
 
 
 def test_substrate_args_appear_in_help(
@@ -342,10 +342,10 @@ def test_pre_import_setup_runs_before_entry_point_callable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A substrate exposes lazy `SWEEP_ENTRY_POINTS` Callables;
+    """A implementation exposes lazy `SWEEP_ENTRY_POINTS` Callables;
     the framework's `dispatch` must call `pre_import_setup`
     BEFORE any of them fires. Verified by routing through
-    `corroborate.cli.sweep.dispatch` against a fake substrate
+    `corroborate.cli.sweep.dispatch` against a fake implementation
     whose `default_registry()` lazy proxy asserts a sentinel
     env var (set in `pre_import_setup`) is present. If a future
     refactor reordered the calls in `dispatch`, the assert
@@ -410,7 +410,7 @@ def test_pre_import_setup_runs_before_entry_point_callable(
     # No --dry-run: the dispatch path goes default_registry()
     # (substrate's assert) → load_sweep() (NotImplementedError).
     # --dry-run would short-circuit at the "expand_sweep is None"
-    # check since this fake substrate doesn't provide one.
+    # check since this fake implementation doesn't provide one.
     argv = [
         'run', str(cfg_file),
         '--substrate', 'ordering_test_substrate',

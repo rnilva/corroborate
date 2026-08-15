@@ -65,7 +65,7 @@ _N_BURSTS = 12
 
 _PER_BURST_KEY = 'contraction_err'
 
-# Substrate composes a per-burst measurable: contraction error
+# Implementation composes a per-burst measurable: contraction error
 # is stored as a per-burst array of shape (n_bursts, 1). Reduce
 # the trailing axis (mean over single-element) to recover the
 # per-burst scalar.
@@ -150,7 +150,7 @@ def test_per_burst_panel_build_and_shape_invariants() -> None:
 
     What this does NOT catch (deliberately): the exact magnitude
     of g_t. That's substrate-tautology — the framework computes
-    Hedges' g via the textbook formula on data the substrate
+    Hedges' g via the textbook formula on data the implementation
     constructed via the same formula. Curve-recovery testing was
     necessary plumbing verification but not a framework probe.
     """

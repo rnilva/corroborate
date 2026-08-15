@@ -3,7 +3,7 @@
 Each cell carries:
 - `env_name` — picks `r_max` per env_catalogue (CartPole-v1 → 1.0).
 - `gamma` — discount factor (γ=0.99 the canonical default).
-- `jensen_gap` — per-cell overestimation gap. The substrate
+- `jensen_gap` — per-cell overestimation gap. The implementation
   *normally* derives this from a `(predicted_q_at_start, mc_return)`
   array reduction; here we plant scalar values directly so the
   closed-form (sync_period, jensen_gap) relationship is the test's

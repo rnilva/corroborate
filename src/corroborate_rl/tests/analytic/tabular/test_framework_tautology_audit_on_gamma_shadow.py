@@ -1,6 +1,6 @@
 """Framework-as-instrument: `tautology_audit` flags
 HP-shadow / outcome-jaccard / clean mediators correctly on a
-substrate where the structural answer is known by construction.
+implementation where the structural answer is known by construction.
 
 Three mediator candidates are synthesized over a γ-grid corpus
 (γ acts as the HP axis); each is engineered to fail (or pass)

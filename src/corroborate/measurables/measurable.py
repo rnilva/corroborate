@@ -282,7 +282,7 @@ _REGISTRY: Registry[Measurable[Mapping[str, object], object]] = Registry()
 
 # Modules that registered a measurable whose `fn.__module__` does NOT
 # name the registering site. `register_as` aliases carry the factory's
-# module (`reductions`), not the substrate that aliased them — recorded
+# module (`reductions`), not the implementation that aliased them — recorded
 # here at alias time so `registry_source_modules()` (the forkserver /
 # spawn worker re-import set) re-runs the aliasing module. Without it a
 # `register_as`-only module is silently absent from a fresh worker's
@@ -367,7 +367,7 @@ def register_as[R: Mapping[str, object], T](
     Threads `compose_of=m.compose_of` so `signature()` recursion at
     `measurable.py:240-246` reaches the source lineage through the
     rename, preserving structural cache invalidation. The earlier
-    substrate idiom `Measurable(fn=composition.fn, name='alias',
+    implementation idiom `Measurable(fn=composition.fn, name='alias',
     reads=(...))` silently dropped `compose_of`; `register_as` is
     the discipline that keeps the lineage honest.
 
@@ -382,7 +382,7 @@ def register_as[R: Mapping[str, object], T](
         compose_of=m.compose_of,
     )
     # `aliased.fn.__module__` points at the factory that minted `m`
-    # (e.g. `corroborate.measurables.reductions`), NOT the substrate
+    # (e.g. `corroborate.measurables.reductions`), NOT the implementation
     # module calling `register_as` here. Record the caller's module so
     # the forkserver / spawn re-import set (`registry_source_modules`)
     # re-runs it — a `register_as`-only module (no plain `@measurable`)
@@ -411,7 +411,7 @@ def registry_source_modules() -> tuple[str, ...]:
     interpreter, re-runs the `@measurable` decorators that
     populated the registry.
 
-    The substrate-agnostic recovery surface for fork-unsafe
+    The implementation-agnostic recovery surface for fork-unsafe
     parallel workers (`runner._load_directory`). A worker spawned
     under `forkserver` / `spawn` starts with an EMPTY registry;
     re-importing exactly these modules re-establishes it without
@@ -426,7 +426,7 @@ def registry_source_modules() -> tuple[str, ...]:
 
     Factory-composed measurables (`from_key`, `reduce_axis`, …)
     carry `fn.__module__ == 'corroborate.measurables.reductions'`
-    rather than the substrate module that composed them. When such a
+    rather than the implementation module that composed them. When such a
     composition is bound to a stable name via `register_as`, that call
     records its *caller's* module in `_EXTRA_SOURCE_MODULES` (unioned
     in below) — so a `register_as`-only module (one with no plain
@@ -573,14 +573,14 @@ def audit_measurable_registry(
     1. **Empty `reads=()` with no parameter-injected deps**: the
        measurable reads NOTHING transitively. Usually means it's a
        constant or has hard-coded values — almost certainly a
-       substrate author bug (the measurable will only ever return
+       implementation author bug (the measurable will only ever return
        the same value regardless of input).
 
     2. **Parameter-injected name not in registry**: a measurable
        declares `def fn(record, mc_return_raw_episodes)` but
        `mc_return_raw_episodes` isn't registered. The framework
        can't inject; the call will TypeError at runtime. Author
-       likely forgot to import the substrate module that
+       likely forgot to import the implementation module that
        registers the dep, or typo'd the name.
 
     3. **`reads` declares cols that aren't on any actual record
@@ -902,7 +902,7 @@ def compute_missing_columns(
     new_cols: dict[str, list[object]] = {n: [] for n, _, _ in pending}
     # Track measurables that ALWAYS failed across all cells — those
     # are authoring bugs, not "missing inputs," and should surface
-    # as a stderr warning so the substrate author sees them. Per-cell
+    # as a stderr warning so the implementation author sees them. Per-cell
     # failures (legitimately missing inputs on subset of cells)
     # remain silent NaN-mapped via the existing path.
     # Counts denominator is per-measurable (full set for added cols,

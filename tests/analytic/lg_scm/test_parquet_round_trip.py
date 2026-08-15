@@ -7,7 +7,7 @@ hand-built RunRows. Those are proper unit tests, but they don't
 prove that the FRAMEWORK PRIMITIVES correctly handle cells that
 have round-tripped through parquet.
 
-This file does. The substrate produces LG-SCM cells, writes them
+This file does. The implementation produces LG-SCM cells, writes them
 to a tmp parquet via `write_runrows` / `write_tracerows`, reads
 them back via `read_runrows` / `read_tracerows`, then runs
 `paired_g.fn` and `paired_g_per_burst.fn`. The closed-form

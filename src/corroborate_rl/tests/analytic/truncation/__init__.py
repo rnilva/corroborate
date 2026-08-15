@@ -4,8 +4,8 @@ target (Pardo 2018 / Sutton-Barto §6.6 / Gymnasium-API).
 Closed-form convergence assertions on a synthetic 1-state cycle env
 that flows through the production `dqn_step` JAX training path.
 Sibling motivation to `tabular/` (closed-form on the numpy
-substrate) and `deadly_triad/` (closed-form on FQI cell panels):
-each subpackage carries the analytic shape its substrate exposes.
+implementation) and `deadly_triad/` (closed-form on FQI cell panels):
+each subpackage carries the analytic shape its implementation exposes.
 
 The cycle env is structurally tabular (single observed state, cycle
 back to self every step, +1 reward) so the optimal Q*(s) has a

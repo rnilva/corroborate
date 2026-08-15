@@ -1,12 +1,12 @@
 """Substrate test bootstrap.
 
-Adds the workspace root to `sys.path` so substrate tests can
+Adds the workspace root to `sys.path` so implementation tests can
 import `experiments.*` modules. The `experiments/` directory is
 shared infrastructure for ad-hoc analysis scripts and bridge
 authoring; it lives at the repo root, not inside either package.
 The framework tests get this for free because pytest's rootdir
-is the repo root when running from there; the substrate tests'
-rootdir is the substrate package, so the workspace root has to
+is the repo root when running from there; the implementation tests'
+rootdir is the implementation package, so the workspace root has to
 be added explicitly."""
 from __future__ import annotations
 

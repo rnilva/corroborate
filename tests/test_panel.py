@@ -232,7 +232,7 @@ def test_diagnostics_finite_fraction_exploration_mode() -> None:
     NaN of 3 cells per stratum → 2/3 ≈ 0.667.
     `_panel_test_outcome` is fully finite → 1.0."""
     # Both measurable names ARE registered in the framework's
-    # @measurable registry (used by other tests / substrate).
+    # @measurable registry (used by other tests / implementation).
     # This test confirms the auto-detection picks them up.
     panel = Panel.from_dataframe(_make_cells_dataframe())
     diag = panel.diagnostics
@@ -651,7 +651,7 @@ def test_from_corpus_collision_when_meas_registered_but_no_substrate(
 ) -> None:
     """When a measurements.parquet column collides with a
     runs.parquet column AND the measurable isn't in the
-    process's registry (no substrate import), measurements
+    process's registry (no implementation import), measurements
     must win — it was stamped by a runner that DID have the
     registry. Runs-side NaN never beats a stamped value."""
     corpus = tmp_path / 'corp_unregistered'
@@ -853,7 +853,7 @@ def test_to_cache_write_sidecar_false_skips_sidecar(
     tmp_path: Path,
 ) -> None:
     """`write_sidecar=False` writes the parquet only; sidecar
-    file stays absent. Use case: substrate author wants the
+    file stays absent. Use case: implementation author wants the
     parquet for their own analysis but doesn't want to mutate
     the canonical `<cache>.sources.json` audit trail."""
     from corroborate.data.panel import CorpusSource
@@ -989,7 +989,7 @@ def test_measurable_availability_matrix_empty_panel() -> None:
 
 def test_measurable_availability_matrix_missing_env_column_falls_back() -> None:
     """When the env_column doesn't exist on the panel, the whole
-    panel is treated as one env (substrate convenience — panels
+    panel is treated as one env (implementation convenience — panels
     that haven't been env-stamped still get availability info)."""
     import polars as pl
 

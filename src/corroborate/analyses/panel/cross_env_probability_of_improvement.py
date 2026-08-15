@@ -172,7 +172,7 @@ def cross_env_probability_of_improvement(
     Mann-Whitney, then aggregate.
 
     `stratify_by`: tuple of cell-record keys defining strata.
-    Default `('env_name',)`; common substrate choice is
+    Default `('env_name',)`; common implementation choice is
     `('env_name', 'gamma')` for γ-conditional panels.
 
     `min_seeds_per_arm`: strata with fewer than this many cells

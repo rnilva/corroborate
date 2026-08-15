@@ -2,7 +2,7 @@
 `register_as` (no plain `@measurable`).
 
 Mirrors `corroborate_rl/dqn/trace_reductions.py` — the lone
-substrate module with this shape — to exercise the
+implementation module with this shape — to exercise the
 `registry_source_modules()` completeness gap found reviewing
 `fix/ingest-fork-deadlock`: a `register_as` alias carries the
 factory's `fn.__module__` (`corroborate.measurables.reductions`),

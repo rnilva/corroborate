@@ -144,7 +144,7 @@ def test_natural_termination_emits_truncated_zero() -> None:
 def test_no_truncated_flag_on_unwrapped_env() -> None:
     """Sanity: vanilla (un-capped) env emits no `truncated` key.
     The rollout-phase default path then synthesizes `truncated=0`,
-    so the substrate behaves identically to its pre-refactor
+    so the implementation behaves identically to its pre-refactor
     semantics."""
     inner, params = gymnax.make('CartPole-v1')
     rng = jax.random.PRNGKey(0)

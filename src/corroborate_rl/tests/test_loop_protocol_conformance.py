@@ -1,7 +1,7 @@
 """Substrate-side `Loop` Protocol conformance + cell-runner graph
 capture.
 
-The substrate-agnostic `Loop` Protocol and the `python_loop`
+The implementation-agnostic `Loop` Protocol and the `python_loop`
 behavior are tested in the framework `tests/test_loop.py`; the
 cases here verify the JAX-backed implementations
 (`corroborate_rl.loop.scan_loop` / `python_loop`) and the

@@ -23,7 +23,7 @@ Known limitations from the meta-analysis literature
     SCOPE_FLAG threshold.
 
 This probe quantifies these effects via Monte Carlo across
-G ∈ {3, 5, 10, 20, 50}. Findings inform substrate-author
+G ∈ {3, 5, 10, 20, 50}. Findings inform implementation-author
 guidance:
 
   - DL τ² POINT ESTIMATE is approximately unbiased at any G ≥ 3.

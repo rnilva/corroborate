@@ -11,14 +11,14 @@ not in the dataclass type.
   envs at dispatch time.
 - `env_binding: 'per_env'` — each (template × env) builds one
   concrete InterventionConfig after `{from_env: <attr>}`
-  substitution against `EnvSpec.public_attrs()`. The substrate
+  substitution against `EnvSpec.public_attrs()`. The implementation
   zips them with one env_config per arm.
 
 The split between *shape* (the dataclass) and *dispatch* (the
 function) keeps tests cheap: they load a `DQNSweep` and inspect
 without spinning up the runner.
 
-The substrate-agnostic YAML primitives (`Sweep` Protocol, scalar
+The implementation-agnostic YAML primitives (`Sweep` Protocol, scalar
 parsers, manifest writer) live in `corroborate.runner.yaml_sweep`;
 this module composes them with DQN-specific env / intervention
 parsing + dispatch."""
@@ -98,7 +98,7 @@ class DQNSweep:
     # Persist the final online + target Q-network params per cell
     # as a msgpack sidecar under
     # `<out_dir>/<cfg.name>/q_checkpoints/cell<NNN>_<seed>_final.msgpack`.
-    # Default False — substrate doesn't pay the disk cost (~25 KB
+    # Default False — implementation doesn't pay the disk cost (~25 KB
     # MLP / ~80 KB CNN per cell) unless a post-hoc analysis needs
     # to re-evaluate Q at arbitrary observations after training
     # ends. Independent of `keep_q_checkpoint_per_burst` — both
@@ -220,7 +220,7 @@ class DQNSweep:
 def env_attrs_from_spec(spec: EnvSpec) -> Mapping[str, object]:
     """Adapter to the catalogue's whitelist. Kept here so the
     YAML loader doesn't import `EnvSpec.public_attrs` directly —
-    swapping the env catalogue for a substrate-specific one is
+    swapping the env catalogue for a implementation-specific one is
     one function change."""
     return spec.public_attrs()
 
@@ -924,7 +924,7 @@ def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
             f'{sweep.archive_remote.rstrip("/")}/{cfg.name}'
             if sweep.archive_remote is not None else None
         )
-        # Substrate defaults + YAML-requested extras. Extras are
+        # Implementation defaults + YAML-requested extras. Extras are
         # validated by the loader (`config_loader._build_required_
         # measurables`) so by the time we reach here every name
         # resolves; duplicates are de-duped by identity since

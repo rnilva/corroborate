@@ -21,11 +21,11 @@ def _reset_runner_report_warnings() -> None:
 @pytest.fixture(autouse=True)
 def _clear_substrate_cache() -> None:
     """Clear `corroborate.cli.sweep._substrate_cache` between
-    tests so a substrate imported in one test doesn't leak its
+    tests so an implementation imported in one test doesn't leak its
     cached entry-points into the next. Required because
     `add_args(parser, argv=...)` populates the cache during
     parser construction; tests that build parsers against
-    different substrates (or that monkey-patch a substrate's
+    different implementations (or that monkey-patch a substrate's
     module) need a clean slate."""
     from corroborate.cli.sweep import _substrate_cache
     _substrate_cache.clear()

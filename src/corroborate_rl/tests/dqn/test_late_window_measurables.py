@@ -35,7 +35,7 @@ def test_q_gap_late_matches_late_half_mean() -> None:
 
 
 def test_q_gap_late_returns_nan_when_min_missing() -> None:
-    """Function-level defensive NaN-return: substrate bodies catch
+    """Function-level defensive NaN-return: implementation bodies catch
     `KeyError` on missing declared reads and return NaN directly,
     rather than letting the framework's `compute_missing_columns`
     wrapper catch it at the per-cell boundary. Both paths end at

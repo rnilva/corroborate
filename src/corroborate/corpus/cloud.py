@@ -67,7 +67,7 @@ class ConflictingArchive(RuntimeError):
     from the manifest's prior entry for the same relpath. The
     user must explicitly opt into overwrite by passing
     `force=True` (the existing parameter); otherwise a re-run
-    that produced different bytes (substrate code change, RNG
+    that produced different bytes (implementation code change, RNG
     drift, deliberate corpus refresh) silently last-writer-wins.
 
     `relpath`, `prior_sha256`, and `local_sha256` are surfaced so
@@ -464,7 +464,7 @@ def _default_files(sweep_dir: Path) -> list[str]:
     to the cloud.
 
     `SIDECAR_DIRS` whitelist (currently `q_checkpoints/`): a
-    substrate writes per-cell auxiliary artifacts here; the
+    implementation writes per-cell auxiliary artifacts here; the
     archive command sweeps them up alongside the parquets so
     the cloud copy is self-contained. The walk RECURSES so
     substrate-authored nested layouts (e.g.
@@ -497,10 +497,10 @@ def _warn_if_trace_schema_incomplete(traces_path: Path) -> None:
 
     The cloud archive is the durable record. If a sweep archives
     traces lacking columns that future ingests will need (e.g. a
-    new reduction was added to the substrate after this sweep
+    new reduction was added to the implementation after this sweep
     ran), those ingests will produce all-NaN values on this
     corpus's cells without ever surfacing why. The check makes the
-    gap loud at archive time so the substrate author can decide:
+    gap loud at archive time so the implementation author can decide:
     re-archive after fixing, or accept the partial schema (some
     measurables won't compute on this corpus).
 
@@ -674,7 +674,7 @@ def archive(
         # has no PAR1 footer; skip the parquet-shaped check for it
         # so the sidecar rides the same archive path without a
         # spurious `ArchivePrecondition` failure. Same exception
-        # applies to substrate sidecars under `SIDECAR_DIRS` (e.g.
+        # applies to implementation sidecars under `SIDECAR_DIRS` (e.g.
         # `q_checkpoints/cell000_0_final.msgpack`) — these are
         # small msgpack files, not parquets.
         from corroborate.core.pre_registration import (

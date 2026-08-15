@@ -20,7 +20,7 @@ provisionally for a future moderation-asking bridge"; this test
 covers the contract so a future consumer can rely on the
 recovery being correct.
 
-Substrate setup: 4 envs split by μ_x threshold = 1.5.
+Implementation setup: 4 envs split by μ_x threshold = 1.5.
 - 2 below-threshold (μ_x ∈ {1.0, 1.4}, β_zy = 1.0)
 - 2 above-threshold (μ_x ∈ {1.6, 2.0}, β_zy = 2.0)
 - Under shared seeds, Δ_y = β_zy · Δ_z exactly per stratum

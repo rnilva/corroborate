@@ -111,10 +111,10 @@ def run_cell(
     """Run one cell; return a `RunRow` with closed-form-tractable
     measurements.
 
-    The verdict is fixed to `HELD` because the substrate emits raw
+    The verdict is fixed to `HELD` because the implementation emits raw
     cells, not bridge results — the analyses under test compute
     their own verdicts from the cell-set. A non-HELD value would
-    encode a bridge decision the substrate has no business making.
+    encode a bridge decision the implementation has no business making.
 
     `seed`, `env_name` and `arm_key` flow into `measurements` at
     top-level so paired_g's default `pair_by=('seed',)` and
@@ -216,7 +216,7 @@ def run_multi_env_paired_arms(
 
 # Author-chosen keys for the per-(burst, episode) trajectory
 # matrices on TraceRow.leaves. Substrate-named (mirrors how the
-# real DQN substrate names its trajectory columns); per-burst
+# real DQN implementation names its trajectory columns); per-burst
 # analyses specify custom sources via
 # `reduce_axis(from_key(PER_BURST_Y_KEY), axis=-1, op='mean')` to
 # read the per-burst-mean Y, etc.
@@ -334,7 +334,7 @@ def run_multi_env_paired_phased_arms(
     Returns the cell-dict list `paired_g_per_burst` /
     `meta_regression_per_burst` / `mundlak_paired_g_per_burst`
     consume directly. Used to drive panel meta-regression on
-    multi-env corpora where the substrate produces both per-burst
+    multi-env corpora where the implementation produces both per-burst
     structure (for the panel's burst dimension) AND env-level
     variation (for between-env covariates)."""
     cells: list[Mapping[str, object]] = []

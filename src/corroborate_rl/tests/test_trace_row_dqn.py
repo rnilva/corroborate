@@ -3,7 +3,7 @@ surfaces its nested leaves at dotted topology paths.
 
 The framework's `walk_paths` primitive is exercised in the
 framework's unit tests for `signature`; this case verifies the
-end-to-end shape on a real substrate composition where
+end-to-end shape on a real implementation composition where
 `partial(dqn, optimizer=partial(warmed_update,
 inner=partial(adam, lr=...), warmup_steps=100))` produces the
 nested `optimizer.inner.lr` path the corpus column-namer

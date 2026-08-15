@@ -1,5 +1,5 @@
 """Closed-form recovery of Cliff's δ on the LG-SCM-style synthetic
-substrate — validates the new `cliff_delta_paired` primitive.
+implementation — validates the new `cliff_delta_paired` primitive.
 
 Cliff's δ measures `P(Δ > 0) - P(Δ < 0)`. Under Δ ~ N(μ, σ²):
 

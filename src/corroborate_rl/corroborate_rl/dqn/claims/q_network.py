@@ -20,7 +20,7 @@ no `record_call`, just bookkeeping that materialises the
 parameter pytree once per cell. Hornik's claim attaches to the
 forward pass, hence `mlp_forward` is the Claim.
 
-Substrate flattens obs to a 1D vector for replay storage; CNN
+Implementation flattens obs to a 1D vector for replay storage; CNN
 reshapes back to its declared `obs_shape` inside `cnn_forward`.
 The framework's `init_state` and `Replay` layers stay obs-flat;
 only CNN sees the spatial structure.
@@ -151,7 +151,7 @@ def mlp_forward(params: Params, obs: jax.Array) -> jax.Array:
 
     Accepts multi-dim `obs` (e.g. (..., H, W, C)) by flattening
     trailing axes greedily until their product matches the
-    first weight matrix's input dim. Substrate stores obs at
+    first weight matrix's input dim. Implementation stores obs at
     native shape; the forward fn collapses for the dot product
     here.
 

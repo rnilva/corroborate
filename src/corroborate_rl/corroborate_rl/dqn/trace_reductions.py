@@ -71,7 +71,7 @@ def _measurable_as_polars_expr(
     do the conversion itself.
 
     `alias(m.name)` pins the emitted column name to the Measurable's
-    name — the substrate must `register_as(...)` each composition
+    name — the implementation must `register_as(...)` each composition
     with a stable hand-picked name to preserve cache-column
     contracts (`pl.col('online_max_q_per_step')` in downstream
     scope predicates).

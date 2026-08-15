@@ -534,7 +534,7 @@ def test_write_report_nan_inf_emit_json_null_not_string_sentinel(
     assert p.read_text().endswith('\n')
 
 
-# ============ End-to-end via existing analytic substrate ============
+# ============ End-to-end via existing analytic implementation ============
 
 
 def test_end_to_end_serializes_full_bridge_evaluation() -> None:

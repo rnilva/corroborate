@@ -38,7 +38,7 @@ the result type and matches the panel-as-primitive principle —
 the panel IS the closure of per-stratum statistics.
 
 **Substrate-neutral.** This primitive knows nothing about RL,
-envs, or DDQN. Substrate authors pass `stratify_by` +
+envs, or DDQN. Implementation authors pass `stratify_by` +
 `measurables` and get a panel back.
 
 **Scope of unification.** This panel is CROSS-ARM — it assumes

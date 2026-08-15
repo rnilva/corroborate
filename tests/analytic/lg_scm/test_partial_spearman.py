@@ -13,7 +13,7 @@ Closed-form Pearson r under the LG-SCM chain X → Z → Y:
     r(X, Y) = β_xz · β_zy · σ_x²
               / sqrt(σ_x² · (β_zy² · (β_xz²·σ_x² + σ_z²) + σ_y²))
 
-For the substrate parameters here (β_xz ∈ {0.5, 0.7, 0.9},
+For the implementation parameters here (β_xz ∈ {0.5, 0.7, 0.9},
 β_zy=1.0, σ_x=0.5, σ_z=σ_y=0.4) the closed-form pearson r
 per-env is in {0.40, 0.53, 0.62} and pools (Fisher-z) to ≈ 0.52.
 Spearman ≈ Pearson under Gaussian-linear (the (6/π)·arcsin(r/2)
@@ -30,7 +30,7 @@ at n=120 each:
     SE_z_partial   ≈ SE_z_marginal · sqrt(1/((1−r_xz²)(1−r_zy²)))
                    ≈ 0.053 · sqrt(1/((1−0.6²)(1−0.7²))) ≈ 0.093
 
-(at r_xz ≈ 0.6, r_zy ≈ 0.7 from the substrate params). Empirical
+(at r_xz ≈ 0.6, r_zy ≈ 0.7 from the implementation params). Empirical
 SD across 5 deterministic-seed replicates: 0.09 — matches the
 closed form. The 0.30 bound covers 3σ of partial-Spearman
 sampling variation around the d-separation null.
@@ -72,7 +72,7 @@ from tests.analytic.lg_scm.runner import (
 )
 
 
-# Substrate parameters chosen so the closed-form Pearson r per
+# Implementation parameters chosen so the closed-form Pearson r per
 # env is moderate (0.4-0.6). High r forces the partial-Spearman
 # closed-form denominator near zero and amplifies finite-sample
 # bias; moderate r keeps the estimator well-conditioned. σ_z and

@@ -14,7 +14,7 @@ Three test layers:
    placeholder accepted; missing placeholder raises with a
    recognisable message; non-string types rejected.
 
-3. **End-to-end via the substrate** (slow — runs a 60-step
+3. **End-to-end via the implementation** (slow — runs a 60-step
    2-seed DQN sweep). Writes a fake per-seed checkpoint family
    via the substrate's own MLP initializer, then runs `dqn()`
    with `init_online_params` per seed via `run_dqn_arm`'s vmap.
@@ -648,7 +648,7 @@ def test_dispatch_sweep_threads_init_params_through_grid_point(
         default_dqn_registry, dispatch_sweep, load_sweep,
     )
     # First sweep: produce a per-cell bundle via the
-    # `keep_q_checkpoint_final` flag (substrate now emits bundles
+    # `keep_q_checkpoint_final` flag (implementation now emits bundles
     # instead of per-seed sidecar files).
     ckpt_dir = tmp_path / 'ckpt_src'
     cfg_src = tmp_path / 'sweep_src.yaml'

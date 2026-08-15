@@ -8,7 +8,7 @@ Two test layers:
    the in-record sentinel key conventions
    (`checkpoint_key` / `parse_checkpoint_key`).
 
-2. **End-to-end via the substrate** (slow — runs a 60-step DQN
+2. **End-to-end via the implementation** (slow — runs a 60-step DQN
    sweep on CartPole). With the YAML flag enabled, assert the
    expected msgpack files land under
    `<arm_dir>/q_checkpoints/`, each loadable into a `QCheckpoint`
@@ -594,7 +594,7 @@ def test_dispatch_sweep_archives_merged_top_level_with_remote(
 def test_dispatch_sweep_without_remote_skips_top_level_archive(
     tmp_path: Path,
 ) -> None:
-    """When `archive_remote` is unset, the substrate must NOT
+    """When `archive_remote` is unset, the implementation must NOT
     attempt a top-level archive (no remote to push to). The
     merged top-level parquets land without a manifest, and the
     sweep is intentionally local-only."""

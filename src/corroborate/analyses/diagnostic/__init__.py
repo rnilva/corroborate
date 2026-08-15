@@ -1,6 +1,6 @@
 """Diagnostic analyses — audits + verdict-distribution summaries
 that bridges call to introspect verdicts at the hypothesis level
-rather than to test a substrate claim.
+rather than to test an implementation claim.
 """
 from corroborate.analyses.diagnostic.tautology_audit import (  # noqa: F401
     tautology_audit as _audit,  # pyright: ignore[reportUnusedImport]

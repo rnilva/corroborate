@@ -118,7 +118,7 @@ def test_pc_removes_real_edge_under_faithfulness_violation() -> None:
     causal-chain claims) will compute on the wrong graph.
 
     This is a fundamental identifiability gap, not a fixable bug.
-    Substrate authors must validate the DAG against domain
+    Implementation authors must validate the DAG against domain
     knowledge — PC's output is the maximum-likelihood DAG given
     only the observational distribution; that's not the same as
     the structural truth when faithfulness fails."""

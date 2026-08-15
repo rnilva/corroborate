@@ -1,4 +1,4 @@
-"""Core — substrate-author daily imports.
+"""Core — implementation-author daily imports.
 
 The framework's most-imported types and decorators:
 

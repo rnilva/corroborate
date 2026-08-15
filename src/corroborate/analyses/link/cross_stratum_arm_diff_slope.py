@@ -9,7 +9,7 @@ Both arm means are computed independently across each arm's
 cells in the stratum — no pair-key cross-referencing. Spearman
 ρ is computed across strata.
 
-Substrate authors who don't have a causal pairing claim should
+Implementation authors who don't have a causal pairing claim should
 reach for this primitive (the paired-Δ sibling
 `cross_config_paired_slope` was deleted as E1 seed-paired).
 

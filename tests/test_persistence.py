@@ -328,7 +328,7 @@ def test_graphs_sidecar_round_trips_topology(tmp_path: Path) -> None:
 def test_graphs_sidecar_absent_file_returns_empty(
     tmp_path: Path,
 ) -> None:
-    """Missing sidecar isn't an error — substrates that don't
+    """Missing sidecar isn't an error — implementations that don't
     capture a graph (or didn't persist one) should return an
     empty mapping cleanly."""
     from corroborate.corpus.persistence import read_graphs_sidecar

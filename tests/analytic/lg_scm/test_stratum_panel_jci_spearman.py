@@ -16,7 +16,7 @@ arm's target mean (config-quality confound), then
 `rho_partial_stratified` drops to ≈ 0 while `rho_marginal` /
 `rho_stratified` stay large.
 
-Substrate setup: 4 envs × 3 μ_x levels = 12 (env, config) strata.
+Implementation setup: 4 envs × 3 μ_x levels = 12 (env, config) strata.
 Within each env, μ_x varies → predictor, target, and partial_z
 all vary linearly with μ_x. Predictor and target are perfectly
 rank-monotone in μ_x → per-env Spearman ρ = +1 → JCI Fisher-z

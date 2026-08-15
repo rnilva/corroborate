@@ -1,4 +1,4 @@
-"""Sweep-launch pre-registration manifest — substrate test.
+"""Sweep-launch pre-registration manifest — implementation test.
 
 Lives here (not in the framework's top-level `tests/`) because it
 imports `corroborate_rl.dqn.yaml_sweep.DQNSweep` — the substrate's
@@ -72,7 +72,7 @@ def fixture_bridge(
 
 
 # pytest imports the test file as a top-level module (see
-# substrate conftest); pyright doesn't know that, so we read the
+# implementation conftest); pyright doesn't know that, so we read the
 # module's actual `__name__` at runtime rather than hard-coding.
 _BRIDGE_NAME = f'{__name__}.fixture_bridge'
 

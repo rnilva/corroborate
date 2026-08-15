@@ -3,7 +3,7 @@
 Pgx uses an api-style `state = env.init(key)` / `state =
 env.step(state, action, key)` where `State` is a typed dataclass
 bundling observation, rewards, terminated, truncated, and
-_step_count; the corroborate_rl substrate calls the gymnax-style
+_step_count; the corroborate_rl implementation calls the gymnax-style
 API (`env.reset(rng, params) → (obs, state)`,
 `env.step(rng, state, action, params)
   → (obs, state, reward, done, info)`).

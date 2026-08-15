@@ -63,7 +63,7 @@ _PER_BURST_G_REL_ERR = 0.20
 
 
 # Source: per-burst mean of `y_per_episode`. The default source
-# in paired_g_per_burst reads `mc_return`; the substrate emits
+# in paired_g_per_burst reads `mc_return`; the implementation emits
 # Y under a domain-honest key, so we wire a custom source.
 _PER_BURST_Y_MEAN = reduce_axis(
     from_key(PER_BURST_Y_KEY), axis=-1, op='mean',
