@@ -276,7 +276,7 @@ def test_yaml_bootstrap_partial_signature_matches_python(
 
     The bootstrap partial lives on the treatment arm
     (`do_effect.arms[1][0].replacement`); the YAML's empty control
-    arm doesn't carry it (and inherits the substrate's default at
+    arm doesn't carry it (and inherits the implementation's default at
     dispatch time)."""
     h_yaml = load_intervention(expectile_yaml_path, reg=reg)
     h_python = _expectile_python()

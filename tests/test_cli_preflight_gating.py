@@ -303,7 +303,7 @@ def test_hypothesis_corrupt_remote_json_fails_cleanly(
 # Implementation dispatch is heavier — `corroborate_rl.dqn.yaml_sweep`
 # pulls JAX via the eager `from corroborate_rl.dqn import
 # measurables` in `corroborate_rl.dqn.__init__`. Tests here mock
-# the substrate's `load_sweep` / `dispatch_sweep` via the lazy
+# the implementation's `load_sweep` / `dispatch_sweep` via the lazy
 # proxies in `corroborate_rl.dqn_sweep` (which the framework's
 # `SWEEP_ENTRY_POINTS` Callables route through). A real
 # minimal `DQNSweep` instance is used to satisfy the proxy's
@@ -313,7 +313,7 @@ def test_hypothesis_corrupt_remote_json_fails_cleanly(
 def _make_stub_sweep(archive_remote: str | None) -> object:
     """Construct a minimal real `DQNSweep` for these mock tests.
 
-    Uses the substrate's actual dataclass (which structurally
+    Uses the implementation's actual dataclass (which structurally
     satisfies the framework `Sweep` Protocol) rather than a
     duck-typed stub, because `corroborate_rl.dqn_sweep`'s lazy
     proxies do a defensive `isinstance(sweep, DQNSweep)` narrow
@@ -334,10 +334,10 @@ def _patch_substrate_callables(
     monkeypatch: pytest.MonkeyPatch,
     archive_remote: str | None,
 ) -> None:
-    """Monkey-patch the substrate's heavy `load_sweep` /
+    """Monkey-patch the implementation's heavy `load_sweep` /
     `dispatch_sweep` so the framework's CLI dispatch doesn't
     actually run a sweep. Patches the underlying functions; the
-    substrate's lazy proxies `from corroborate_rl.dqn.yaml_sweep
+    implementation's lazy proxies `from corroborate_rl.dqn.yaml_sweep
     import load_sweep` resolves to the patched attribute at
     proxy-call time."""
     stub_sweep = _make_stub_sweep(archive_remote)

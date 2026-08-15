@@ -1,4 +1,4 @@
-"""DQN substrate's lightweight entry point for `corroborate sweep run`.
+"""DQN implementation's lightweight entry point for `corroborate sweep run`.
 
 Top-level under `corroborate_rl` (NOT under `corroborate_rl.dqn`)
 so importing this module does NOT trigger
@@ -105,7 +105,7 @@ def _pre_import_setup(args: argparse.Namespace) -> None:
     Determinism resolution order: `--no-deterministic` CLI flag
     forces OFF (always wins). Otherwise peek the YAML's
     `deterministic: true|false` top-level field via a lightweight
-    plain-yaml read that does NOT trigger the substrate's lazy
+    plain-yaml read that does NOT trigger the implementation's lazy
     loader (which would import JAX before we've stamped the
     flags). Default ON when neither is set."""
     device = _require_device(args, 'device')
@@ -139,7 +139,7 @@ def _peek_yaml_bool(path: str, key: str, *, default: bool) -> bool:
 
     Intentionally narrow: no schema validation, no error on
     malformed YAML beyond what `yaml.safe_load` raises. Bad YAML
-    surfaces later when the substrate's typed loader runs; this
+    surfaces later when the implementation's typed loader runs; this
     function exists ONLY to extract env-stamping hints before
     JAX is imported."""
     import yaml
@@ -292,7 +292,7 @@ def _dispatch_sweep_lazy(sweep: Sweep) -> tuple[Path, Path]:
 
 def _default_registry_lazy() -> Registry:
     """Lazy proxy: pre-populated Registry covering the DQN
-    substrate's claim namespace."""
+    implementation's claim namespace."""
     from corroborate_rl.dqn.yaml_sweep import default_dqn_registry
     return default_dqn_registry()
 
@@ -344,7 +344,7 @@ def _format_dry_run_summary_lazy(
     lines.append(f'  interventions (expanded): {len(configs)}')
     for cfg in configs:
         # The framework only sees `ConfigName.name`; the
-        # substrate's expand_sweep returns `InterventionConfig`
+        # implementation's expand_sweep returns `InterventionConfig`
         # which has additional attributes. Narrow at the
         # consumer site.
         if not isinstance(cfg, InterventionConfig):

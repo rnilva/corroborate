@@ -8,7 +8,7 @@ under random actions.
 We deliberately do NOT assert trajectory equivalence with
 gymnasium's Box2D implementation — that would require a Box2D
 runtime in the test, defeating the purpose of the port. The
-substrate's contract is structural (Env Protocol + obs/action
+implementation's contract is structural (Env Protocol + obs/action
 shapes) plus qualitative (reward sign / done-flags match the
 documented spec).
 """

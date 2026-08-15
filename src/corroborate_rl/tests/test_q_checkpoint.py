@@ -92,7 +92,7 @@ def test_parse_checkpoint_key_rejects_malformed_sentinel() -> None:
 
 
 def _small_mlp_params(rng_key: jax.Array) -> dict[str, jax.Array]:
-    """Build a small two-layer MLP params dict via the substrate's
+    """Build a small two-layer MLP params dict via the implementation's
     own initialiser — gives us the exact pytree shape the
     cell-runner extracts from the trained network."""
     mlp = MLP(hidden=(8, 8))

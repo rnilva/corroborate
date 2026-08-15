@@ -18,7 +18,7 @@ The tabular regime makes the bias **exactly testable**:
 | double_greedify, Q_online = Q_target | σ/√π (n=2 case) | σ/√π |
 
 This tests the *foundational* theorem at the heart of CLAIM 2 in
-the substrate's claim graph (auto-memory `findings_action_dim_sweep`).
+the implementation's claim graph (auto-memory `findings_action_dim_sweep`).
 """
 from __future__ import annotations
 
@@ -117,7 +117,7 @@ def test_hasselt_max_bias_grows_with_log_n_actions() -> None:
 
     The asymptotic σ·√(2 ln |A|) overestimates for small |A|
     (~30% off at |A|=4) but is the correct leading-order term.
-    The substrate's `jensen_dormancy_gap` invariant uses this as
+    The implementation's `jensen_dormancy_gap` invariant uses this as
     a structural floor.
 
     A regression that broke the dependence on |A| (e.g., constant

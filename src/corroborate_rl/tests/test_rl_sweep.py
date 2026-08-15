@@ -1,11 +1,11 @@
-"""Tests for `corroborate_rl.sweep` — RL substrate's Runner.
+"""Tests for `corroborate_rl.sweep` — RL implementation's Runner.
 
 Covers:
 - DQNRunner satisfies `Runner[DQNTrajectoryRecord]` Protocol
   (structural-type check via Runner[R] accepting it).
 - DQNRunner type-narrows env_name and seeds from grid_point.
 - DQNRunner rejects unexpected grid keys (HP variation belongs
-  in the substrate's `base`, not in the exogenous grid).
+  in the implementation's `base`, not in the exogenous grid).
 
 Tests use a SHORT-run claim (total_steps=60, eval_every=30,
 small Replay) so each test completes in seconds on CPU."""

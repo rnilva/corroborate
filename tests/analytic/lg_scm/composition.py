@@ -70,7 +70,7 @@ class LinearGaussianSCM:
         Delta_Y(t)
             = beta_zy * (beta_xz_t - beta_xz_b) * X(t)
 
-    The substrate's whole point is that this Δ has a closed form
+    The implementation's whole point is that this Δ has a closed form
     the test can assert against, rather than a large-N empirical
     bound that admits silent regressions."""
     mu_x: float

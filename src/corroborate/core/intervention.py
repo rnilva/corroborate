@@ -197,7 +197,7 @@ class DoEffect:
     fingerprint of its arm.
 
     The empty-tuple arm (when present) is the "no intervention"
-    control — the substrate's vanilla composition. Non-empty arms
+    control — the implementation's vanilla composition. Non-empty arms
     are interventional structural deltas. Binary contrast is the
     special case `arms=(control, treatment)` with one tuple
     typically empty. Multi-level (dose-response) is

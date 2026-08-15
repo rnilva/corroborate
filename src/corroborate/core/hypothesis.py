@@ -114,18 +114,18 @@ class Hypothesis(Protocol):
 
     Modules and classes both satisfy the Protocol structurally
     via attribute access. The framework's verdict-time runner
-    reads `BRIDGES`; the substrate's sweep glue reads
+    reads `BRIDGES`; the implementation's sweep glue reads
     `INTERVENTION` to drive paired sweep iteration.
 
     Optional `CLAIM` attribute (`Claim[..., object] | None`):
-    the substrate's outermost @claim function — the structural
+    the implementation's outermost @claim function — the structural
     truth for endogeneity gating (cf. ENDOGENEITY_TOPOLOGY.md).
     The runner reads it via `getattr(h, 'CLAIM', None)` and
     threads to `evaluate(..., claim=...)`. Hypotheses that omit
     it fall back to `None`; the gates short-circuit on the
     endogeneity check (still correct for typo/contract-shape
     gates). New implementation hypothesis modules should declare
-    `CLAIM = dqn` (or their substrate's outermost claim) at
+    `CLAIM = dqn` (or their implementation's outermost claim) at
     module level.
 
     Optional `MODULE_SCOPE` attribute (`pl.Expr | None`): a

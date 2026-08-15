@@ -2,7 +2,7 @@
 
 YAML- or config-driven sweep authoring needs to map string tokens
 (`'double_greedify'`, `'Replay'`) back to the typed Python handle
-the substrate's `Claim` graph holds. This module is that map.
+the implementation's `Claim` graph holds. This module is that map.
 
 Two surfaces:
 
@@ -108,7 +108,7 @@ class Registry:
 
         Used both by `add_module` (auto-discovered config-bundle
         classes) and by the implementation (manual cross-module
-        registration when a bundle lives outside the substrate's
+        registration when a bundle lives outside the implementation's
         claim modules)."""
         self.classes.register(cls.__name__, cls)
 

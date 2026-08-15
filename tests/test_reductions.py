@@ -112,7 +112,7 @@ def test_mean_window_handles_tiny_arrays() -> None:
 def test_mean_window_handles_zero_d() -> None:
     """0-d / scalar operand (e.g. a null trace cell decoded as a
     scalar ndarray) has no window axis; NaN-propagate rather than
-    raise. Subsumes the substrate's prior `_mean_window` 0-d
+    raise. Subsumes the implementation's prior `_mean_window` 0-d
     guard."""
     record: Mapping[str, npt.NDArray[np.floating]] = {
         'x': np.asarray(0.0),  # 0-d scalar ndarray

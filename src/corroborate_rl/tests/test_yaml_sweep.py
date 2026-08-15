@@ -1,5 +1,5 @@
 """Schema-contract smoke for the `expectile_3way` YAML sweep:
-every authored slot resolves to the typed handle the substrate's
+every authored slot resolves to the typed handle the implementation's
 Claim graph holds.
 
 The reference Python construction below is one realisation of
@@ -170,7 +170,7 @@ def test_resolve_measurables_empty_returns_defaults() -> None:
 
 def test_resolve_measurables_appends_extras() -> None:
     """YAML extras append after defaults so default order stays
-    canonical. The substrate's `dqn_default_measurables` already
+    canonical. The implementation's `dqn_default_measurables` already
     contains `eval_best_burst_mean`, so requesting it as an
     extra is a no-op (dedup by registry identity)."""
     from corroborate_rl.dqn.measurables import dqn_default_measurables

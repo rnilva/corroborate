@@ -1,6 +1,6 @@
 """Closed-form assertions on the `q_divergence_score` measurable.
 
-The substrate's `q_divergence_score` normalizes `jensen_gap` by
+The implementation's `q_divergence_score` normalizes `jensen_gap` by
 the Bellman fixed-point bound:
 
     q_divergence_score = jensen_gap · (1 - γ) / r_max
@@ -110,7 +110,7 @@ def test_q_divergence_score_exceeds_bound_under_deadly_triad() -> None:
 def test_score_below_one_iff_jensen_gap_within_bellman_bound() -> None:
     """The discriminator: q_divergence_score < 1 ⟺ jensen_gap <
     r_max / (1 - γ). The Bellman bound is the FQI/deadly-triad
-    discriminator the substrate's bridges use to classify regime."""
+    discriminator the implementation's bridges use to classify regime."""
     bound = bellman_bound(gamma=0.99, r_max=1.0)
     assert abs(bound - 100.0) < 1e-9  # sanity, mod float precision
 

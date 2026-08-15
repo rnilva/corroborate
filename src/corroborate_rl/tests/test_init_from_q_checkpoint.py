@@ -16,7 +16,7 @@ Three test layers:
 
 3. **End-to-end via the implementation** (slow — runs a 60-step
    2-seed DQN sweep). Writes a fake per-seed checkpoint family
-   via the substrate's own MLP initializer, then runs `dqn()`
+   via the implementation's own MLP initializer, then runs `dqn()`
    with `init_online_params` per seed via `run_dqn_arm`'s vmap.
    Verifies (a) the run completes without error, (b) the policy
    starts from the loaded params (initial Q output on a probe
@@ -52,7 +52,7 @@ def _write_per_seed_ckpts(
     obs_shape: tuple[int, ...] = (4,),
     n_actions: int = 2,
 ) -> str:
-    """Materialise one msgpack per seed via the substrate's MLP
+    """Materialise one msgpack per seed via the implementation's MLP
     initializer. Returns the path template
     (with `{seed}` placeholder) that `load_batched_online_params`
     consumes."""
@@ -314,7 +314,7 @@ def test_dqn_resumes_from_loaded_init_params(tmp_path: Path) -> None:
         )
 
     # The Q-network forward call on the LOADED (axis-0 sliced)
-    # params reproduces the same Q-vector the substrate's MLP
+    # params reproduces the same Q-vector the implementation's MLP
     # gives directly on the same params. Proves the batched
     # pytree's per-seed slice is bit-identical to the on-disk
     # value (no implicit reshape / dtype drift in the load path).
@@ -435,7 +435,7 @@ def _write_decoupled_ckpts(
     online_params vs target_params — closed-form basis for the
     "target_params loaded != online_params" assertion. Uses two
     distinct PRNGKey draws + a constant target-bias perturbation
-    so EVERY leaf differs (the substrate's MLP biases init to 0
+    so EVERY leaf differs (the implementation's MLP biases init to 0
     so two fresh inits both have b0=b1=b2=0; without the
     perturbation the test couldn't distinguish target-loaded
     from target-mirrors-online on bias keys)."""

@@ -7,7 +7,7 @@ A `Loop[C, T, Idx]` is the iteration-backend contract: run
 implementations pick the form that fits their backend:
 
 - `int` for implementation-agnostic Python (`python_loop` here).
-- A traced array index for jax-flavored backends (a substrate's
+- A traced array index for jax-flavored backends (a implementation's
   `scan_loop` over `lax.scan`, or jax-stacked `python_loop`).
 
 The aggregation contract (list, stacked pytree, generator, ...)

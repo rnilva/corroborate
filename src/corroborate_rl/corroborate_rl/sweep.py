@@ -1,8 +1,8 @@
-"""RL substrate's bridge into `corroborate.sweep`.
+"""RL implementation's bridge into `corroborate.sweep`.
 
 Provides `DQNRunner` — a stateful `Runner[DQNTrajectoryRecord]`
 caching the env catalogue. Each `__call__` receives a composed
-Claim (the substrate's theory pre-bound with HPs and overlaid
+Claim (the implementation's theory pre-bound with HPs and overlaid
 with one arm's Intervention tuple), the framework-derived
 `arm_key`, the typed Measurables, and one exogenous-grid point.
 
@@ -27,8 +27,8 @@ sweep-dispatch time by `dispatch_sweep` when the sweep's
 the legacy `init_online_params_batched` (the two are mutually
 exclusive — `run_dqn_arm` raises if both are passed).
 
-Other keys are an error: HP variation lives in the substrate's
-`base` (substrate's outer loop iterates HP regimes by building
+Other keys are an error: HP variation lives in the implementation's
+`base` (implementation's outer loop iterates HP regimes by building
 distinct Hypothesis objects); cell-level exogenous variation
 goes through env_name + seeds.
 
@@ -80,14 +80,14 @@ def _is_init_override(v: object) -> TypeIs[InitOverride]:
 
 
 class DQNRunner:
-    """RL substrate's `Runner[DQNTrajectoryRecord]`. Holds the
+    """RL implementation's `Runner[DQNTrajectoryRecord]`. Holds the
     env catalogue so each call doesn't re-resolve env_specs from
     strings, and so the runner's identity is shared across grid
     points.
 
     `q_checkpoint_dir`: when set, every `__q_checkpoint__*` payload
     in the per-cell record gets persisted to a msgpack sidecar
-    under this dir. The substrate's `dispatch_sweep` constructs the
+    under this dir. The implementation's `dispatch_sweep` constructs the
     runner with this set to `<out_dir>/q_checkpoints/` per arm-
     config; library callers can leave it None (default).
 

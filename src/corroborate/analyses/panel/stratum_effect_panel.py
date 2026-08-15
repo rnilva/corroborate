@@ -39,7 +39,7 @@ form for cross-stratum claims about treatment effects.
 
 The framework stays implementation-neutral here: this primitive
 knows nothing about RL, envs, or any implementation-specific
-measurable. The substrate's bridge declares which measurables
+measurable. The implementation's bridge declares which measurables
 to populate and what stratify_by to use. Same primitive
 serves any implementation whose cells admit (treatment, baseline,
 strata) decomposition.

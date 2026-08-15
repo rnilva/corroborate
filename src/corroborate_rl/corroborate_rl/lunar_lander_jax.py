@@ -2,7 +2,7 @@
 
 Gymnasium's reference `LunarLander-v2` is built on Box2D — a C++
 rigid-body simulator that doesn't compose with `jax.vmap` and
-breaks the substrate's vectorised seed-rollout pipeline. This
+breaks the implementation's vectorised seed-rollout pipeline. This
 module reimplements the env in pure JAX so it slots into the
 existing `cell_runner` codepath alongside gymnax / jumanji envs
 with no Python-side per-cell branching.
@@ -71,7 +71,7 @@ The solver pipeline per step is:
   polygon corners but only the deepest gets the hard-crash flag.
 - Wind / turbulence / per-step impulse dispersion omitted (matches
   gymnasium's `enable_wind=False` default; dispersion adds minor
-  torque noise that the substrate's deterministic-transition
+  torque noise that the implementation's deterministic-transition
   preference excludes).
 
 API: matches `gymnax.environments.environment.Environment`'s
@@ -827,7 +827,7 @@ def _apply_contact_impulses(
 class LunarLanderEnv:
     """JAX-native LunarLander-v2.
 
-    Structurally matches the gymnax `Env` Protocol — substrate's
+    Structurally matches the gymnax `Env` Protocol — implementation's
     `cell_runner` calls `reset(rng, params)` and `step(rng, state,
     action, params)` without inspecting the env's class.
 

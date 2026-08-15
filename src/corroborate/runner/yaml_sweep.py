@@ -11,7 +11,7 @@ pre-registration manifest writer
 (`write_pre_registration_manifest_for_sweep`).
 
 Implementation sweep modules (`corroborate_rl.dqn.yaml_sweep`) compose
-these for their own YAML loader + dispatch path. The substrate's
+these for their own YAML loader + dispatch path. The implementation's
 sweep dataclass adds implementation-specific fields (envs, agent HPs)
 and satisfies the framework `Sweep` Protocol structurally — no
 inheritance friction.
@@ -20,7 +20,7 @@ Why Protocol instead of dataclass inheritance: frozen dataclasses
 with `slots=True` don't compose via inheritance cleanly (slot-
 layout conflicts, immutability layering). Structural typing via
 `runtime_checkable` Protocol gives the same compile-time check +
-no inheritance friction. The substrate's `DQNSweep` remains a flat
+no inheritance friction. The implementation's `DQNSweep` remains a flat
 frozen dataclass that *happens to* satisfy the Protocol."""
 from __future__ import annotations
 
@@ -267,10 +267,10 @@ class _LoadSweep[S: Sweep](Protocol):
     parameter is part of the typed contract; implementations that
     accept positional `reg` would not match.
 
-    PEP 695 generic over `S: Sweep` so the substrate's
+    PEP 695 generic over `S: Sweep` so the implementation's
     `load_sweep(...) -> DQNSweep` matches under contravariant
     parameter / covariant return rules — `(Path, Registry) -> S` is
-    covariant in `S`, so the substrate's narrower return is
+    covariant in `S`, so the implementation's narrower return is
     assignable into `_LoadSweep[DQNSweep]`."""
 
     def __call__(self, path: Path, *, reg: Registry) -> S: ...
@@ -281,7 +281,7 @@ class _DispatchSweep[S: Sweep](Protocol):
     Generic over `S: Sweep` because function PARAMETERS are
     contravariant — `(sweep: DQNSweep) -> ...` is NOT assignable
     to `(sweep: Sweep) -> ...`. Without the generic, the
-    substrate's typed dispatch_sweep would fail pyright when
+    implementation's typed dispatch_sweep would fail pyright when
     constructed into `SweepEntryPoints`."""
 
     def __call__(self, sweep: S) -> tuple[Path, Path]: ...
@@ -296,7 +296,7 @@ class _DefaultRegistry(Protocol):
 
 
 class _ExpandSweep[S: Sweep](Protocol):
-    """Optional dry-run helper. Returns the substrate's resolved
+    """Optional dry-run helper. Returns the implementation's resolved
     config tuple — element type satisfies `ConfigName` for the
     CLI's print loop. Implementation may name elements anything (DQN's
     `InterventionConfig`), so the framework only sees `ConfigName`.
@@ -376,7 +376,7 @@ class SweepEntryPoints[S: Sweep]:
 class _AddCliArgs(Protocol):
     """Substrate hook to add implementation-specific argparse arguments
     to `corroborate sweep run`. Called by the framework BEFORE
-    `parser.parse_args()` so the substrate's options appear in
+    `parser.parse_args()` so the implementation's options appear in
     `--help` output and are validated by argparse alongside the
     framework's own args.
 
@@ -396,7 +396,7 @@ class _PreImportSetup(Protocol):
 
     Critical use case: `JAX_PLATFORMS` must be set before any
     `import jax` because JAX latches the backend on first init.
-    The framework's CLI doesn't know about JAX; the substrate's
+    The framework's CLI doesn't know about JAX; the implementation's
     pre-import hook does, and it runs at the right moment in the
     import sequence. implementations with heavy deps keep their
     `SWEEP_ENTRY_POINTS` Callables lazy so the actual heavy
@@ -428,7 +428,7 @@ class SweepCliExtensions:
     2. After `parser.parse_args(argv)` produces the Namespace,
        calls `pre_import_setup(args)` to stamp env vars (e.g.
        `JAX_PLATFORMS`, `XLA_FLAGS`).
-    3. Invokes `SWEEP_ENTRY_POINTS` Callables — the substrate's
+    3. Invokes `SWEEP_ENTRY_POINTS` Callables — the implementation's
        lazy proxies now import heavy deps with correct env.
 
     Construction enforces a runtime shape check on both fields

@@ -8,7 +8,7 @@ stratum level, then run DoWhy backdoor regression on the panel
 adjusting for burst dummies.
 
 Under the LG-SCM (X → Z → Y) with SHARED seeds across arms (the
-substrate's design — `numpy.random.default_rng(seed)` pre-draws
+implementation's design — `numpy.random.default_rng(seed)` pre-draws
 all epsilons identically per seed), the σ_z and σ_y noise
 streams are PERFECTLY MATCHED across arms. Seed-pooled means
 at each (env, burst, arm) therefore differ ONLY by the
@@ -31,7 +31,7 @@ at every stratum, not just in expectation.
 → DoWhy backdoor regression of Δ_y on Δ_z (adjusting for burst
 dummies) recovers β_zy = 1.5 to machine precision (empirically
 1.5 ± 1e-15 — float64 OLS solve noise, not sampling noise).
-The substrate's variation in μ_x across envs gives the panel
+The implementation's variation in μ_x across envs gives the panel
 enough between-stratum spread for the OLS solve to converge
 without singularity.
 

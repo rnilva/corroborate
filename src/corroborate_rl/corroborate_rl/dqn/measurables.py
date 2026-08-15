@@ -1436,7 +1436,7 @@ def state_hash_n_unique_late(
     the late 50% of training. Diagnostic for whether the env's
     registered `state_hash` is non-degenerate.
 
-    1.0 = the substrate's `default_state_hash` returned 0 for every
+    1.0 = the implementation's `default_state_hash` returned 0 for every
     step (env catalogue did not register a real hash). Any
     state-conditional measurable evaluated on this cell degenerates
     to a global / no-conditioning form.

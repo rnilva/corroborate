@@ -1,6 +1,6 @@
 """Canonical trace post-reductions for DQN traces.
 
-The substrate's `dqn_step` emits per-step `online_q_per_action` /
+The implementation's `dqn_step` emits per-step `online_q_per_action` /
 `target_q_per_action` shape `(steps, n_actions)`. Persisting those
 2-D arrays per cell is wasteful — every analysis subsequently
 reduces them to per-step scalars (max/min/mean/std/argmax across

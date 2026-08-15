@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     # `gymnax.environments.environment`, and `Box` / `Discrete` via
     # `gymnax.environments.spaces` (the runtime `spaces` module
     # imported above). With `from __future__ import annotations`
-    # enabled, the substrate's annotations referencing these names
+    # enabled, the implementation's annotations referencing these names
     # are stringified — never resolved at runtime — so the
     # TYPE_CHECKING import is the right tool: pyright sees the
     # typed Protocol surface from the stub, the runtime never
@@ -196,7 +196,7 @@ class ActionDiscretize:
     on Pendulum.
 
     Multi-D continuous action spaces are not handled (n_bins^d
-    inflates combinatorially; outside the substrate's scope)."""
+    inflates combinatorially; outside the implementation's scope)."""
     n_bins: int
 
     def wrap(self, inner: Env) -> Env:
@@ -1088,7 +1088,7 @@ class EpisodeLengthCappedEnv:
     Emits `info['truncated']=1` when `done` fires because the cap
     triggered (artificial time-limit cutoff per Sutton-Barto §6.6 /
     Gymnasium-API), and `info['truncated']=0` when the inner env
-    naturally terminated. The substrate's `bootstrap` claim
+    naturally terminated. The implementation's `bootstrap` claim
     consumes this signal: at truncation the trajectory continues
     bootstrap (`target = r + γ · v(s')`), at natural termination it
     zeros (`target = r`). Without this distinction, capping at e.g.
@@ -1410,7 +1410,7 @@ def introspect_env(name: str) -> IntrospectedEnv:
     shape = tuple(int(d) for d in obs_space.shape)
     # Box (continuous) → action_dim is the product of shape dims;
     # is_discrete=False. Caller must apply `ActionDiscretize` (or
-    # similar) before the substrate's discrete-action consumers see
+    # similar) before the implementation's discrete-action consumers see
     # the env. Discrete envs follow the original path.
     # `Discrete` is TYPE_CHECKING-only; duck-type at runtime via the
     # `n` attribute (Discrete has `n`, Box has `shape`).

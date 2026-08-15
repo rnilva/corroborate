@@ -116,7 +116,7 @@ def _closed_form_paired_delta_se(
 # `test_paired_g_recovers_closed_form_hasselt_bias_correction`
 # was deleted. It asserted `paired_g.mean_diff ≈ -σ/√π`, which
 # is `np.mean(max_greedify(eps_v) − double_greedify(eps_o, eps_t))`
-# — the substrate's own Hasselt theorem evaluated through `np.mean`.
+# — the implementation's own Hasselt theorem evaluated through `np.mean`.
 # A stub returning the right hardcoded `mean_diff` passes; no
 # framework inference is exercised. The substrate-side identity
 # is already covered by `test_hasselt_max_bias.py`.

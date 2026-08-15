@@ -13,7 +13,7 @@ fails immediately.
 The test runs `import corroborate` in a *fresh subprocess* so the
 parent test runner's already-loaded modules don't pollute
 `sys.modules`. The forbidden set covers every dep that ought to
-land in the substrate's pyproject, not the framework's."""
+land in the implementation's pyproject, not the framework's."""
 from __future__ import annotations
 
 import subprocess

@@ -30,7 +30,7 @@ framework's reported `.mean_diff_se` is within ±20% of the
 closed-form SE.
 
 Pairing-rho diagnostic: since the arms SHARE seeds (the
-substrate's whole-point cancellation), `pairing_rho` should be
+implementation's whole-point cancellation), `pairing_rho` should be
 ≈ 1.0 — exercising the "arms-share-seed-noise" diagnostic
 branch. The null-contrast scenario uses DISTINCT seed ranges
 across arms (identical SCM, independent samples) to exercise

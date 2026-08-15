@@ -2068,7 +2068,7 @@ def _reestablish_registry(initializer_modules: tuple[str, ...]) -> None:
     worker started that way begins with an EMPTY interpreter — no
     inheritance of the parent's measurable registry. Without this
     re-import every `_load_one_corpus` call would compute against a
-    registry missing the substrate's measurables and silently
+    registry missing the implementation's measurables and silently
     null-pad them (CACHE_BUILD.md: a measurable absent from the
     registry is skipped, not errored). `fork` formerly side-stepped
     this via copy-on-write inheritance — but fork-after-threading

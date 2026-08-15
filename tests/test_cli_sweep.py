@@ -2,7 +2,7 @@
 
 Exercises implementation resolution + `--dry-run` against the in-tree
 RL substrate. The JAX-touching paths (real dispatch) are covered
-by the substrate's `tests/test_run_sweep_cli.py`; this file
+by the implementation's `tests/test_run_sweep_cli.py`; this file
 proves the framework wiring works.
 
 Routes dispatch through `corroborate.__main__.main` so the full
@@ -23,11 +23,11 @@ from corroborate.runner.yaml_sweep import SweepEntryPoints
 
 
 def test_in_tree_substrate_exposes_entry_points() -> None:
-    """The in-tree RL substrate's lightweight entry module
+    """The in-tree RL implementation's lightweight entry module
     `corroborate_rl.dqn_sweep` exports `SWEEP_ENTRY_POINTS:
     SweepEntryPoints`. The lightweight module — top-level under
     `corroborate_rl`, NOT under the JAX-pulling
-    `corroborate_rl.dqn` namespace — is the substrate's
+    `corroborate_rl.dqn` namespace — is the implementation's
     framework-facing surface; the heavy
     `corroborate_rl.dqn.yaml_sweep` is implementation detail
     behind the lightweight module's lazy proxies."""

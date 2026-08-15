@@ -8,7 +8,7 @@ Exercises `corroborate.cli.sweep`'s two-phase argparse flow:
 `add_args` / `pre_import_setup` callbacks are wired into the
 dispatch flow.
 
-The in-tree RL substrate's `corroborate_rl.dqn_sweep` is the
+The in-tree RL implementation's `corroborate_rl.dqn_sweep` is the
 canonical lightweight-module example — top-level under
 `corroborate_rl` (NOT under `corroborate_rl.dqn`) so the eager
 `from corroborate_rl.dqn import measurables` side-effect (which
@@ -39,7 +39,7 @@ from corroborate.runner.yaml_sweep import (
 
 
 def test_in_tree_substrate_module_does_not_pull_jax_at_import() -> None:
-    """The in-tree DQN substrate's lightweight entry module
+    """The in-tree DQN implementation's lightweight entry module
     `corroborate_rl.dqn_sweep` MUST stay JAX-free at module-load
     time. If a future edit accidentally imports JAX (or anything
     that pulls JAX, like `corroborate_rl.dqn.measurables`) at
@@ -320,9 +320,9 @@ def test_substrate_args_appear_in_help(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """`corroborate sweep run --help` includes the in-tree
-    substrate's `--device {cpu,gpu}` option — proves the
+    implementation's `--device {cpu,gpu}` option — proves the
     framework's `add_args(p_run, argv=...)` correctly threaded
-    argv to the substrate's `add_args(p_run)` callback."""
+    argv to the implementation's `add_args(p_run)` callback."""
     from corroborate.cli.sweep import add_args
     parser = argparse.ArgumentParser(prog='corroborate sweep')
     add_args(parser, argv=['run', 'cfg.yaml', '--help'])
@@ -408,7 +408,7 @@ def test_pre_import_setup_runs_before_entry_point_callable(
     from corroborate.cli.sweep import add_args, dispatch
     parser = argparse.ArgumentParser(prog='corroborate sweep')
     # No --dry-run: the dispatch path goes default_registry()
-    # (substrate's assert) → load_sweep() (NotImplementedError).
+    # (implementation's assert) → load_sweep() (NotImplementedError).
     # --dry-run would short-circuit at the "expand_sweep is None"
     # check since this fake implementation doesn't provide one.
     argv = [
@@ -418,7 +418,7 @@ def test_pre_import_setup_runs_before_entry_point_callable(
     add_args(parser, argv=argv)
     ns = parser.parse_args(argv)
 
-    # The substrate's `default_registry()` has an internal assert
+    # The implementation's `default_registry()` has an internal assert
     # that fires if `dispatch` swapped the call order. We expect
     # dispatch to fail at `load_sweep` (NotImplementedError) AFTER
     # `default_registry()` succeeded (i.e., the assert passed).

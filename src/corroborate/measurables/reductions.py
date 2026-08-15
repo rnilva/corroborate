@@ -48,7 +48,7 @@ type _AxisOp = Literal['mean', 'var', 'std', 'max', 'min', 'sum']
 #
 # The Protocol formalises the implementation-author contract: new
 # reductions written outside this module (e.g. for a non-RL
-# substrate's domain-specific shape) get type-checked against this
+# implementation's domain-specific shape) get type-checked against this
 # shape. Deviation from `(of: Measurable[R, T_in], *params) ->
 # Measurable[R, T_out]` fails pyright at the factory's call site.
 #
@@ -159,7 +159,7 @@ def mean_window[R: Mapping[str, object]](
         # 0-d / scalar inputs (e.g. a null trace cell that
         # `from_key`'s `np.asarray` decoded as a 0-d ndarray) have
         # no window to take a mean over; NaN-propagate. Subsumes
-        # the substrate's prior `_mean_window` helper, which
+        # the implementation's prior `_mean_window` helper, which
         # guarded the same case before being deleted.
         if arr.ndim == 0:
             return float('nan')

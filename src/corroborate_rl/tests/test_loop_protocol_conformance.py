@@ -13,7 +13,7 @@ from corroborate.core.loop import Loop
 
 
 def test_rl_scan_loop_satisfies_loop_protocol() -> None:
-    """The rl-substrate's `scan_loop` is `Loop[C, T, jax.Array]` —
+    """The rl-implementation's `scan_loop` is `Loop[C, T, jax.Array]` —
     the `Idx` parameter binds to `jax.Array` because scan's body
     is traced (jit elides Python int conversion)."""
     import jax
@@ -25,7 +25,7 @@ def test_rl_scan_loop_satisfies_loop_protocol() -> None:
 
 
 def test_rl_python_loop_satisfies_loop_protocol() -> None:
-    """The rl-substrate's `python_loop` (with jax stacking)
+    """The rl-implementation's `python_loop` (with jax stacking)
     likewise satisfies `Loop[C, T, jax.Array]` — same step-fn
     signature as `scan_loop` so authors write the theory once."""
     import jax

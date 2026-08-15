@@ -54,7 +54,7 @@ def _alt_treatment_op(record: Mapping[str, object]) -> Mapping[str, object]:
 def _base_theory(
     record: Mapping[str, object] | None = None,
 ) -> Mapping[str, object]:
-    """Stand-in for the substrate's theory. Returns a record-
+    """Stand-in for the implementation's theory. Returns a record-
     shaped mapping; the synthetic test just exercises the
     framework's claim composition + arm_key plumbing."""
     return record or {}

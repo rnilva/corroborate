@@ -2,7 +2,7 @@
 
 Exercises `corroborate.runner.yaml_sweep` against a minimal
 `Sweep`-Protocol-satisfying dataclass that doesn't depend on the
-DQN substrate. The substrate's `DQNSweep` keeps its own
+DQN substrate. The implementation's `DQNSweep` keeps its own
 substrate-level coverage in
 `src/corroborate_rl/tests/test_pre_registration_at_sweep_launch.py`."""
 from __future__ import annotations

@@ -231,7 +231,7 @@ class ColumnRole:
       representing a Measurable observation/reduction, this is
       the set of claim graph nodes whose `record_call` outputs
       contribute to the measurable's `transitive_reads` — i.e.
-      the substrate's projection of "which claims feed this
+      the implementation's projection of "which claims feed this
       measurable" via the trace. Empty when the column doesn't
       map to the claim graph (leaves, structural HPs).
     `role` — one of `'outcome'`, `'derived'`, `'leaf'`, `'claim'`,
@@ -257,7 +257,7 @@ def diff_against_claim_graph(
     column_roles: Mapping[str, ColumnRole],
 ) -> tuple[DiffEdge, ...]:
     """Categorize each PC-discovered edge against the per-step
-    claim graph using the substrate's column→claim-node bridge.
+    claim graph using the implementation's column→claim-node bridge.
 
     Counterpart to `explained_by_claim_graph`: takes a SET of
     edges + a typed bridge, returns the diff partitioned by
@@ -268,7 +268,7 @@ def diff_against_claim_graph(
     axis as a typed structural element would convert these to
     `EXPLAINED`.
 
-    `column_roles` is the substrate's bridge mapping; typically
+    `column_roles` is the implementation's bridge mapping; typically
     supplied by the substrate-side module that authored the
     columns.
 

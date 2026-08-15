@@ -164,7 +164,7 @@ def test_module_lacking_attrs_is_not_hypothesis() -> None:
 def test_class_with_classvars_satisfies_protocol() -> None:
     """A frozen dataclass with ClassVar fields conforms — the
     canonical class-based authoring shape. Module-shape conformance
-    is exercised by the substrate's bridge-zoo files (`dqn_bridges.py`,
+    is exercised by the implementation's bridge-zoo files (`dqn_bridges.py`,
     `findings/ddqn/`) at production load time."""
     @dataclass(frozen=True)
     class MyHypothesis:

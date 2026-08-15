@@ -1,7 +1,7 @@
 """Sweep — paired-intervention exogenous-grid runner.
 
 Substrate-agnostic primitive: takes a `DoEffect` (the typed
-contrast), a substrate-provided `base` Callable (the substrate's
+contrast), a substrate-provided `base` Callable (the implementation's
 theory pre-bound with HPs), an optional `measurables` tuple (for
 eager per-cell scalar persistence), a discrete `grid_points`
 sequence, and a `Runner` that knows how to execute one cell.
@@ -248,7 +248,7 @@ def run_intervention[R: Mapping[str, object]](
     same `grid_point` ARE matched by construction (one cell per
     arm per grid point).
 
-    `base` is the substrate's theory pre-bound with HPs (e.g.
+    `base` is the implementation's theory pre-bound with HPs (e.g.
     `partial(dqn, gamma=0.99, lr=1e-3, total_steps=200_000, ...)`).
     The framework does not introspect or modify it; it just
     threads it through `apply_interventions`. HPs are substrate-
@@ -256,7 +256,7 @@ def run_intervention[R: Mapping[str, object]](
     tuple, per the leaves-as-covariates discipline.
 
     `measurables` is OPTIONAL: pre-registered Measurable instances
-    the substrate's runner persists per cell at sweep time
+    the implementation's runner persists per cell at sweep time
     (typically used to bake outcome reductions or cheap-to-compute
     scalars into RunRow.measurements alongside the leaf
     fingerprint). implementations that compute mediators post-sweep

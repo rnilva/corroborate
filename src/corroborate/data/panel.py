@@ -341,7 +341,7 @@ def _write_manifest_for_panel(
     that names a registered `@measurable`, and write
     `<cache>.hashes.json`. Columns not in the registry are
     silently skipped — matches the runner's `_signatures_for`
-    behaviour. Substrate-author MUST import the substrate's
+    behaviour. Substrate-author MUST import the implementation's
     measurables module before calling Panel.to_cache for the
     manifest to be populated; otherwise the registry is empty
     and the file is `{}`."""
@@ -621,7 +621,7 @@ class Panel:
         - `<cache>.hashes.json` (when `write_manifest=True`): one
           entry per cell column whose name matches a currently-
           registered `@measurable`. Built from the live registry,
-          so the substrate's measurables module MUST be imported
+          so the implementation's measurables module MUST be imported
           before calling `to_cache` for the manifest to be
           meaningful. Columns that don't match a registered name
           are silently skipped (matches the runner's
@@ -629,7 +629,7 @@ class Panel:
 
         Passing `write_manifest=False` unlinks any pre-existing
         manifest without writing a fresh one — use when the
-        Panel was assembled WITHOUT importing the substrate's
+        Panel was assembled WITHOUT importing the implementation's
         measurables module (the manifest would be misleadingly
         empty); the next `corroborate hypothesis <module>` pass
         will rebuild from scratch.

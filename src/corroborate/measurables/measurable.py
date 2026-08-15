@@ -443,7 +443,7 @@ def registry_source_modules() -> tuple[str, ...]:
         if mod and mod != '__main__':
             mods.add(mod)
     # `register_as` aliases carry the factory's module, not the
-    # aliasing substrate's; that module is recorded at alias time.
+    # aliasing implementation's; that module is recorded at alias time.
     mods.update(_EXTRA_SOURCE_MODULES)
     return tuple(sorted(mods))
 

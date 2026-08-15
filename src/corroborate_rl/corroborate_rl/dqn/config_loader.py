@@ -4,7 +4,7 @@ Substrate-coupled: the YAML schema (`name`, `base`, `arms`) is a
 implementation-author convention, not a framework typed contract.
 The framework's hypothesis surface is the `Hypothesis` Protocol
 (`INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`);
-`InterventionConfig` is the intermediate the substrate's
+`InterventionConfig` is the intermediate the implementation's
 `dispatch_sweep` decomposes into a Protocol-conformer + a `base`
 callable.
 
@@ -48,7 +48,7 @@ from corroborate.runner.registry import Registry
 @dataclass(frozen=True, slots=True)
 class InterventionConfig:
     """YAML-loaded intervention configuration. A substrate-coupled
-    intermediate — the substrate's `dispatch_sweep` decomposes it
+    intermediate — the implementation's `dispatch_sweep` decomposes it
     into a Hypothesis Protocol-conformer + a `base` Callable.
 
     Carries:
@@ -65,7 +65,7 @@ class InterventionConfig:
       empty arm) supports the shared-mode "this template is one arm
       in a multi-template sweep" pattern.
     - `required_measurables`: extra `@measurable` names to compute
-      per cell at sweep time, on top of the substrate's default set.
+      per cell at sweep time, on top of the implementation's default set.
       Use case: exploration — pre-compute a measurable's
       distribution before authoring the bridge that consumes it
       (chicken-and-egg: bridges declare what's required at ingest,
@@ -238,7 +238,7 @@ def load_intervention(
 ) -> InterventionConfig:
     """Build an InterventionConfig from a YAML file. The file is
     one intervention per `path`; multi-intervention sweeps are
-    loaded by the substrate's own dispatcher."""
+    loaded by the implementation's own dispatcher."""
     with path.open() as f:
         raw: object = yaml.safe_load(f)
     if not is_str_keyed_mapping(raw):

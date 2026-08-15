@@ -11,7 +11,7 @@ A `QCheckpointBundle` collapses one cell's snapshots into ONE
 msgpack file, mirroring `traces.parquet`'s "one artifact per cell"
 shape. Archive cost drops to 1 PUT per cell.
 
-**Storage shape.** The substrate's `batched_record` already carries
+**Storage shape.** The implementation's `batched_record` already carries
 arrays with the seed axis at position 0:
 
 - `per_burst_*` arrays: shape `(n_seeds, n_bursts, *param_shape)`
@@ -39,7 +39,7 @@ by the per-file layout. Top-level dict:
 **Four-question test** (CLAUDE.md "When to introduce a primitive"):
 
 1. Typed contract — `QCheckpointBundle` field shapes are the
-   substrate's batched-record shapes; pyright checks at every
+   implementation's batched-record shapes; pyright checks at every
    producer / consumer site.
 2. Runtime narrowing — `bundle.per_burst_online is None` narrows
    the consumer's branch (final-only bundles vs full bundles).
@@ -300,7 +300,7 @@ def from_batched_record(
     cell_idx: int,
     seeds: Sequence[int],
 ) -> QCheckpointBundle | None:
-    """Build a bundle from the substrate's batched per-cell record.
+    """Build a bundle from the implementation's batched per-cell record.
 
     The record carries `__q_checkpoint__<arm>__<role>__<param_key>`
     entries with the seed axis at position 0 and (for per_burst) the

@@ -220,7 +220,7 @@ def test_lg_scm_dynamic_partial_is_null_when_mediator_d_separates() -> None:
     result = results[key]
     # Per-burst bound 0.35: 2.5σ on partial Spearman at n=160 with
     # the closed-form (1−ρ_xz²)(1−ρ_yz²) denominator inflation
-    # factor of ≈ 2.5 at the substrate's r_xz ≈ 0.72 / r_yz ≈ 0.82.
+    # factor of ≈ 2.5 at the implementation's r_xz ≈ 0.72 / r_yz ≈ 0.82.
     for b, rho in enumerate(result.rho_partial):
         assert abs(rho) < 0.35, (
             f'burst {b}: partial rho={rho:.4f} should be ≈ 0 when Z '

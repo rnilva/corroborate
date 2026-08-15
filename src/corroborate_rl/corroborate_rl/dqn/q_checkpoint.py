@@ -21,7 +21,7 @@ and language runtimes (any msgpack reader can decode the bytes
 into nested dicts of typed arrays), unlike pickle's
 Python-version-specific bytecode dependency.
 
-**In-record key convention.** The substrate's `train_with_eval`
+**In-record key convention.** The implementation's `train_with_eval`
 returns a flat `dict[str, jax.Array]` record. To pipe stacked
 checkpoint arrays through the same channel without breaking the
 existing trace-column / measurable boundaries, we reserve the
@@ -313,7 +313,7 @@ def load_batched_online_params(
     raises `ValueError` naming the divergence so the operator
     sees it before training starts.
 
-    The substrate's `dispatch_sweep` uses this to materialise
+    The implementation's `dispatch_sweep` uses this to materialise
     the per-cell init-params pytree for "continue from saved
     checkpoint" interventions; the loaded pytree is threaded
     through `grid_point['init_online_params_batched']` to the

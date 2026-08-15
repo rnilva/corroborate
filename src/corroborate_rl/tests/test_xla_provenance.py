@@ -97,7 +97,7 @@ def test_cmdbuf_explicit_disable_then_space() -> None:
 def test_det_true_implicit_disable() -> None:
     """Config (c): det=T, cmdbuf unset → XLA implicitly disables
     cmdbuf (the fix). Prior implementation incorrectly reported True
-    here. This is the substrate's default GPU configuration."""
+    here. This is the implementation's default GPU configuration."""
     with xla_flags('--xla_gpu_deterministic_ops=true'):
         assert _xla_command_buffer_enabled() is False
 

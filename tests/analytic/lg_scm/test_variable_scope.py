@@ -25,7 +25,7 @@ column has a known scope under `stratify_by='env_name'`:
   uniform noise) → `BOTH`
 
 The closed-form scopes are determined entirely by the data
-construction, not by the substrate's structural arrows. A
+construction, not by the implementation's structural arrows. A
 regression in the variance decomposition or threshold logic
 would surface immediately on these mechanical examples.
 

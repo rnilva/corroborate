@@ -1,6 +1,6 @@
 """Env-boundary helper for the rollout phase.
 
-The substrate's rollout body should read like Mnih 2015 Algorithm 1:
+The implementation's rollout body should read like Mnih 2015 Algorithm 1:
 score the current obs, pick an action, step the env, store the
 transition. Pulling truncation extraction + type narrowing into a
 boundary helper keeps `rollout_phase` paper-shaped — the

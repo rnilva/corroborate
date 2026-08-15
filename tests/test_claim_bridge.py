@@ -250,7 +250,7 @@ def test_bridge_carries_typed_intervention() -> None:
     `DoEffect` carries Intervention tuples per arm; arm keys
     derive from `combined_arm_key` (canonical_str) — the
     structural link between the do-contrast and the claim graph
-    the substrate's intervention_arms produce."""
+    the implementation's intervention_arms produce."""
     @claim_bridge(
         source=INTERVENTION,
         target='eval_best_burst_mean',

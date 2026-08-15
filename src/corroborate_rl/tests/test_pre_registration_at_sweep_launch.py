@@ -1,7 +1,7 @@
 """Sweep-launch pre-registration manifest — implementation test.
 
 Lives here (not in the framework's top-level `tests/`) because it
-imports `corroborate_rl.dqn.yaml_sweep.DQNSweep` — the substrate's
+imports `corroborate_rl.dqn.yaml_sweep.DQNSweep` — the implementation's
 typed sweep shape with the new `pre_registered_bridges` field.
 
 Per-spec test 5 from

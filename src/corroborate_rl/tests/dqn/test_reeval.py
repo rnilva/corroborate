@@ -227,7 +227,7 @@ def _write_per_file_cell(
     base: Path, *, cell_idx: int, seeds: tuple[int, ...], n_bursts: int,
 ) -> None:
     """Write a per-file-layout checkpoint cell (one msgpack per
-    (seed, burst)) via the substrate's MLP initializer."""
+    (seed, burst)) via the implementation's MLP initializer."""
     mlp = MLP(hidden=(8, 8))
     for s in seeds:
         for b in range(n_bursts):

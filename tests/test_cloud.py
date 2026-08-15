@@ -557,7 +557,7 @@ def test_purge_deletes_both_parquets_and_nested_sidecars(
     """End-to-end downstream of the recursing-sidecar archive:
     `corroborate purge <sweep_dir>` after archive deletes BOTH
     the parquets AND the nested-sidecar msgpacks via the unified
-    manifest. This is what makes the substrate's
+    manifest. This is what makes the implementation's
     `keep_q_checkpoint_*` opt-in self-cleaning at sweep end."""
     msgpack = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst00.msgpack'
     msgpack.parent.mkdir(parents=True, exist_ok=True)

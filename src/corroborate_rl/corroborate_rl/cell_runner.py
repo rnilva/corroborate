@@ -293,7 +293,7 @@ def run_dqn_arm(
     `ArmResult(cells, graph)` — per-seed `CellResult`s plus the
     `ComputationGraph` captured from the bound claim.
 
-    `claim` is the substrate's theory composed with one arm's
+    `claim` is the implementation's theory composed with one arm's
     Intervention tuple — typically `apply_interventions(base,
     intervention.treatment)` where `base = partial(dqn, **HPs)`.
     The framework's `run_intervention` builds it; implementation

@@ -627,7 +627,7 @@ def arm_leaves(
     candidates, and exogenous columns are decoded.
 
     `exogenous_keys` and `exogenous_prefixes` let the caller
-    override the default RL substrate's exogenous-key set
+    override the default RL implementation's exogenous-key set
     (cf. CLAUDE.md: implementation declares exogenous via
     `Annotated[T, Exogenous]`; framework doesn't hardcode).
     """

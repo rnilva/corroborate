@@ -6,7 +6,7 @@ with
 - frozen-dataclass equality on every config-bundle slot,
 - stable arm keys and `claim_graph_signature`.
 
-`build_per_env` is the substrate's per-env resolver; asserting
+`build_per_env` is the implementation's per-env resolver; asserting
 the contract at its output is the strongest guarantee short of
 running the sweep itself."""
 from __future__ import annotations

@@ -21,7 +21,7 @@ env-side ceiling (e.g. discounted-return saturation on
 short-horizon envs), distinct from genuine policy convergence.
 
 Substrate-coupled to:
-- `eval_best_burst_mean` outcome key (the substrate's canonical
+- `eval_best_burst_mean` outcome key (the implementation's canonical
   best-window-mean reduction).
 - `SOLVE_THRESHOLDS` per-env threshold table.
 - `is_solved` predicate."""

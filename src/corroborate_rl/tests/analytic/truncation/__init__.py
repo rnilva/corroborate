@@ -1,4 +1,4 @@
-"""Analytic tests for the substrate's truncation-aware Bellman
+"""Analytic tests for the implementation's truncation-aware Bellman
 target (Pardo 2018 / Sutton-Barto §6.6 / Gymnasium-API).
 
 Closed-form convergence assertions on a synthetic 1-state cycle env

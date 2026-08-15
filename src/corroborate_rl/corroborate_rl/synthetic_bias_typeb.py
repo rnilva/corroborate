@@ -372,7 +372,7 @@ def make_synthetic_bias_typeb(
     max_steps_in_episode: int = 128,
 ) -> tuple[BiasTypeBEnv, BiasTypeBParams]:
     """Factory matching the lunar_lander pattern. Builds an env
-    instance + its default params; substrate's cell_runner consumes
+    instance + its default params; implementation's cell_runner consumes
     the pair via the gymnax-style API.
 
     For the parametric Type-A/B sweep, register one factory closure

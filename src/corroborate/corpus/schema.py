@@ -223,7 +223,7 @@ class RunRow:
     fixtures and old parquets without the column read as the
     baseline arm. Production write paths populate it from
     `canonical_str(claim)` of the per-arm composition (the
-    substrate's cell runner).
+    implementation's cell runner).
 
     Older parquets may carry a `claim_graph_signature` column
     (legacy program-structural fingerprint); `from_row_dict`

@@ -562,7 +562,7 @@ def _build_wrappers(node: Mapping[str, object]) -> tuple['EnvWrapper', ...]:
     return tuple(out)
 
 
-# Single source of truth for the DQN substrate's registered claim
+# Single source of truth for the DQN implementation's registered claim
 # namespace — the slot-claim modules PLUS the two root programs
 # (`dqn`, `paired_dqn`). Root programs are registered so a sweep's
 # `program:` field resolves through the SAME `reg.fn(name)` path as
@@ -587,7 +587,7 @@ DQN_REGISTRY_MODULES: tuple[str, ...] = (
 
 
 def default_dqn_registry() -> Registry:
-    """Pre-populated Registry covering the DQN substrate's claim
+    """Pre-populated Registry covering the DQN implementation's claim
     namespace. `add_modules` auto-discovers `@claim` free
     functions and frozen-dataclass config bundles (`Replay`,
     `MLP`, `CNN`); authors of one-off sweeps rarely need to

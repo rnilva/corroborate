@@ -1,7 +1,7 @@
 """Compute panel of Measurables on a corpus of cells by streaming
 traces.
 
-The substrate's per-cell trace store carries the per-step series
+The implementation's per-cell trace store carries the per-step series
 each Measurable reads (`mc_return`, `td_error`, `online_q_per_action`,
 state_hash`, etc.). At analysis time we want scalar reductions
 (`mediator.greedy_match_late`, `mediator.q_gap_late`, ...) per

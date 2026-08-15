@@ -18,7 +18,7 @@ Both surface the shared `TimeAggregationStatus` enum
 pathologies as a typed value rather than a runtime gotcha.
 
 Inputs are PER-BURST `List(Float64)` columns on `cells` (a
-`pl.DataFrame`), produced by the substrate's `_per_burst`
+`pl.DataFrame`), produced by the implementation's `_per_burst`
 measurables (see e.g. `bootstrap_gap_magnitude_per_burst` in
 `corroborate_rl.dqn.measurables`). Each cell carries an array of
 length `n_bursts` at the named columns. The primitives align by

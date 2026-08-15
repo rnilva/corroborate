@@ -105,7 +105,7 @@ class PgxEnv(Generic[StateT]):
         # Pgx natively distinguishes terminated (genuine terminal)
         # from truncated (artificial cap, e.g. pgx's
         # `_step_count >= max_termination_steps`). Surface
-        # truncated through `info['truncated']` so the substrate's
+        # truncated through `info['truncated']` so the implementation's
         # `bootstrap` claim continues bootstrap on truncations.
         # See `pgx/core.py:105` for the upstream split.
         info: dict[str, object] = {

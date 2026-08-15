@@ -9,7 +9,7 @@ wrapper publishes via `info['truncated']`:
 - Natural termination before the cap: `done=True`,
   `info['truncated']=False`.
 
-The substrate's `bootstrap` claim consumes this signal — at
+The implementation's `bootstrap` claim consumes this signal — at
 truncation the trajectory continues bootstrap (target = r + γ·v(s')),
 at termination it zeros (target = r). Without the wrapper-published
 flag, capping at e.g. 200 on a 1000-step env would change the

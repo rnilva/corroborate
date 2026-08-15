@@ -268,7 +268,7 @@ def dqn(
     # them by the cell_runner. All seven are `Annotated[..., Exogenous]`
     # — the framework's "we generalize over this, not intervene on
     # it" marker. The endogeneity gate consumes leaf ∪ exogenous as
-    # the substrate's author-primitive set
+    # the implementation's author-primitive set
     # (cf. ENDOGENEITY_TOPOLOGY.md).
     env_name: Annotated[str, Exogenous],
     seed: Annotated[int, Exogenous] = 0,

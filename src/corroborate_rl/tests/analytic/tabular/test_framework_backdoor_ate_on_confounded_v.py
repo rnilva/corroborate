@@ -11,7 +11,7 @@ Setup (the canonical confounded SCM):
 V can be read as the policy-evaluated value of a degenerate
 1-step TabularMDP where the per-cell reward depends on (T, Z):
 the Bellman backup gives `V[s_0] = E[r] = β_T·T + β_Z·Z` exactly
-(the substrate's `policy_evaluation` would return precisely
+(the implementation's `policy_evaluation` would return precisely
 this in the limit of γ → 0). The substrate-grounding here is
 that the closed-form `V` IS the policy evaluation result; the
 framework's backdoor_ate must recover the STRUCTURAL `β_T`

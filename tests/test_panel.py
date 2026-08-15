@@ -827,7 +827,7 @@ def test_to_cache_write_manifest_false_unlinks_stale(
     """`write_manifest=False` unlinks any pre-existing manifest
     (since the promoted cohort's row-set may not match the
     prior signatures) but doesn't write a new one. Use when
-    the substrate's `@measurable` registry isn't loaded in
+    the implementation's `@measurable` registry isn't loaded in
     this process — an empty/inaccurate manifest is worse than
     no manifest, since the runner's drift detection trusts
     what's stamped."""

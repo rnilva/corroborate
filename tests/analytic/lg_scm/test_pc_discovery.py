@@ -1,7 +1,7 @@
 """Closed-form assertions on PC adjacency discovery against the
 LG-SCM's known DAG.
 
-The LG-SCM substrate's structural form is X → Z → Y. The
+The LG-SCM implementation's structural form is X → Z → Y. The
 Markov / faithfulness assumptions yield the closed-form
 conditional-independence pattern:
 

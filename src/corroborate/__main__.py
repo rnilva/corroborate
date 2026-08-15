@@ -243,7 +243,7 @@ def _build_parser(
 
     `argv`, when provided, is threaded into the `sweep` subparser
     so its substrate-CLI peek + extension loading happens at
-    parser-build time (substrate's `add_args(p_run)` registers
+    parser-build time (implementation's `add_args(p_run)` registers
     implementation-specific options before `parser.parse_args(argv)`
     runs). When `argv` is None, the sweep subparser registers
     only framework args; implementation extensions are skipped."""
@@ -431,7 +431,7 @@ def _build_parser(
 
 def main(argv: Sequence[str] | None = None) -> int:
     # Thread argv through the parser so the `sweep` subparser can
-    # peek for `--substrate <name>` and load that substrate's CLI
+    # peek for `--substrate <name>` and load that implementation's CLI
     # extensions BEFORE argparse runs (implementation-specific args
     # then get validated alongside framework args in one parse).
     effective_argv: Sequence[str] = (

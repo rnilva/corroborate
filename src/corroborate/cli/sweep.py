@@ -13,7 +13,7 @@ Currently one subcommand: `corroborate sweep run <yaml>
    `SWEEP_ENTRY_POINTS: SweepEntryPoints` (required) — both read
    from a SINGLE `importlib.import_module(substrate)`.
 3. If `SWEEP_CLI_EXTENSIONS` is present, the framework calls
-   `ext.add_args(p_run)` so the substrate's own argparse options
+   `ext.add_args(p_run)` so the implementation's own argparse options
    (e.g. `--device cpu|gpu` for the JAX-using RL implementation)
    appear in `--help` and get validated alongside framework args.
 4. `parser.parse_args(argv)` produces the full Namespace.
@@ -37,10 +37,10 @@ deliberate lightweight wrapper around the heavy
 
 **Why a substrate-registered entry-point shape, not a framework-
 level abstract `dispatch_sweep`.** The framework can't run a
-substrate's cells (no per-cell-runner Protocol exists at this
+implementation's cells (no per-cell-runner Protocol exists at this
 level — see `IMPLEMENTATION_SPEC_yaml_sweep_lift.md` §1
 non-goals). The CLI here is a thin import + delegate layer; the
-real dispatch logic stays in the substrate's `dispatch_sweep`."""
+real dispatch logic stays in the implementation's `dispatch_sweep`."""
 from __future__ import annotations
 
 import argparse
@@ -98,7 +98,7 @@ def peek_substrate(argv: Sequence[str]) -> str:
     when argv carries no `--substrate` flag.
 
     Used by `add_args` BEFORE `parser.parse_args(argv)` so the
-    substrate's CLI extensions can be loaded + registered onto
+    implementation's CLI extensions can be loaded + registered onto
     the parser in time for argparse to validate substrate-
     specific args alongside framework args."""
     found: str | None = None
@@ -136,13 +136,13 @@ def _import_substrate_module(module_path: str) -> ModuleType:
     typo-hint on ImportError. The hint surfaces the
     framework-side convention so a typo'd `--substrate` flag
     doesn't dead-end at argparse's generic 'unrecognized
-    arguments' (which it would, since the substrate's `--device`
+    arguments' (which it would, since the implementation's `--device`
     etc. never get registered when the lightweight module fails
     to import)."""
     try:
         return importlib.import_module(module_path)
     except ImportError as exc:
-        # Try to import the substrate's parent package so the
+        # Try to import the implementation's parent package so the
         # error message can disambiguate "typo in --substrate"
         # from "substrate package not installed".
         parent_path, _, leaf = module_path.rpartition('.')
@@ -265,7 +265,7 @@ def add_args(
     """Register `sweep run` arguments onto `parser`.
 
     `argv`, when provided, is the post-`corroborate` argv slice
-    used to peek at `--substrate <name>` so the substrate's
+    used to peek at `--substrate <name>` so the implementation's
     `SWEEP_CLI_EXTENSIONS.add_args(p_run)` gets called BEFORE
     `parser.parse_args(argv)` — implementation-specific args then
     appear in `--help` and validate alongside framework args.
@@ -333,7 +333,7 @@ def add_args(
     # Implementation extension discovery + registration. The argv peek
     # is what makes this two-phase parsing work: we resolve which
     # implementation the user picked BEFORE argparse runs so the
-    # substrate's `add_args(p_run)` can append implementation-specific
+    # implementation's `add_args(p_run)` can append implementation-specific
     # args (which argparse then validates as part of the same
     # parse pass).
     if argv is not None:
@@ -347,9 +347,9 @@ def dispatch(args: argparse.Namespace) -> int:
     """Argparse dispatch for `corroborate sweep run`. Returns
     0 on success, non-zero on preflight failure / config error.
 
-    Calls the substrate's `pre_import_setup(args)` BEFORE any
+    Calls the implementation's `pre_import_setup(args)` BEFORE any
     `SweepEntryPoints` Callable is invoked — this is when env
-    vars like `JAX_PLATFORMS` get stamped, so the substrate's
+    vars like `JAX_PLATFORMS` get stamped, so the implementation's
     lazy proxies see the correct config when they fire."""
     m = to_mapping(args)
     sub = require_str(m, 'sweep_subcmd')
@@ -392,9 +392,9 @@ def dispatch(args: argparse.Namespace) -> int:
         _print_dry_run(sweep, configs, substrate_summary)
         return 0
 
-    # `default_registry` / `load_sweep` fire the substrate's
+    # `default_registry` / `load_sweep` fire the implementation's
     # lazy proxies (if any) AFTER pre_import_setup; JAX (or
-    # whatever the substrate's heavy deps need) picks the
+    # whatever the implementation's heavy deps need) picks the
     # platform up on first init.
     reg = ep.default_registry()
     sweep = ep.load_sweep(cfg_path, reg=reg)

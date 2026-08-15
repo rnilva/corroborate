@@ -25,7 +25,7 @@ layers treat default-equal-or-implicit as equivalent, so
 regime-mismatch reports only fire on substantive HP differences.
 
 Domain-agnostic: the helper doesn't know what RL or any implementation
-considers a 'regime'. It just lists columns. The substrate's own
+considers a 'regime'. It just lists columns. The implementation's own
 notion of regime emerges from the report — e.g. RL sweeps will
 typically surface `total_steps` and `eval_every`."""
 from __future__ import annotations

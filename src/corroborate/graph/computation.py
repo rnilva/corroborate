@@ -356,7 +356,7 @@ def measurables_by_attachment(
     reads) and the claim graph (source-path emissions). A
     measurable `reads=('mc_return',)` is attached to whichever
     Claim emitted `mc_return` as a return-value field. The
-    substrate's paper-narrative scope (mechanism / outcome / link)
+    implementation's paper-narrative scope (mechanism / outcome / link)
     is a substrate-side reading on top of this structural
     attachment, not a framework-level type."""
     from corroborate.measurables import get_registered, registered_names
@@ -380,7 +380,7 @@ class ScopeInfo:
 
     `producing_claims` lists the Claims whose return-value paths
     match keys in the measurable's `reads`. Multiple claims may
-    contribute when a measurable reads from a substrate's
+    contribute when a measurable reads from a implementation's
     multi-claim record assembly.
 
     `unmatched_reads` lists reads that no Claim in `g` produces —

@@ -1,8 +1,8 @@
-"""DQN substrate's per-env sweep config.
+"""DQN implementation's per-env sweep config.
 
 `EnvConfig` captures "how to sweep this env" (name + seeds +
 chunk size + env wrappers). `_chunks` splits an EnvConfig's seed
-range into vmap-able chunks; the substrate's `dispatch_sweep`
+range into vmap-able chunks; the implementation's `dispatch_sweep`
 reads it.
 
 Sweep orchestration + persistence + R2 archival is at the

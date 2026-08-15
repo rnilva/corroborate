@@ -146,7 +146,7 @@ def test_panel_classifies_arms_by_bellman_bound() -> None:
     """Independent of the cross-arm Δ: under the FQI envelope, the
     long-sync arm's q_divergence_score is below 1 (within bound)
     AND the short-sync arm with diverged Q is above 1 (deadly-
-    triad). The substrate's bridges use this 1.0 threshold to
+    triad). The implementation's bridges use this 1.0 threshold to
     classify cell regimes — we assert the panel populates
     correctly per cell.
 
