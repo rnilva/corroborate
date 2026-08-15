@@ -18,7 +18,8 @@ SCRIPTS_DIR="papers/g099_mediation/scripts"
 
 for s in 01_mech_per_env 02_outcome_per_env 02b_learning_curves \
          03_static_mediation 03b_per_env_best_mediator \
-         04_aggregation_danger 05_dynamic_mediation; do
+         04_aggregation_danger 05_dynamic_mediation \
+         05b_dynamic_best_mediator 05c_snake_3M_vs_1M_curves; do
     echo "─── ${s} ───"
     uv run python "${SCRIPTS_DIR}/${s}.py"
 done
