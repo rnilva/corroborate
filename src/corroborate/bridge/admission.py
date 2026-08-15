@@ -216,6 +216,73 @@ def resolved_source(
     )
 
 
+def distinct_units(
+    bridge: 'Bridge',
+    cells: Sequence[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
+) -> GateResult | None:
+    """WARN (BLOCK below 4): the bridge's source varies at a COARSER
+    grain than the cell, so the row count overstates n.
+
+    The failure this catches: a source that is a property of some
+    unit above the cell — a bed, a map, an environment — replicated
+    across the cells belonging to that unit. Each replicate then
+    enters the analysis as an independent observation, and the
+    p-value is computed against a sample size the design never had.
+    Observed in the wild on first outside use: a bed-level covariate
+    with 3 distinct values, replicated over 4 instances each, gave
+    rho=+0.913 p=0.0006 from what was really n=3; aggregated to the
+    unit it read rho=+0.500 p=0.667.
+
+    The effective n is the number of DISTINCT source values, not the
+    number of rows. This gate reports it. It does not aggregate for
+    you — the right unit is the author's call, and the fix may be
+    either to aggregate or to declare that the replicates really are
+    independent (e.g. the source is measured per cell, not inherited).
+
+    DoEffect sources don't apply: an arm indicator is meant to repeat
+    across cells, and `pair_by` already carries the design there.
+    Bool sources don't apply either: a per-cell binary indicator has
+    2 distinct values by construction — value cardinality says
+    nothing about the grain it was measured at."""
+    del claim
+    source = bridge.source
+    if isinstance(source, DoEffect) or not cells:
+        return None
+    name = source if isinstance(source, str) else source.name
+    if name not in cells[0]:
+        return None  # `resolved_source` reports this first
+    vals: list[float] = []
+    for c in cells:
+        v = c.get(name)
+        if isinstance(v, bool):
+            continue  # binary indicator: cardinality ≠ grain
+        if isinstance(v, (int, float)) and v == v:  # finite; NaN != NaN
+            vals.append(round(float(v), 12))
+    if not vals:
+        return None
+    n_cells, n_eff = len(vals), len(set(vals))
+    if n_eff >= n_cells:
+        return None  # every cell its own value: nothing to report
+    if n_eff * 2 > n_cells:
+        return None  # mild ties (rank data); not replication
+    block = n_eff < 4
+    return GateResult(
+        gate_name='distinct_units',
+        level=GateLevel.BLOCK if block else GateLevel.WARN,
+        passed=False,
+        message=(
+            f'Bridge {bridge.name!r} sources on {name!r}, which takes only '
+            f'{n_eff} distinct values across {n_cells} cells. The effective '
+            f'sample size is {n_eff}, not {n_cells}: the source varies at a '
+            f'coarser grain than the cell, so the replicates are not '
+            f'independent observations of it. Aggregate to that unit, or '
+            f'confirm the source is measured per cell.'
+        ),
+    )
+
+
 def exogenous_source(
     bridge: 'Bridge',
     cells: Sequence[Mapping[str, object]],
@@ -376,10 +443,13 @@ def no_predicted_direction(
 # `resolved_source` runs first so a typo'd source surfaces with
 # the column-existence message before `exogenous_source`'s
 # leaf-test, which would otherwise classify the absent name as
-# endogenous-by-elimination and silently pass.
+# endogenous-by-elimination and silently pass. `distinct_units`
+# defers to it the same way (returns None on an absent source
+# column) so the typo diagnostic wins over the grain diagnostic.
 AUTO_GATES: tuple[AdmissionGate, ...] = (
     distinct_arms,
     resolved_source,
+    distinct_units,
     exogenous_source,
     exogenous_scope,
     no_predicted_direction,
@@ -392,6 +462,7 @@ __all__ = [
     'GateLevel',
     'GateResult',
     'distinct_arms',
+    'distinct_units',
     'exogenous_scope',
     'exogenous_source',
     'is_endogenous',
