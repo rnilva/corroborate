@@ -1,15 +1,15 @@
 """Contract tests for `BridgeEvaluation.extent_hash`.
 
 The extent_hash is the framework's load-bearing cluster-identity
-primitive: `hash(frozenset(admitted_cell_ids))` computed at
+primitive: `stable_extent_hash(admitted_cell_ids)` computed at
 evaluation time. Two bridges with the same `(source_name,
 target_name, extent_hash)` admitted identical cell-sets on the
 current cache — automatic cluster on the post-evaluated graph.
 
 These tests lock the five invariants the design relies on:
 
-1. extent_hash equals `hash(frozenset(admitted_ids))` literally.
-2. Empty admission → `hash(frozenset())` (the honest-empty-extent
+1. extent_hash equals `stable_extent_hash(admitted_ids)` literally.
+2. Empty admission → `stable_extent_hash(())` (the honest-empty-extent
    invariant; AWAITING-DATA bridges all share this hash).
 3. Stable under row permutation (frozenset semantics).
 4. Bridges sharing a NAMED module-level scope predicate hash
@@ -19,13 +19,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import os
+from pathlib import Path
+import subprocess
+import sys
 
 import polars as pl
 
 from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import claim_bridge, evaluate
 from corroborate.bridge.verdict import Verdict
-from corroborate.graph.causal import Direction, Tier
+from corroborate.graph.causal import Direction, Tier, stable_extent_hash
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,22 +99,22 @@ def _bridge_empty_scope(_noop_analysis: _NoopResult) -> Verdict:
 
 def test_extent_hash_equals_frozenset_admitted_ids() -> None:
     """The load-bearing identity invariant: extent_hash IS
-    `hash(frozenset(admitted_cell_ids))` — not a digest, not
+    `stable_extent_hash(admitted_cell_ids)` — not a digest, not
     a sorted-tuple hash. Frozenset semantics are the contract."""
     cells = _cells('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
     out = evaluate(_bridge_positive_x_a, cells)
-    expected = hash(frozenset({'c0', 'c1'}))
+    expected = stable_extent_hash({'c0', 'c1'})
     assert out.extent_hash == expected
 
 
 def test_extent_hash_empty_when_scope_admits_zero() -> None:
     """Honest-empty-extent invariant: scope admits zero cells →
-    extent_hash is `hash(frozenset())`. AWAITING-DATA bridges
+    extent_hash is `stable_extent_hash(())`. AWAITING-DATA bridges
     cluster naturally under this single hash, reflecting that the
     framework cannot distinguish them on the current cache."""
     cells = _cells('c0', 'c1', 'c2', x=(1.0, 2.0, 3.0))
     out = evaluate(_bridge_empty_scope, cells)
-    assert out.extent_hash == hash(frozenset[str]())
+    assert out.extent_hash == stable_extent_hash(())
     assert out.n_cells_in_scope == 0
 
 
@@ -123,6 +127,35 @@ def test_extent_hash_stable_under_row_permutation() -> None:
     out_forward = evaluate(_bridge_positive_x_a, forward)
     out_reversed = evaluate(_bridge_positive_x_a, reversed_order)
     assert out_forward.extent_hash == out_reversed.extent_hash
+
+
+def test_extent_hash_stable_across_python_hash_seeds() -> None:
+    """Saved reports must compare across fresh interpreter processes.
+
+    In particular, this fails for ``hash(frozenset(str_ids))`` because
+    CPython salts string hashes independently in each process.
+    """
+    root = Path(__file__).parents[1]
+    env = dict(os.environ)
+    env['PYTHONPATH'] = str(root / 'src')
+    command = [
+        sys.executable,
+        '-c',
+        (
+            'from corroborate.graph._extent import stable_extent_hash; '
+            'print(stable_extent_hash({"alpha", "beta"}))'
+        ),
+    ]
+    outputs = []
+    for hash_seed in ('1', '987654'):
+        env['PYTHONHASHSEED'] = hash_seed
+        outputs.append(subprocess.check_output(
+            command,
+            cwd=root,
+            env=env,
+            text=True,
+        ).strip())
+    assert outputs[0] == outputs[1]
 
 
 def test_extent_hash_shared_when_same_named_scope() -> None:
@@ -151,5 +184,5 @@ def test_extent_hash_distinct_when_disjoint_scopes() -> None:
     out_pos = evaluate(_bridge_positive_x_a, cells)
     out_neg = evaluate(_bridge_negative_x, cells)
     assert out_pos.extent_hash != out_neg.extent_hash
-    assert out_pos.extent_hash == hash(frozenset({'c0', 'c1'}))
-    assert out_neg.extent_hash == hash(frozenset({'c2', 'c3'}))
+    assert out_pos.extent_hash == stable_extent_hash({'c0', 'c1'})
+    assert out_neg.extent_hash == stable_extent_hash({'c2', 'c3'})

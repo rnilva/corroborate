@@ -78,6 +78,7 @@ class BridgeReportEntry:
     analysis_results: Mapping[str, Mapping[str, object]]
     warnings: tuple[Mapping[str, object], ...]
     blocked_by: Mapping[str, object] | None
+    refutation_class: str | None = None
     assumption_violations: tuple[str, ...] = ()
     extent_hash: int = 0
 
@@ -395,6 +396,10 @@ def _build_bridge_entry(
         analysis_results=MappingProxyType(analysis_results_dict),
         warnings=tuple(warnings_list),
         blocked_by=blocked_by_dict,
+        refutation_class=(
+            evaluation.refutation_class.value
+            if evaluation.refutation_class is not None else None
+        ),
         assumption_violations=evaluation.assumption_violations,
         extent_hash=evaluation.extent_hash,
     )

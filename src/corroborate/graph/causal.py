@@ -15,7 +15,7 @@ Nodes are measurable / record-key names (strings). Edges are
 - `evidentiary_level: str` — the verdict-derived label
   ('refuted' / 'correlational' / 'causal_one_sided'). Lifecycle
   the bridge is in.
-- `extent_hash` — frozenset-of-admitted-cell-ids hash carried
+- `extent_hash` — stable set-identity digest of admitted cell IDs carried
   from `BridgeEvaluation.extent_hash`. Two edges with the same
   `(source, target, extent_hash)` were evaluated against identical
   cell-sets — the cluster-identity primitive. Authors group their
@@ -62,6 +62,7 @@ from typing import TYPE_CHECKING, Literal, override
 import polars as pl
 
 from corroborate.bridge.verdict import Verdict
+from corroborate.graph._extent import stable_extent_hash
 from corroborate.graph.graph import Edge, Graph
 
 if TYPE_CHECKING:
@@ -187,11 +188,11 @@ class BridgeEdge:
     `feedback` — set on edges that intentionally participate in
     cycles. Graph walks use this to break cycle traversal.
 
-    `extent_hash` — `hash(frozenset(admitted_cell_ids))` carried
+    `extent_hash` — `stable_extent_hash(admitted_cell_ids)` carried
     from `BridgeEvaluation.extent_hash`. Two edges with the same
     `(source, target, extent_hash)` admit identical cell-sets on
     the cache that produced them — the cluster identity primitive.
-    Empty extent → all empties share `hash(frozenset())`, honestly
+    Empty extent → all empties share `stable_extent_hash(())`, honestly
     reflecting "framework cannot distinguish these on this cache."
     Cluster identity is corpus-dependent by design (bridge verdicts
     already are; cluster identity inherits the dependency)."""
@@ -523,7 +524,7 @@ class ClusterVerdict(Enum):
     EMPTY_EXTENT = 'empty_extent'
 
 
-EMPTY_EXTENT_HASH = hash(frozenset[str]())
+EMPTY_EXTENT_HASH = stable_extent_hash(())
 
 _ADMIT_LEVELS: frozenset[EvidentiaryLevel] = frozenset(
     {'correlational', 'causal_one_sided'},
@@ -538,7 +539,7 @@ def clusters_by_extent(
     Multi-edge groups are refutation clusters (≥2 bridges
     corroborating the same edge identity); singletons are
     standalone bridges. Empty-extent edges all share
-    `hash(frozenset())` per the cluster-identity invariant."""
+    `stable_extent_hash(())` per the cluster-identity invariant."""
     buckets: dict[tuple[str, str, int], list[BridgeEdge]] = {}
     for e in g.edges:
         key = (e.source, e.target, e.metadata.extent_hash)
