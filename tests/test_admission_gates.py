@@ -29,6 +29,7 @@ from corroborate.bridge.admission import (
     GateLevel,
     GateResult,
     distinct_arms,
+    distinct_units,
     exogenous_scope,
     exogenous_source,
     is_endogenous,
@@ -372,15 +373,116 @@ def test_no_predicted_direction_silent_when_set() -> None:
 # ---------- AUTO_GATES wiring ----------
 
 
-def test_auto_gates_tuple_contains_all_five() -> None:
+def test_auto_gates_tuple_contains_all_six() -> None:
     """Sanity: the framework's auto-gate list is exactly the
-    five functions shipped post-Phase-A0 (resolved_source added
+    six functions shipped post-Phase-A0 (resolved_source added
     so typo'd source strings surface before the endogeneity
-    test classifies them as endogenous-by-elimination)."""
+    test classifies them as endogenous-by-elimination;
+    distinct_units added so a source that varies at a coarser
+    grain than the cell reports its effective n instead of
+    letting the row count stand in for it)."""
     assert AUTO_GATES == (
-        distinct_arms, resolved_source, exogenous_source,
-        exogenous_scope, no_predicted_direction,
+        distinct_arms, resolved_source, distinct_units,
+        exogenous_source, exogenous_scope, no_predicted_direction,
     )
+
+
+# ---------- distinct_units (BLOCK below 4 / WARN) ----------
+
+
+def _units_bridge() -> Bridge:
+    """Minimal string-sourced bridge for the distinct_units tests."""
+    return Bridge(
+        name='bed_prop_tracks_outcome',
+        source='bed_prop',
+        target='outcome',
+        tier=Tier.ASSOCIATIONAL,
+        holds_when=lambda partial_spearman: Verdict.HELD,
+    )
+
+
+def test_distinct_units_blocks_replicated_source() -> None:
+    """A bed-level source replicated across per-instance cells has
+    effective n = distinct values, not rows. Below 4 it BLOCKs."""
+    cells: list[Mapping[str, object]] = [
+        {'arm_key': 'a', 'env_name': 'e', 'seed': 0, 'instance': i,
+         'bed_prop': p, 'outcome': 20.0 + i}
+        for p in (0.38, 0.62, 0.74) for i in range(4)
+    ]
+    res = distinct_units(_units_bridge(), cells)
+    assert res is not None and not res.passed
+    assert res.level is GateLevel.BLOCK
+    assert '3 distinct values across 12 cells' in res.message
+
+
+def test_distinct_units_silent_when_source_is_per_cell() -> None:
+    """Every cell carrying its own source value is the ordinary
+    case and must not fire."""
+    cells: list[Mapping[str, object]] = [
+        {'arm_key': 'a', 'env_name': 'e', 'seed': s, 'instance': i,
+         'bed_prop': 0.40 + 0.01 * (s * 4 + i), 'outcome': 20.0 + s}
+        for s in range(3) for i in range(4)
+    ]
+    assert distinct_units(_units_bridge(), cells) is None
+
+
+def test_distinct_units_warns_above_block_threshold() -> None:
+    """8 distinct values over 24 cells: replication, but enough
+    units to estimate — WARN, so the bridge still runs."""
+    cells: list[Mapping[str, object]] = [
+        {'arm_key': 'a', 'env_name': 'e', 'seed': s, 'instance': i,
+         'bed_prop': 0.10 * s, 'outcome': 20.0 + i}
+        for s in range(8) for i in range(3)
+    ]
+    res = distinct_units(_units_bridge(), cells)
+    assert res is not None and res.level is GateLevel.WARN
+    assert '8 distinct values across 24 cells' in res.message
+
+
+def test_distinct_units_silent_on_mild_ties() -> None:
+    """Rank data ties a few cells without implying a coarser unit:
+    with n_eff > n_cells/2 (here 7 of 12) the gate must not
+    conflate ties with replication."""
+    values = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.1, 0.2, 0.3, 0.4, 0.5)
+    cells: list[Mapping[str, object]] = [
+        {'arm_key': 'a', 'env_name': 'e', 'seed': i,
+         'bed_prop': v, 'outcome': 20.0 + i}
+        for i, v in enumerate(values)
+    ]
+    assert distinct_units(_units_bridge(), cells) is None
+
+
+def test_distinct_units_silent_on_do_effect_source() -> None:
+    """An arm indicator is meant to repeat across cells; the
+    contrast design carries its own n accounting. Gate doesn't
+    apply to DoEffect sources."""
+    bridge = Bridge(
+        name='contrast',
+        source=_INTERVENTION,
+        target='eval_best_burst_mean',
+        tier=Tier.INTERVENTIONAL,
+        holds_when=lambda paired_g: Verdict.HELD,
+    )
+    assert distinct_units(bridge, _synthetic_cells()) is None
+
+
+def test_distinct_units_silent_on_bool_source() -> None:
+    """A per-cell binary indicator has 2 distinct values by
+    construction — value cardinality says nothing about the grain
+    it was measured at, so the gate must not fire."""
+    bridge = Bridge(
+        name='diverged_tracks_outcome',
+        source='diverged',
+        target='outcome',
+        tier=Tier.ASSOCIATIONAL,
+        holds_when=lambda partial_spearman: Verdict.HELD,
+    )
+    cells: list[Mapping[str, object]] = [
+        {'arm_key': 'a', 'env_name': 'e', 'seed': i,
+         'diverged': i % 2 == 0, 'outcome': 20.0 + i}
+        for i in range(12)
+    ]
+    assert distinct_units(bridge, cells) is None
 
 
 # ---------- evaluate() integration: BLOCK short-circuits ----------
