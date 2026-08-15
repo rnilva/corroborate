@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }
 authors = [
-    { name = "Jean Seong Bjorn Choe", email = "rnilva849@gmail.com" },
+    { name = "rnilva", email = "rnilva849@gmail.com" },
 ]
 dependencies = [
     "polars>=1.0",
