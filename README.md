@@ -52,7 +52,7 @@ uv run pytest tests/
 |---|---|
 | `paper.pdf` | the workshop paper |
 | `src/corroborate/` | the framework (typed claims → bridges → causal-graph verdicts) |
-| `src/corroborate_rl/` | the DQN/JAX substrate the intervention re-executes |
+| `src/corroborate_rl/` | the DQN/JAX implementation under study (the intervention re-executes it) |
 | `experiments/findings/` | the hypothesis packages (bridges + findings), incl. `hasselt_clean/` — the worked DDQN chain |
 | `experiments/data/cache/` | shipped per-hypothesis panels (the paper's data) |
 | `experiments/data/*/_remote.json` | provenance manifests for the raw cloud-archived corpora (not needed to reproduce) |
