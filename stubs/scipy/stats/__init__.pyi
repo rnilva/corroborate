@@ -94,3 +94,21 @@ class _T:
 
 
 t: _T
+
+
+class _NCT:
+    """Frozen noncentral-t distribution — `scipy.stats.nct` exposed
+    at module scope. Corroborate's call sites pass scalar x with
+    scalar df and noncentrality."""
+    def cdf(self, x: float, /, df: float | int, nc: float) -> float: ...
+    def sf(self, x: float, /, df: float | int, nc: float) -> float: ...
+
+
+nct: _NCT
+
+
+def skew(
+    a: _ArrayLikeFloat, /,
+    axis: int = ...,
+    bias: bool = ...,
+) -> float: ...

@@ -350,9 +350,9 @@ def _paired_g_assumption_violations(
         return tuple(violations)
     m3 = float((centered ** 3).mean())
     m4 = float((centered ** 4).mean())
-    # Fisher-Pearson sample skewness with bias correction (G_1).
+    # Adjusted Fisher-Pearson sample skewness with bias correction (G_1).
     g1 = m3 / (m2 ** 1.5)
-    skew_d = g1 * (n * n) / ((n - 1) * (n - 2))
+    skew_d = math.sqrt(n * (n - 1)) / (n - 2) * g1
     # Bias-corrected sample excess kurtosis (G_2).
     g2 = m4 / (m2 ** 2) - 3.0
     kurt_d = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * g2 + 6.0)

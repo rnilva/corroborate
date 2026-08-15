@@ -25,6 +25,9 @@ from corroborate.analyses.paired.mundlak_paired_g_per_burst import (  # noqa: F4
 from corroborate.analyses.paired.paired_comparison import (  # noqa: F401
     paired_comparison as _paired_comparison,  # pyright: ignore[reportUnusedImport]
 )
+from corroborate.analyses.paired.paired_directional import (  # noqa: F401
+    paired_directional as _paired_directional,  # pyright: ignore[reportUnusedImport]
+)
 from corroborate.analyses.paired.paired_g import (  # noqa: F401
     paired_g as _paired_g,  # pyright: ignore[reportUnusedImport]
 )
