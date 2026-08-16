@@ -609,3 +609,63 @@ def test_analysis_wrapper_is_directly_callable() -> None:
     assert _scaled_mean(cells, scale=10.0) == 25.0
     with pytest.raises(TypeError):
         _scaled_mean(cells, not_a_param=1)
+
+
+def test_analysis_call_dispatches_dataframe_by_signature() -> None:
+    """`Analysis.__call__` input dispatch: a `pl.DataFrame` passes
+    through untouched when the fn's cells parameter admits one
+    (the DataFrame-native fast path), and is materialised to
+    per-row mappings exactly once for iterable-only fns. The
+    passthrough branch is the regression case: unconditional
+    dicts-conversion crashed the DataFrame-native
+    dynamic-mediation family."""
+    from collections.abc import Iterable
+
+    from corroborate.bridge.analysis import analysis
+
+    @analysis
+    def _df_native_probe(cells: pl.DataFrame) -> tuple[str, int]:
+        assert isinstance(cells, pl.DataFrame)
+        return ('dataframe', cells.height)
+
+    @analysis
+    def _iterable_probe(
+        cells: Iterable[Mapping[str, object]],
+    ) -> tuple[str, int]:
+        rows = list(cells)
+        assert not isinstance(cells, pl.DataFrame)
+        return ('rows', len(rows))
+
+    df = pl.DataFrame({'a': [1, 2, 3]})
+    assert _df_native_probe.accepts_dataframe is True
+    assert _iterable_probe.accepts_dataframe is False
+    assert _df_native_probe(df) == ('dataframe', 3)
+    assert _iterable_probe(df) == ('rows', 3)
+    assert _iterable_probe([{'a': 1}]) == ('rows', 1)
+
+
+def test_dataframe_native_registered_analyses_detected() -> None:
+    """The signature-derived `accepts_dataframe` flag on the real
+    registered instances: the three DataFrame-native analyses and
+    a dual-input analysis carry it; the iterable-only paired
+    family does not. Guards the exploration contract that
+    `panel.cells` works against every registered analysis."""
+    from corroborate.analyses.diagnostic.mediator_leak_adjudication import (
+        mediator_leak_adjudication,
+    )
+    from corroborate.analyses.dynamic_mediation.partial_spearman import (
+        dynamic_partial_spearman,
+    )
+    from corroborate.analyses.dynamic_mediation.pc_adjacency import (
+        dynamic_pc_adjacency,
+    )
+    from corroborate.analyses.paired.paired_g import paired_g
+    from corroborate.analyses.spearman.partial_spearman import (
+        partial_spearman,
+    )
+
+    assert dynamic_partial_spearman.accepts_dataframe is True
+    assert dynamic_pc_adjacency.accepts_dataframe is True
+    assert mediator_leak_adjudication.accepts_dataframe is True
+    assert partial_spearman.accepts_dataframe is True
+    assert paired_g.accepts_dataframe is False

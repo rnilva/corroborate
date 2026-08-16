@@ -547,6 +547,25 @@ def test_scope_field_colliding_with_derived_column_fails(
     assert caught.value.checks[-1].code == 'row_key_collision'
 
 
+def test_producer_field_colliding_with_trajectory_column_fails(
+    tmp_path: Path,
+) -> None:
+    """The `<outcome>_mean_at_<checkpoint>` trajectory columns
+    widen the adapter-reserved namespace: a producer field with
+    that exact name fails closed (same posture as `return_mean`),
+    rather than either side being silently overwritten. Pins the
+    admission-behavior change introduced with the trajectory
+    derivation."""
+    _make_bundle(
+        tmp_path,
+        scope={'env_name': 'MountainCar-v0', 'return_mean_at_10': 1.0},
+    )
+
+    with pytest.raises(BundleValidationError) as caught:
+        adapt_study(tmp_path)
+    assert caught.value.checks[-1].code == 'row_key_collision'
+
+
 def test_resealed_protocol_execution_mismatch_fails(tmp_path: Path) -> None:
     _make_bundle(tmp_path, protocol_pair_keys=(8,))
 

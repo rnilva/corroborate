@@ -50,7 +50,10 @@ from typing import cast, overload
 
 import polars as pl
 
-from corroborate._internals.introspection import get_param_default
+from corroborate._internals.introspection import (
+    get_param_annotation,
+    get_param_default,
+)
 from corroborate._internals.polars import to_dicts
 from corroborate._internals.registry import Registry
 
@@ -69,10 +72,16 @@ class Analysis[R: Mapping[str, object], O]:
     with bridge measurables' transitive_reads so the trace-column
     join + the no-drop set know what to bring in. Scalar fields
     already present in `runs.parquet` (`env_name`, `seed`, …) do
-    NOT need to be declared — they're loaded for free."""
+    NOT need to be declared — they're loaded for free.
+
+    `accepts_dataframe` records whether `fn`'s cells parameter
+    admits a `pl.DataFrame` — detected once at registration from
+    the declared signature, consumed by `__call__`'s input
+    dispatch. Never set by authors; the signature is the truth."""
     fn: Callable[..., O]
     name: str
     reads: tuple[str, ...] = field(default=())
+    accepts_dataframe: bool = field(default=False)
 
     def __call__(
         self, cells: Iterable[R] | pl.DataFrame, /, **params: object,
@@ -85,16 +94,45 @@ class Analysis[R: Mapping[str, object], O]:
         otherwise fail with ``TypeError: 'Analysis' object is not
         callable``, which sends the reader looking for `.fn`.
 
-        A `pl.DataFrame` (typically `panel.cells`) is materialised
-        to per-row mappings once, here — the exploration surface's
-        native shape works against every registered analysis
-        regardless of whether the analysis's own signature accepts
-        a DataFrame. Iterable input delegates untouched, keeping
-        one code path; unlike `run_for`, kwargs are passed through
-        unfiltered — the caller owns them."""
-        if isinstance(cells, pl.DataFrame):
+        A `pl.DataFrame` (typically `panel.cells`) works against
+        every registered analysis: analyses whose own signature
+        admits a DataFrame receive it untouched (their canonical
+        fast path — no conversion round-trip), and iterable-only
+        analyses get it materialised to per-row mappings once,
+        here. Iterable input always delegates untouched; unlike
+        `run_for`, kwargs are passed through unfiltered — the
+        caller owns them."""
+        if isinstance(cells, pl.DataFrame) and not self.accepts_dataframe:
             return self.fn(to_dicts(cells), **params)
         return self.fn(cells, **params)
+
+
+def _first_param_accepts_dataframe(fn: Callable[..., object]) -> bool:
+    """Registration-time detection of `fn`'s cells shape.
+
+    Under PEP 563 (every analysis module uses `from __future__
+    import annotations`) the annotation is a string; textual
+    containment of ``'DataFrame'`` is the deliberate check —
+    resolving names instead (`typing.get_type_hints`) would
+    evaluate EVERY parameter's annotation and raise on any
+    `TYPE_CHECKING`-only name anywhere in the signature. The
+    failure modes are asymmetric in the right direction: a false
+    positive hands the fn the DataFrame it would have received
+    before `__call__` normalised at all (the pre-existing status
+    quo), never a new shape."""
+    try:
+        sig = inspect.signature(fn)
+    except (ValueError, TypeError):
+        return False
+    for param in sig.parameters.values():
+        # First parameter only — the cells argument by contract.
+        annotation = get_param_annotation(param)
+        if annotation is inspect.Parameter.empty:
+            return False
+        # `str()` covers both PEP 563 string annotations and live
+        # class objects (whose repr names the class).
+        return 'DataFrame' in str(annotation)
+    return False
 
 
 _REGISTRY: Registry[Analysis[Mapping[str, object], object]] = Registry()
@@ -159,7 +197,12 @@ def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
 
     def _build(fn_inner: Callable[..., O]) -> Analysis[R, O]:
         name = fn_inner.__name__
-        wrapper: Analysis[R, O] = Analysis(fn=fn_inner, name=name, reads=reads)
+        wrapper: Analysis[R, O] = Analysis(
+            fn=fn_inner,
+            name=name,
+            reads=reads,
+            accepts_dataframe=_first_param_accepts_dataframe(fn_inner),
+        )
         # `Registry[Analysis[Mapping[str, object], object]]` accepts
         # this generic-parameter narrowing at the storage boundary;
         # the `cast` lifts `Analysis[R, O]` through Python's

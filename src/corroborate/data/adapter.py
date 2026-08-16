@@ -64,6 +64,15 @@ and the evaluation trajectory as one scalar column per checkpoint
 (``<outcome>_mean_at_<checkpoint>``) — the panel-side surface for
 exploring how the contrast evolves over training rather than only
 where it ended.
+
+The derived names — ``<outcome>_mean``, ``<outcome>_auc``,
+``<outcome>_mean_at_<checkpoint>`` — are adapter-reserved: a
+producer-declared scope field or run measurement colliding with
+one fails closed (``row_key_collision``) rather than being
+silently overwritten. A bundle sealed before the trajectory
+columns existed that used such a name for its own measurement is
+therefore rejected by this adapter version; rename the producer
+field and re-seal.
 """
 from __future__ import annotations
 
