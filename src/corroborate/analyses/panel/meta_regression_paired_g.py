@@ -19,6 +19,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses.paired.paired_g import per_env_paired_g_panel
 from corroborate.bridge.analysis import analysis
 from corroborate.stats import (
@@ -29,7 +32,7 @@ from corroborate.stats.meta_regression import Pool
 
 @analysis
 def meta_regression_paired_g(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -56,6 +59,7 @@ def meta_regression_paired_g(
     via tuple-search naturally fall through to POW_INSUF. The
     underlying `meta_regress_panel` still fail-loud raises for
     direct callers that haven't opted into this graceful shape."""
+    cells = as_rows(cells)
     panel = per_env_paired_g_panel(
         list(cells),
         treatment_arm=treatment_arm,

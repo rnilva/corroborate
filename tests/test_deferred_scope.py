@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping
 
 import polars as pl
 
+from corroborate._internals.polars import as_rows
 from corroborate.analyses.panel.stratum_panel import StratumPanel
 from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import claim_bridge, evaluate
@@ -41,19 +42,19 @@ def _empty_panel(
 
 
 def test_static_scope_is_applied_before_panel_and_in_final_expr() -> None:
-    """Iterable-only panel analyses are structurally accepted.
-
-    The static predicate shapes the panel's input first, and is
+    """The static predicate shapes the panel's input first, and is
     still ANDed into the returned expression so an excluded row in
-    a surviving stratum cannot leak back into evaluation.
+    a surviving stratum cannot leak back into evaluation. The probe
+    follows the canonical-union convention: it accepts either cells
+    shape and normalises at its own entry.
     """
     panel_inputs: list[list[Mapping[str, object]]] = []
 
     @analysis
-    def _iterable_only_panel(
-        cells: Iterable[Mapping[str, object]],
+    def _row_consuming_panel(
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
     ) -> StratumPanel:
-        rows = list(cells)
+        rows = list(as_rows(cells))
         panel_inputs.append(rows)
         return _empty_panel(rows)
 
@@ -63,7 +64,7 @@ def test_static_scope_is_applied_before_panel_and_in_final_expr() -> None:
         {'id': 3, 'env_name': 'B', 'eligible': False},
     ]
     scope = scope_from_panel(
-        panel_analysis=_iterable_only_panel,
+        panel_analysis=_row_consuming_panel,
         panel_kwargs={},
         keep=lambda _panel, _index: True,
         static_scope=pl.col('eligible'),
@@ -76,12 +77,18 @@ def test_static_scope_is_applied_before_panel_and_in_final_expr() -> None:
     assert admitted['id'].to_list() == [1]
 
 
-def test_dataframe_native_panel_receives_dataframe() -> None:
+def test_panel_analysis_receives_prefiltered_dataframe() -> None:
+    """`resolve` hands the panel analysis the pre-filtered cells as
+    a DataFrame directly — one path, no per-shape dispatch; the
+    analysis's own entry normalisation owns any conversion."""
     seen: list[type[object]] = []
 
     @analysis
-    def _dataframe_panel(cells: pl.DataFrame) -> StratumPanel:
+    def _dataframe_panel(
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    ) -> StratumPanel:
         seen.append(type(cells))
+        assert isinstance(cells, pl.DataFrame)
         return _empty_panel(cells.to_dicts())
 
     scope = scope_from_panel(
@@ -98,9 +105,9 @@ def test_missing_static_column_is_null_padded_before_panel() -> None:
 
     @analysis
     def _missing_column_panel(
-        cells: Iterable[Mapping[str, object]],
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
     ) -> StratumPanel:
-        rows = list(cells)
+        rows = list(as_rows(cells))
         panel_inputs.append(rows)
         return _empty_panel(rows)
 
@@ -123,9 +130,9 @@ def test_generator_cells_survive_deferred_scope_and_analysis() -> None:
 
     @analysis
     def _all_strata_panel(
-        cells: Iterable[Mapping[str, object]],
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
     ) -> StratumPanel:
-        return _empty_panel(cells)
+        return _empty_panel(as_rows(cells))
 
     scope = scope_from_panel(
         panel_analysis=_all_strata_panel,

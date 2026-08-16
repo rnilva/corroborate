@@ -1,10 +1,11 @@
 """Analyses — the framework's typed statistical primitives.
 
-An *analysis* takes a corpus (iterable of records) plus
-parameters and produces a typed result. Examples: paired-g
-across seeds, meta-regression coefficients, DoWhy backdoor ATE.
-Each analysis is reusable across many bridges; bridges consume
-analysis results by typed parameter (pytest-fixture style).
+An *analysis* takes a corpus (a polars DataFrame or iterable of
+records) plus parameters and produces a typed result. Examples:
+paired-g across seeds, meta-regression coefficients, DoWhy
+backdoor ATE. Each analysis is reusable across many bridges;
+bridges consume analysis results by typed parameter
+(pytest-fixture style).
 
 The bridge file authors *claims* (declarations of edges +
 thresholds); the analyses are the framework-supplied fixtures
@@ -16,16 +17,14 @@ the claim's `holds_when` body consumes:
         treatment_arm, baseline_arm, pair_by, source, ...,
     ) -> PairedGResult: ...
 
-    @claim_bridge
+    @claim_bridge(
+        source='<intervention_parameter>',
+        target='<outcome_metric>',
+        direction=Direction.DIRECT,
+        tier=Tier.ASSOCIATIONAL,
+    )
     def treatment_helps_outcome(
         paired_g: PairedGResult,
-        *,
-        source: str = '<outcome_metric>',
-        target: str = '<outcome_metric>',
-        direction: Direction = Direction.DIRECT,
-        tier: Tier = Tier.ASSOCIATIONAL,
-        treatment_arm: str = 'treatment',
-        baseline_arm: str = 'baseline',
     ) -> Verdict:
         if paired_g.g > 0.3 and paired_g.p_value < 0.05:
             return Verdict.HELD
@@ -40,6 +39,16 @@ runs it on the cells, and injects the result.
 Analyses are registered globally by `fn.__name__`. The naming is
 the consumption protocol: a bridge's parameter name must match a
 registered analysis name.
+
+**Canonical cells input.** Every analysis accepts
+`pl.DataFrame | Iterable[Mapping[str, object]]` and normalises
+once at its own entry — `as_rows` for row-consuming bodies,
+`data.kernel.cells_to_dataframe` for DataFrame-consuming bodies
+(the two directions of the conversion boundary). The wrapper
+therefore adds no hidden conversion: `__call__` is pure typed
+delegation, and `panel.cells` works against the whole registry
+by convention rather than by dispatch. The convention is pinned
+by a registry-wide test, not enforced by runtime reflection.
 
 `Analysis[C, O, **P]` preserves the wrapped fn's full surface —
 cells shape `C`, result `O`, keyword surface `P` — through the
@@ -60,27 +69,11 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from types import UnionType
-from typing import (
-    Annotated,
-    Concatenate,
-    Protocol,
-    TypeAliasType,
-    Union,
-    cast,
-    get_origin,
-    overload,
-)
+from typing import Concatenate, Protocol, cast, overload
 
 import polars as pl
 
-from corroborate._internals.introspection import (
-    get_attr_obj,
-    get_param_annotation,
-    get_param_default,
-    get_typing_args,
-)
-from corroborate._internals.polars import to_dicts
+from corroborate._internals.introspection import get_param_default
 from corroborate._internals.registry import Registry
 
 
@@ -97,9 +90,8 @@ class Analysis[
     captures the remaining (keyword) parameters, and `O` is the
     typed result the bridge `holds_when` consumes. A direct call
     through `__call__` is therefore checked against the analysis's
-    real signature — a mistyped kwarg, or an iterable handed to a
-    DataFrame-native analysis, is a pyright error at the call
-    site, not a runtime TypeError. `name` is the lookup key
+    real signature — a mistyped kwarg is a pyright error at the
+    call site, not a runtime TypeError. `name` is the lookup key
     (= `fn.__name__`).
 
     `reads` declares record-key columns the analysis touches off
@@ -108,36 +100,19 @@ class Analysis[
     with bridge measurables' transitive_reads so the trace-column
     join + the no-drop set know what to bring in. Scalar fields
     already present in `runs.parquet` (`env_name`, `seed`, …) do
-    NOT need to be declared — they're loaded for free.
-
-    `accepts_dataframe` records whether `fn`'s cells parameter
-    admits a `pl.DataFrame` — detected once at registration from
-    the declared signature, consumed by `__call__`'s runtime input
-    dispatch (static types erase, so the conversion decision needs
-    a runtime witness). Never set by authors; the signature is the
-    truth."""
+    NOT need to be declared — they're loaded for free."""
     # `Callable[Concatenate[C, P], O]` would make the first
     # parameter positional-only even when the wrapped function
     # declares a normal positional-or-keyword `cells` parameter.
     # Keep `.fn` gradual; `__call__` below is the surface whose
-    # remaining arguments are preserved precisely by `P`.
+    # arguments are preserved precisely by `C` and `P`.
     fn: Callable[..., O]
     name: str
     reads: tuple[str, ...] = field(default=())
-    accepts_dataframe: bool = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Cache the cells-shape dispatch witness for every
-        construction path, including direct `Analysis(...)` use."""
-        object.__setattr__(
-            self,
-            'accepts_dataframe',
-            _first_param_accepts_dataframe(self.fn),
-        )
 
     def __call__(
         self,
-        cells: C | pl.DataFrame,
+        cells: C,
         /,
         *args: P.args,
         **kwargs: P.kwargs,
@@ -150,115 +125,13 @@ class Analysis[
         otherwise fail with ``TypeError: 'Analysis' object is not
         callable``, which sends the reader looking for `.fn`.
 
-        A `pl.DataFrame` (typically `panel.cells`) works against
-        every registered analysis: analyses whose own signature
-        admits a DataFrame receive it untouched (their canonical
-        fast path — no conversion round-trip), and iterable-only
-        analyses get it materialised to per-row mappings once,
-        here. Iterable input always delegates untouched. Unlike
+        Pure delegation: every analysis accepts the canonical
+        cells union and normalises at its own entry (see the
+        module docstring), so the wrapper performs no conversion
+        and `panel.cells` flows through untouched. Unlike
         `run_for`, kwargs are passed through unfiltered — and,
         via `P`, statically checked."""
-        if isinstance(cells, pl.DataFrame) and not self.accepts_dataframe:
-            return self.fn(to_dicts(cells), *args, **kwargs)
         return self.fn(cells, *args, **kwargs)
-
-
-def _eval_annotation_name(
-    annotation: str,
-    fn: Callable[..., object],
-) -> object | None:
-    """Resolve one postponed annotation in `fn`'s namespace.
-
-    Only the cells annotation is evaluated. This intentionally
-    avoids `get_type_hints(fn)`, which would also resolve unrelated
-    parameter/return annotations and can fail on a
-    `TYPE_CHECKING`-only name elsewhere in the signature.
-    """
-    try:
-        globals_obj = get_attr_obj(fn, '__globals__')
-    except AttributeError:
-        return None
-    if not isinstance(globals_obj, dict):
-        return None
-    try:
-        resolved: object = eval(  # pyright: ignore[reportAny]
-            annotation, globals_obj,
-        )
-    except (AttributeError, NameError, SyntaxError, TypeError):
-        return None
-    return resolved
-
-
-def _annotation_accepts_dataframe(
-    annotation: object,
-    fn: Callable[..., object],
-    seen: set[int | str],
-) -> bool:
-    """Whether `annotation` admits a DataFrame at its top level.
-
-    Aliases, `Annotated`, and union arms are transparent. Other
-    generic arguments are deliberately opaque: for example,
-    `Iterable[DataFrameRow]` describes the row element type and
-    does *not* mean the cells object itself accepts a DataFrame.
-    """
-    if isinstance(annotation, str):
-        marker: int | str = f'str:{annotation}'
-        if marker in seen:
-            return False
-        seen.add(marker)
-        resolved = _eval_annotation_name(annotation, fn)
-        if resolved is None:
-            return False
-        return _annotation_accepts_dataframe(resolved, fn, seen)
-
-    marker = id(annotation)
-    if marker in seen:
-        return False
-    seen.add(marker)
-
-    if isinstance(annotation, TypeAliasType):
-        value = get_attr_obj(annotation, '__value__')
-        return _annotation_accepts_dataframe(value, fn, seen)
-
-    if isinstance(annotation, type):
-        try:
-            return issubclass(annotation, pl.DataFrame)
-        except TypeError:
-            return False
-
-    origin = get_origin(annotation)
-    args = get_typing_args(annotation)
-    if origin is Annotated:
-        return bool(args) and _annotation_accepts_dataframe(
-            args[0], fn, seen,
-        )
-    if origin is Union or origin is UnionType:
-        return any(
-            _annotation_accepts_dataframe(arg, fn, seen)
-            for arg in args
-        )
-    return False
-
-
-def _first_param_accepts_dataframe(fn: Callable[..., object]) -> bool:
-    """Registration-time detection of `fn`'s cells shape.
-
-    Resolves only that first annotation in the function's own
-    globals. Top-level aliases/unions are supported without the
-    false positives produced by name substring matching or by
-    recursively treating generic element types as accepted input
-    containers."""
-    try:
-        sig = inspect.signature(fn)
-    except (ValueError, TypeError):
-        return False
-    for param in sig.parameters.values():
-        # First parameter only — the cells argument by contract.
-        annotation = get_param_annotation(param)
-        if annotation is inspect.Parameter.empty:
-            return False
-        return _annotation_accepts_dataframe(annotation, fn, set())
-    return False
 
 
 type _StoredAnalysis = Analysis[object, object, ...]
@@ -315,12 +188,15 @@ def analysis(
     `fn.__name__`; rename the function to rename the analysis.
 
     The wrapped function's first positional arg is the corpus —
-    `C` in the wrapper's type. The remaining parameters are
-    captured as `P` (PEP 612 `Concatenate`) and the result as `O`,
-    so a direct exploration call like `paired_g(panel.cells,
-    source=...)` is checked against the analysis's real signature.
-    The bridge path is unaffected: `run_for` supplies kwargs
-    dynamically through the registry's erased view.
+    `C` in the wrapper's type, and by convention the canonical
+    union `pl.DataFrame | Iterable[Mapping[str, object]]`,
+    normalised in the fn's own first statement. The remaining
+    parameters are captured as `P` (PEP 612 `Concatenate`) and the
+    result as `O`, so a direct exploration call like
+    `paired_g(panel.cells, source=...)` is checked against the
+    analysis's real signature. The bridge path is unaffected:
+    `run_for` supplies kwargs dynamically through the registry's
+    erased view.
 
     Two decorator forms:
 

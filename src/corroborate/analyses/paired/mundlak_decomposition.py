@@ -41,6 +41,9 @@ import numpy as np
 import numpy.typing as npt
 import scipy.stats as ss
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.bridge.analysis import analysis
 
 
@@ -92,7 +95,7 @@ class MundlakResult:
 
 @analysis
 def mundlak_decomposition(
-    panel: Iterable[Mapping[str, object]],
+    panel: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     stratum_key: str = 'stratum_id',
     x_key: str = 'x',
@@ -123,6 +126,7 @@ def mundlak_decomposition(
     panel-data target where the predictor has both env-level and
     within-env variation. Forces an explicit choice of which
     level is being claimed about."""
+    panel = as_rows(panel)
     panel_list = [dict(p) for p in panel]
     if not panel_list:
         raise ValueError('panel must contain at least one observation')

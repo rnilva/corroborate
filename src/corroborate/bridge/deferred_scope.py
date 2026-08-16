@@ -31,25 +31,21 @@ from typing import Protocol
 import polars as pl
 
 from corroborate.analyses.panel.stratum_panel import StratumPanel
-from corroborate._internals.polars import to_dicts
 from corroborate.bridge._filter import filter_cells
 
 
 class _PanelAnalysis(Protocol):
     """Structural surface `DeferredScope` consumes.
 
-    Panel analyses may declare DataFrame, iterable, or dual input;
-    resolution invokes the gradual `.fn` dynamically and requires
-    only a `StratumPanel` result. Avoiding an exact invariant
-    `Analysis[...]` input type keeps all of those wrappers
-    assignable.
+    Every registered analysis accepts the canonical cells union
+    (DataFrame or row mappings); resolution invokes the gradual
+    `.fn` dynamically and requires only a `StratumPanel` result.
+    Avoiding an exact invariant `Analysis[...]` input type keeps
+    every conforming wrapper assignable.
     """
 
     @property
     def fn(self) -> Callable[..., StratumPanel]: ...
-
-    @property
-    def accepts_dataframe(self) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,26 +69,14 @@ class DeferredScope:
     ) -> pl.Expr:
         """Build the panel from `cells`, apply `keep` per stratum,
         return `pl.col(stratify_column).is_in([surviving]) & static_scope`."""
-        panel_cells: pl.DataFrame | list[dict[str, object]]
-        if self.panel_analysis.accepts_dataframe:
-            panel_df = pl.from_dicts(cells) if cells else pl.DataFrame()
-            panel_cells = (
-                filter_cells(panel_df, self.static_scope)
-                if self.static_scope is not None
-                else panel_df
-            )
-        elif self.static_scope is not None:
-            panel_df = pl.from_dicts(cells) if cells else pl.DataFrame()
-            panel_cells = [
-                dict(row)
-                for row in to_dicts(filter_cells(
-                    panel_df, self.static_scope,
-                ))
-            ]
-        else:
-            panel_cells = cells
+        # One path: every analysis accepts the canonical cells
+        # union, so the pre-filtered DataFrame is handed over
+        # directly — the fn normalises at its own entry.
+        panel_df = pl.from_dicts(cells) if cells else pl.DataFrame()
+        if self.static_scope is not None:
+            panel_df = filter_cells(panel_df, self.static_scope)
         panel = self.panel_analysis.fn(
-            panel_cells,
+            panel_df,
             **self.panel_kwargs,
         )
         try:

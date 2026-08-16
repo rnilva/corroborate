@@ -55,6 +55,9 @@ from typing import Literal
 
 from scipy.stats import binomtest as _binomtest  # type: ignore[attr-defined]
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     stratified_arm_diff_pooled,
 )
@@ -92,7 +95,7 @@ class CrossEnvSignAlignmentBinomialResult:
 
 @analysis
 def cross_env_sign_alignment_binomial(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     source_x: str,
     source_y: str,
@@ -123,6 +126,7 @@ def cross_env_sign_alignment_binomial(
     Per-stratum d is produced via `stratified_arm_diff_pooled.fn`
     called twice (once per measurable). Both panels MUST use the
     same `stratify_by` for stratum_ids to align."""
+    cells = as_rows(cells)
     cells_list = list(cells)
     pooled_x = stratified_arm_diff_pooled.fn(
         cells_list,

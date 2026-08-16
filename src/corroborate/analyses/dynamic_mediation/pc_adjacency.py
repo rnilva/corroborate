@@ -38,7 +38,7 @@ depth-1 with one mediator.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 import polars as pl
@@ -190,7 +190,7 @@ class DynamicPCResult:
 
 @analysis
 def dynamic_pc_adjacency(
-    cells: pl.DataFrame,
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     arm_field: str = 'arm_key',
     mediator_per_burst: (
@@ -277,6 +277,9 @@ def dynamic_pc_adjacency(
     cell contributes (missing arm tag, malformed per-burst columns,
     single-arm stratum) are absent from the result — the framework
     refuses to silently emit a NaN trajectory."""
+    if not isinstance(cells, pl.DataFrame):
+        from corroborate.data.kernel import cells_to_dataframe
+        cells = cells_to_dataframe(cells)
     mediators_tuple: tuple[ColumnOrMeasurable, ...]
     if isinstance(mediator_per_burst, tuple):
         mediators_tuple = mediator_per_burst

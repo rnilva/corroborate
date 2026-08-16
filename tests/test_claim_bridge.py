@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import polars as pl
 import pytest
@@ -34,18 +34,6 @@ from corroborate.bridge.bridge import (
 from corroborate.core.claim import claim
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.bridge.verdict import Verdict
-
-
-if TYPE_CHECKING:
-    from pathlib import Path as _StaticOnlyAnnotation
-
-
-type _FrameCells = pl.DataFrame
-type _FrameOrRows = pl.DataFrame | Iterable[Mapping[str, object]]
-# The name deliberately contains "DataFrame" while the top-level
-# container does not. Runtime dispatch must inspect the resolved
-# type shape, not annotation spelling or nested element names.
-type _DataFrameRows = Iterable[Mapping[str, object]]
 
 
 # Synthetic intervention arms for the top-level bridges in this file.
@@ -780,88 +768,47 @@ def test_analysis_wrapper_is_directly_callable() -> None:
         _scaled_mean(cells, not_a_param=1)  # pyright: ignore[reportCallIssue]
 
 
-def test_analysis_call_dispatches_dataframe_by_signature() -> None:
-    """`Analysis.__call__` input dispatch: a `pl.DataFrame` passes
-    through untouched when the fn's cells parameter admits one
-    (the DataFrame-native fast path), and is materialised to
-    per-row mappings exactly once for iterable-only fns. The
-    passthrough branch is the regression case: unconditional
-    dicts-conversion crashed the DataFrame-native
-    dynamic-mediation family."""
+def test_analysis_call_passes_cells_through_unchanged() -> None:
+    """`Analysis.__call__` is pure delegation — no hidden
+    conversion, no registration-time signature reflection. Every
+    analysis accepts the canonical cells union and normalises at
+    its own entry, so the probe receives exactly the object shape
+    the caller passed, in both directions."""
+    from corroborate._internals.polars import as_rows
     from corroborate.bridge.analysis import Analysis, analysis
 
     @analysis
-    def _df_native_probe(cells: pl.DataFrame) -> tuple[str, int]:
-        assert isinstance(cells, pl.DataFrame)
-        return ('dataframe', cells.height)
-
-    @analysis
-    def _iterable_probe(
-        cells: Iterable[Mapping[str, object]],
+    def _union_probe(
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
     ) -> tuple[str, int]:
-        rows = list(cells)
-        assert not isinstance(cells, pl.DataFrame)
-        return ('rows', len(rows))
-
-    @analysis
-    def _alias_probe(
-        cells: _FrameCells,
-        *,
-        unrelated: _StaticOnlyAnnotation | None = None,
-    ) -> tuple[str, int]:
-        del unrelated
-        assert isinstance(cells, pl.DataFrame)
-        return ('alias', cells.height)
-
-    @analysis
-    def _union_alias_probe(cells: _FrameOrRows) -> tuple[str, int]:
         if isinstance(cells, pl.DataFrame):
-            return ('union', cells.height)
-        return ('union', len(list(cells)))
+            return ('dataframe', cells.height)
+        return ('rows', len(list(cells)))
 
     @analysis
-    def _nested_name_probe(cells: _DataFrameRows) -> tuple[str, int]:
-        assert not isinstance(cells, pl.DataFrame)
-        return ('nested-rows', len(list(cells)))
-
-    @analysis
-    def _nested_element_probe(
-        cells: Iterable[pl.DataFrame],
-    ) -> tuple[str, int]:
-        assert not isinstance(cells, pl.DataFrame)
-        return ('nested-frames', len(list(cells)))
-
-    def _direct_alias_probe(cells: _FrameCells) -> tuple[str, int]:
-        return ('direct-alias', cells.height)
-
-    direct = Analysis(fn=_direct_alias_probe, name='_direct_alias_probe')
+    def _normalising_probe(
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    ) -> int:
+        return len(list(as_rows(cells)))
 
     df = pl.DataFrame({'a': [1, 2, 3]})
-    assert _df_native_probe.accepts_dataframe is True
-    assert _iterable_probe.accepts_dataframe is False
-    assert _alias_probe.accepts_dataframe is True
-    assert _union_alias_probe.accepts_dataframe is True
-    assert _nested_name_probe.accepts_dataframe is False
-    assert _nested_element_probe.accepts_dataframe is False
-    assert direct.accepts_dataframe is True
-    assert _df_native_probe(df) == ('dataframe', 3)
+    assert _union_probe(df) == ('dataframe', 3)
+    assert _union_probe([{'a': 1}]) == ('rows', 1)
     # `.fn` preserves the wrapped function's positional-or-keyword
     # first parameter instead of falsely exposing it as positional-only.
-    assert _df_native_probe.fn(cells=df) == ('dataframe', 3)
-    assert _iterable_probe(df) == ('rows', 3)
-    assert _iterable_probe([{'a': 1}]) == ('rows', 1)
-    assert _alias_probe(df) == ('alias', 3)
-    assert _union_alias_probe(df) == ('union', 3)
-    assert _nested_name_probe(df) == ('nested-rows', 3)
-    assert _nested_element_probe([df]) == ('nested-frames', 1)
-    assert direct(df) == ('direct-alias', 3)
+    assert _union_probe.fn(cells=df) == ('dataframe', 3)
+    # The entry normalisation makes both shapes equivalent for a
+    # row-consuming body — the convention the registry-wide guard
+    # below pins for every production analysis.
+    assert _normalising_probe(df) == 3
+    assert _normalising_probe(df.to_dicts()) == 3
 
     # Backward-compatible public annotation: the original two
     # arguments remain cells/result; ParamSpec is optional third.
     legacy: Analysis[
-        Iterable[Mapping[str, object]], tuple[str, int]
-    ] = _iterable_probe
-    assert legacy(df) == ('rows', 3)
+        pl.DataFrame | Iterable[Mapping[str, object]], tuple[str, int]
+    ] = _union_probe
+    assert legacy(df) == ('dataframe', 3)
 
 
 def test_analysis_call_preserves_wrapped_signature_statically() -> None:
@@ -892,28 +839,37 @@ def test_analysis_call_preserves_wrapped_signature_statically() -> None:
     assert result.n_pairs == 30
 
 
-def test_dataframe_native_registered_analyses_detected() -> None:
-    """The signature-derived `accepts_dataframe` flag on the real
-    registered instances: the three DataFrame-native analyses and
-    a dual-input analysis carry it; the iterable-only paired
-    family does not. Guards the exploration contract that
-    `panel.cells` works against every registered analysis."""
-    from corroborate.analyses.diagnostic.mediator_leak_adjudication import (
-        mediator_leak_adjudication,
-    )
-    from corroborate.analyses.dynamic_mediation.partial_spearman import (
-        dynamic_partial_spearman,
-    )
-    from corroborate.analyses.dynamic_mediation.pc_adjacency import (
-        dynamic_pc_adjacency,
-    )
-    from corroborate.analyses.paired.paired_g import paired_g
-    from corroborate.analyses.spearman.partial_spearman import (
-        partial_spearman,
-    )
+def test_every_registered_analysis_accepts_the_cells_union() -> None:
+    """Registry-wide convention guard for the exploration contract:
+    every production analysis declares the canonical cells union
+    (`pl.DataFrame | Iterable[Mapping[str, object]]`) and
+    normalises at its own entry, so `panel.cells` works against the
+    whole registry with no wrapper-side conversion. Signature
+    reflection lives HERE, in one test, instead of in runtime
+    dispatch. Test-local probes (registered from test modules) are
+    exempt — the convention binds `corroborate.*` analyses."""
+    import inspect
 
-    assert dynamic_partial_spearman.accepts_dataframe is True
-    assert dynamic_pc_adjacency.accepts_dataframe is True
-    assert mediator_leak_adjudication.accepts_dataframe is True
-    assert partial_spearman.accepts_dataframe is True
-    assert paired_g.accepts_dataframe is False
+    from corroborate.bridge.analysis import get_registered, registered_names
+
+    production_names = [
+        name for name in registered_names()
+        if (a := get_registered(name)) is not None
+        and a.fn.__module__.startswith('corroborate.')
+    ]
+    assert len(production_names) >= 40
+    offenders: list[str] = []
+    for name in production_names:
+        analysis_obj = get_registered(name)
+        assert analysis_obj is not None
+        first_param = next(
+            iter(inspect.signature(analysis_obj.fn).parameters.values()),
+        )
+        # Name-agnostic: the cells argument is positional-first by
+        # contract but may be semantically named (`panel`, …).
+        if 'pl.DataFrame | ' not in str(first_param):
+            offenders.append(f'{name}: {first_param}')
+    assert not offenders, (
+        'analyses whose cells parameter does not declare the '
+        f'canonical union: {offenders}'
+    )

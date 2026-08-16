@@ -38,6 +38,9 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses._dowhy_internal import backdoor_with_refutations
 from corroborate.analyses.dowhy import (
     BackdoorResult,
@@ -98,7 +101,7 @@ def _nan_refutation(
 
 @analysis
 def stratum_baseline_predictor_link_dowhy(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -134,6 +137,7 @@ def stratum_baseline_predictor_link_dowhy(
 
     Empty panel (no stratum survives filters) yields a
     NaN-everywhere result."""
+    cells = as_rows(cells)
     cells_list = list(cells)
     treatment_col = 'v_pred'
     outcome_col = 'd_out'

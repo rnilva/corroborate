@@ -33,6 +33,9 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     stratified_arm_diff_pooled,
 )
@@ -44,7 +47,7 @@ from corroborate.stats.meta_regression import Pool
 
 @analysis
 def meta_regression_unpaired_d(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -103,6 +106,7 @@ def meta_regression_unpaired_d(
     coefficients tuple, intercept=NaN). Bridges should check
     `coef is None` or `math.isnan(coef.coefficient)` for graceful
     POW_INSUF fallthrough."""
+    cells = as_rows(cells)
     if covariates_per_key is None and continuous_covariate is None:
         raise ValueError(
             "meta_regression_unpaired_d: provide either "

@@ -36,6 +36,9 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.stats import spearmanr
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.bridge.analysis import analysis
 from corroborate.graph.discovery import (
     stratified_partial_spearman_rho,
@@ -182,7 +185,7 @@ def _nan_result(
 
 @analysis
 def stratum_panel_jci_spearman(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -207,6 +210,7 @@ def stratum_panel_jci_spearman(
     (JCI + partial) is the strongest empirical falsification
     surface — it controls for both env (scale confound) and
     baseline arm's outcome (config-quality confound)."""
+    cells = as_rows(cells)
     cells_list = list(cells)
     x_arr, dy_arr, vy_arr, envs = _build_panel_arrays(
         cells_list,

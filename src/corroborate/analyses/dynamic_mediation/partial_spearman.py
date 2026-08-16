@@ -38,7 +38,7 @@ per-burst extraction, ragged-tail alignment) lives in `_common.py`
 """
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -162,7 +162,7 @@ def _marginal_spearman(
 
 @analysis
 def dynamic_partial_spearman(
-    cells: pl.DataFrame,
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     arm_field: str = 'arm_key',
     mediator_per_burst: (
@@ -262,6 +262,9 @@ def dynamic_partial_spearman(
     `bootstrap_seed` (default 42) makes the resample deterministic
     via `np.random.default_rng`; `bootstrap_alpha` (default 0.05 →
     95% CI) controls the percentile."""
+    if not isinstance(cells, pl.DataFrame):
+        from corroborate.data.kernel import cells_to_dataframe
+        cells = cells_to_dataframe(cells)
     # Normalize mediator argument to a tuple. The empty-tuple case
     # is the marginal test (which we already report via
     # `rho_marginal`); raising here keeps the framework's two

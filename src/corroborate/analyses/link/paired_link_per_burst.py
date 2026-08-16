@@ -28,6 +28,9 @@ import numpy as np
 import numpy.typing as npt
 import scipy.stats as _stats
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses._cell_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables import Measurable
@@ -94,7 +97,7 @@ def _pearson_r_p_slope(
 
 @analysis
 def paired_link_per_burst(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -139,6 +142,7 @@ def paired_link_per_burst(
       tightens scope or opts into aggregation;
     - `'mean'` averages the per-burst (target, predictor) vectors
       element-wise within each duplicate bucket."""
+    cells = as_rows(cells)
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
             f'paired_link_per_burst: unknown dedupe_strategy '

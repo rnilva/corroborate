@@ -55,6 +55,9 @@ import numpy as np
 import numpy.typing as npt
 from scipy.stats import mannwhitneyu  # type: ignore[attr-defined]
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses._cell_value import resolve_value
 from corroborate.bridge.analysis import analysis
 
@@ -155,7 +158,7 @@ def _bootstrap_p_xy(
 
 @analysis
 def cross_env_probability_of_improvement(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     source: str,
     treatment_arm: str,
@@ -192,6 +195,7 @@ def cross_env_probability_of_improvement(
     Returns a frozen dataclass carrying point estimate +
     permutation p (exact at any n) + bootstrap CI (asymptotic,
     descriptive at small n)."""
+    cells = as_rows(cells)
     cells_list = list(cells)
 
     strata: dict[tuple[object, ...], dict[str, list[float]]] = {}

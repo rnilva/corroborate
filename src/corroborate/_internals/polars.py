@@ -18,9 +18,22 @@ Module name is underscore-prefixed to signal **internal use
 only**. External users should import polars directly."""
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 import polars as pl
+
+
+def as_rows(
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+) -> Iterable[Mapping[str, object]]:
+    """Normalise the canonical analysis cells union to per-row
+    mappings — the one-line entry normalisation for analyses whose
+    body consumes rows. DataFrame input is materialised via
+    `to_dicts`; iterable input passes through untouched (a
+    generator stays single-shot, exactly as handed in)."""
+    if isinstance(cells, pl.DataFrame):
+        return to_dicts(cells)
+    return cells
 
 
 def to_dicts(df: pl.DataFrame) -> Sequence[Mapping[str, object]]:

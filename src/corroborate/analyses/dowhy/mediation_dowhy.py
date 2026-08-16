@@ -103,6 +103,9 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses._dowhy_internal import (
     DAGLike,
     backdoor_estimate,
@@ -180,7 +183,7 @@ def _classify_linearity(
 
 @analysis
 def mediation_dowhy(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment: str,
     outcome: str,
@@ -208,6 +211,7 @@ def mediation_dowhy(
     for OLS. Pair with `dowhy.placebo_refutation` +
     `random_common_cause_refutation` on the same total-ATE
     arguments to refute the foundation."""
+    cells = as_rows(cells)
     if not mediators:
         raise ValueError(
             'mediation_dowhy: `mediators` must be a non-empty tuple of '

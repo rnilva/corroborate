@@ -16,6 +16,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.bridge.analysis import analysis
 
 
@@ -76,7 +79,7 @@ def _dominant(
 
 @analysis
 def verdict_distribution_per_env(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     arm_filter: str,
     arm_field: str = 'arm_key',
@@ -87,6 +90,7 @@ def verdict_distribution_per_env(
     case-folded to lowercase before matching the four canonical
     buckets — the persisted column uses the lowercased
     `Verdict.value` enum strings."""
+    cells = as_rows(cells)
     per_env_counts: dict[str, list[int]] = {}
     for cell in cells:
         env_v = cell.get('env_name')

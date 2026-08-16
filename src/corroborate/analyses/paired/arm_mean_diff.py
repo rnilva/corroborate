@@ -26,6 +26,9 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.bridge.analysis import analysis
 
 from corroborate.analyses._cell_value import key_tuple, resolve_value
@@ -111,7 +114,7 @@ class ArmMeanDiffResult:
 
 @analysis
 def arm_mean_diff(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     source: str,
     treatment_arm: str,
@@ -150,6 +153,7 @@ def arm_mean_diff(
     filtering more DDQN cells than vanilla) bias the comparison,
     that's a SCOPE issue to handle at the bridge level, not by
     silently filtering arm samples here."""
+    cells = as_rows(cells)
     treatment_vals: list[float] = []
     baseline_vals: list[float] = []
     treatment_paired: dict[tuple[object, ...], list[float]] = {}

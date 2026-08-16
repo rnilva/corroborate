@@ -65,6 +65,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses._cell_value import key_tuple, resolve_value
 from corroborate.bridge.analysis import analysis
 
@@ -125,7 +128,7 @@ def _hedges_g_paired_inline(deltas: np.ndarray) -> float:
 
 @analysis
 def bootstrap_paired_g(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     source: str,
     treatment_arm: str,
@@ -155,6 +158,7 @@ def bootstrap_paired_g(
     before bootstrap); pass `'raise'` to error on duplicates.
 
     See module docstring for when to use vs paired_g."""
+    cells = as_rows(cells)
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
             f'bootstrap_paired_g: unknown dedupe_strategy '

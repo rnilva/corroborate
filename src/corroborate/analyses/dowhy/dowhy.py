@@ -29,6 +29,9 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.bridge.analysis import analysis
 from corroborate.analyses._dowhy_internal import (
     DAGLike,
@@ -92,7 +95,7 @@ class RefutationResult:
 
 @analysis
 def backdoor_ate(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment: str,
     outcome: str,
@@ -102,6 +105,7 @@ def backdoor_ate(
     """Identify + estimate the ATE of `treatment` on `outcome`
     under `dag`. Returns identified=False when the DAG admits
     no admissible adjustment."""
+    cells = as_rows(cells)
     cells_list = list(cells)
     df, identified, estimate = backdoor_estimate(
         cells_list, treatment, outcome, dag, method_name,
@@ -191,7 +195,7 @@ def _run_refuter(
 
 @analysis
 def placebo_refutation(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment: str,
     outcome: str,
@@ -217,6 +221,7 @@ def placebo_refutation(
     variation for cross-session reproducibility; pass an
     explicit different seed to probe sensitivity to the
     synthetic-confounder draw."""
+    cells = as_rows(cells)
     return _run_refuter(
         cells, treatment, outcome, dag, method_name,
         refuter_method='placebo_treatment_refuter',
@@ -226,7 +231,7 @@ def placebo_refutation(
 
 @analysis
 def random_common_cause_refutation(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment: str,
     outcome: str,
@@ -247,6 +252,7 @@ def random_common_cause_refutation(
     were partially-stable-by-accident under that scheme.
     Deterministic seed 0 locks the synthetic-confounder draw;
     pass a different int to probe sensitivity."""
+    cells = as_rows(cells)
     return _run_refuter(
         cells, treatment, outcome, dag, method_name,
         refuter_method='random_common_cause',

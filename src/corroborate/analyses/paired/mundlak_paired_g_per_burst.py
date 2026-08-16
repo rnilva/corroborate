@@ -26,6 +26,9 @@ from collections.abc import Iterable, Mapping, Sequence
 import numpy as np
 import numpy.typing as npt
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses.paired.mundlak_decomposition import (
     MundlakResult, mundlak_decomposition,
 )
@@ -68,7 +71,7 @@ def _per_env_burst_predictor_mean(
 
 @analysis
 def mundlak_paired_g_per_burst(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -113,6 +116,7 @@ def mundlak_paired_g_per_burst(
     defaults to `'mean'` (per-cell aggregation within each
     `(env, arm, pair_by)` bucket); pass `'raise'` to error on
     duplicates."""
+    cells = as_rows(cells)
     cells_list = [dict(c) for c in cells]
     per_burst_g = paired_g_per_burst.fn(
         cells_list, treatment_arm=treatment_arm,

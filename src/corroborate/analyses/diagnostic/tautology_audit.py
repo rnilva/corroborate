@@ -30,6 +30,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables.redundancy_check import (
     TautologyReport, audit_mediator_panel,
@@ -70,7 +73,7 @@ class AuditResult:
 
 @analysis
 def tautology_audit(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     measurables: Sequence[Mapping[str, object]],
     outcome_path: str,
@@ -107,6 +110,7 @@ def tautology_audit(
     explicit map so the audit reads them without forcing the
     caller to rename keys. Forwarded verbatim to
     `audit_mediator_panel`."""
+    cells = as_rows(cells)
     spec_list: list[_MeasurableSpec] = []
     for m in measurables:
         name_v = m.get('name')

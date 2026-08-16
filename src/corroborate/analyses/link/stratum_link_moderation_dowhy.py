@@ -56,6 +56,9 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses.dowhy import (
     BackdoorResult,
     RefutationResult,
@@ -270,7 +273,7 @@ def _nan_refutation(t: str, o: str, m: str, name: str) -> RefutationResult:
 
 @analysis
 def stratum_link_moderation_dowhy(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -307,6 +310,7 @@ def stratum_link_moderation_dowhy(
     strata) yields NaN-everywhere. Bridges should check
     `n_strata > p_covariates` and `n_envs_above ≥ 1 AND
     n_envs_below ≥ 1` for identification."""
+    cells = as_rows(cells)
     cells_list = list(cells)
     rows, dag, t_col, o_col, n_above, n_below = _build_panel(
         cells_list,

@@ -30,6 +30,9 @@ import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.bridge.analysis import analysis
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.corpus.schema import MeasurementLeaf
@@ -244,7 +247,7 @@ def _per_group_stats(
 
 @analysis(reads=())
 def paired_comparison(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -279,6 +282,7 @@ def paired_comparison(
     - `KeyError` when a cell is missing the `group_by` value.
     - `TypeError` when a cell is missing/non-scalar at `pair_by`
       keys or `outcome_path`."""
+    cells = as_rows(cells)
     if treatment_arm == baseline_arm:
         raise ValueError(
             f'paired_comparison: treatment_arm and baseline_arm '
