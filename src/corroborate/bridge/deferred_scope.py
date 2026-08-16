@@ -24,22 +24,32 @@ This closes the framework's "use the correlation edge directly"
 gap (γ in the original discussion)."""
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import Protocol
 
 import polars as pl
 
 from corroborate.analyses.panel.stratum_panel import StratumPanel
-from corroborate.bridge.analysis import Analysis
+from corroborate._internals.polars import to_dicts
+from corroborate.bridge._filter import filter_cells
 
-# The exact cells shape `stratum_panel` (and any dual-input panel
-# builder) declares. `Analysis` is invariant in its cells
-# parameter, so the field spells it precisely; `...` leaves the
-# keyword surface gradual — `resolve` feeds `panel_kwargs`
-# dynamically by design.
-type _PanelAnalysis = Analysis[
-    ..., pl.DataFrame | Iterable[Mapping[str, object]], StratumPanel,
-]
+
+class _PanelAnalysis(Protocol):
+    """Structural surface `DeferredScope` consumes.
+
+    Panel analyses may declare DataFrame, iterable, or dual input;
+    resolution invokes the gradual `.fn` dynamically and requires
+    only a `StratumPanel` result. Avoiding an exact invariant
+    `Analysis[...]` input type keeps all of those wrappers
+    assignable.
+    """
+
+    @property
+    def fn(self) -> Callable[..., StratumPanel]: ...
+
+    @property
+    def accepts_dataframe(self) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +73,28 @@ class DeferredScope:
     ) -> pl.Expr:
         """Build the panel from `cells`, apply `keep` per stratum,
         return `pl.col(stratify_column).is_in([surviving]) & static_scope`."""
-        panel = self.panel_analysis.fn(cells, **self.panel_kwargs)
+        panel_cells: pl.DataFrame | list[dict[str, object]]
+        if self.panel_analysis.accepts_dataframe:
+            panel_df = pl.from_dicts(cells) if cells else pl.DataFrame()
+            panel_cells = (
+                filter_cells(panel_df, self.static_scope)
+                if self.static_scope is not None
+                else panel_df
+            )
+        elif self.static_scope is not None:
+            panel_df = pl.from_dicts(cells) if cells else pl.DataFrame()
+            panel_cells = [
+                dict(row)
+                for row in to_dicts(filter_cells(
+                    panel_df, self.static_scope,
+                ))
+            ]
+        else:
+            panel_cells = cells
+        panel = self.panel_analysis.fn(
+            panel_cells,
+            **self.panel_kwargs,
+        )
         try:
             stratify_idx = panel.stratify_by.index(self.stratify_column)
         except ValueError as exc:
@@ -122,9 +153,9 @@ def scope_from_panel(
     def my_bridge(...): ...
     ```
 
-    Note: the `panel_analysis` runs with the full corpus + the
-    `static_scope` filter applied BEFORE panel build (the runner
-    pre-filters with static_scope). The `keep` predicate then
+    Note: the `panel_analysis` runs with the `static_scope` filter
+    applied BEFORE panel build. `DeferredScope.resolve` performs
+    that pre-filter directly. The `keep` predicate then
     decides which strata survive on top of that. This gives
     proper edge-conditioning: upstream-fixture's per-stratum data
     drives downstream-bridge's cell admission."""

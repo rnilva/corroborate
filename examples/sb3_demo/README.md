@@ -7,10 +7,10 @@ seen — here, ordinary
 DQN. The training script contains no corroborate imports.
 
 The study: whether gamma = 0.99 outperforms gamma = 0.80 on
-CartPole-v1 at 25k steps. Like most real studies it starts by
-looking: the adapted run set is explored first, and the
-directional claim is declared afterwards — with the receipt
-recording exactly that register.
+CartPole-v1 at 25k steps. `sb3_claim.py` codifies that question as
+an executable, data-independent `@claim_bridge`; `analyze.py`
+first explores the adapted run set, then evaluates that authored
+test against the verified record.
 
 ## 1. Train (`train.py`, pure SB3)
 
@@ -46,7 +46,6 @@ admissible: True
   [VERIFIED    ] pairs_complete: verified 3 complete pairs
   [VERIFIED    ] config_isolation: all resolved configs share one template after removing only gamma and seed
   [VERIFIED    ] evaluation_complete: verified 6 × 5 × 5 evaluation extent
-  [UNVERIFIABLE] protocol: no prospective protocol committed; the design is admitted retrospectively
   [UNVERIFIABLE] assignment: assignment process was not mechanically recorded
   [VERIFIED    ] rows_derived: derived 6 seeded-run rows
 ```
@@ -57,10 +56,9 @@ Statements only the producer can make remain `ATTESTED` or
 `UNVERIFIABLE`. A malformed bundle raises with the same
 vocabulary instead of parsing permissively.
 
-The `protocol` line is the study's epistemic register, typed: no
-design was sealed before the runs existed, so whatever is claimed
-later is admitted retrospectively. That is the ordinary register
-of exploratory work — recorded, not penalised.
+The receipt makes no claim about when the test module was
+authored. A bundle digest proves which files were sealed together;
+it cannot prove that they existed before the observations.
 
 ## 3. Explore
 
@@ -69,7 +67,7 @@ DataFrame that registered analyses accept directly. Nothing in
 this step requires a declared design.
 
 ```text
-panel: 6 seeded runs × 17 columns
+panel: 6 seeded runs × 18 columns
 ┌─────────────┬──────────┬──────┬───────┬─────────────┐
 │ id          ┆ arm_key  ┆ seed ┆ gamma ┆ return_mean │
 ╞═════════════╪══════════╪══════╪═══════╪═════════════╡
@@ -98,22 +96,63 @@ mean return per checkpoint (seeds pooled per condition):
 
 Gamma 0.99 is behind at 5k, level by 10k, ahead at 15k — then
 falls away over the last two checkpoints while gamma 0.80 holds.
-At this training length the intuitive claim runs the other way,
-and the trajectory says why a final-checkpoint reading alone
-would mislead: the deficit is late-training degradation, not
-slower convergence still in progress.
+In these three paired seeds, that trajectory is consistent with a
+late decline at the higher gamma. It is descriptive evidence, not
+enough by itself to distinguish degradation from noisy or slower
+learning.
 
-A design-free paired probe quantifies the same contrast:
+A descriptive paired probe quantifies the same contrast:
 
 ```text
 probe: Δ(return_mean) = -62.2 ± 40.0  g=-0.51  pairs helped: 33% of 3
 ```
 
-## 4. A directional claim under a declared design
+## 4. Author and evaluate the claim test
 
-Exploration sharpened the question; now the claim is stated as a
-frozen design (`DirectionalDesign`: one-sided, alpha 0.05, SESOI
-dz = 0.5, 3 planned pairs) and tested:
+The claim module contains the scientific test, not the data:
+
+```python
+@claim_bridge(
+    source='gamma',
+    target='return_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    pair_by=('seed',),
+    scope=(
+        (pl.col('env_id') == 'CartPole-v1')
+        & pl.col('gamma').is_in([0.80, 0.99])
+    ),
+    predicted_direction='a_gt_b',
+)
+def higher_gamma_improves_return(
+    paired_directional: PairedDirectionalResult,
+    *,
+    alpha: float = 0.05,
+    sesoi_dz: float = 0.5,
+    minimum_pairs: int = 3,
+) -> tuple[Verdict, RefutationClass | None]:
+    del alpha, sesoi_dz, minimum_pairs
+    return paired_directional_verdict(paired_directional)
+```
+
+There are no bundle paths, observed values, or arm labels in this
+module. `analyze.py` binds the external record only at the call
+site:
+
+```python
+evaluation = evaluate(
+    higher_gamma_improves_return,
+    panel.cells,
+    recorded_contrast=study.contrast,
+)
+```
+
+The recorded contrast must match the bridge's `gamma` source.
+Its verified baseline/treatment keys are injected into the named
+`paired_directional` analysis, whose typed result is retained in
+`evaluation.analysis_results` before the bridge body maps it to a
+verdict. `evaluation.evidence_digest` records the exact sealed
+bundle used:
 
 ```text
 claim: gamma 0.99 > gamma 0.80 on return_mean
@@ -122,28 +161,20 @@ claim: gamma 0.99 > gamma 0.80 on return_mean
   verdict: POWER_INSUFFICIENT (UNDERPOWERED)
 ```
 
-The design is declared at analysis time, and the receipt already
-recorded what that means: retrospective. At this training length
-the point estimate runs against the claim, and three pairs are
-not enough evidence to settle it either way. The verdict is
-therefore `POWER_INSUFFICIENT` rather than `NO_EFFECT`; with more
-seeds (`--seeds 8`) the verdict follows whatever the data
-supports.
+At this training length the point estimate runs against the claim,
+and three pairs are not enough evidence to settle it either way.
+The verdict is therefore `POWER_INSUFFICIENT` rather than
+`NO_EFFECT`; with more seeds (`--seeds 8`) the same test module
+follows whatever the compatible data supports.
 
-## 5. From exploration to confirmation
+## 5. Reuse the test
 
-The exploratory pass produced a directional, scoped claim — and a
-mechanism suspicion (late-training degradation at high gamma)
-worth its own study. To test the claim in the confirmatory
-register, seal the design *before* training the fresh seeds: the
-contract's optional `prospective_protocol` field commits a
-document (by path and SHA-256) naming the confirmatory pair keys,
-the per-condition configurations, and the evaluation extent. The
-adapter then verifies the digest and that the executed study
-matches the sealed design (`protocol_committed` and
-`protocol_design_match`, both `VERIFIED`) — "pre-registered"
-becomes a machine-checked property of the record rather than a
-sentence in prose.
+Run the same bridge against any newly adapted study with the same
+measurable schema and contrast path. Producer condition names may
+differ: `recorded_contrast` supplies them at runtime. The adapter
+continues to verify the record's seal, configuration isolation,
+pair completeness, and evaluation extent; the claim module
+continues to own the estimand and decision rule.
 
 ## Producer-side cost
 

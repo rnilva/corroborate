@@ -25,7 +25,6 @@ from corroborate.data import (
     adapt_study,
     seal_bundle,
 )
-from corroborate.data._bundle_io import sha256_file
 
 _BASELINE_ARM = 'entropy_0'
 _TREATMENT_ARM = 'entropy_positive'
@@ -92,12 +91,11 @@ def _make_bundle(
     duplicate_evaluation: bool = False,
     unexpected_evaluation: bool = False,
     nan_return: bool = False,
-    include_protocol: bool = True,
     include_assignment: bool = True,
     omit_logical_arm_keys: bool = False,
     logical_arm_keys: Mapping[str, str] | None = None,
-    protocol_pair_keys: tuple[int, ...] | None = None,
     scope: Mapping[str, object] | None = None,
+    extra_run_measurements: Mapping[str, float] | None = None,
 ) -> None:
     resolved_scope: dict[str, object] = (
         dict(scope)
@@ -105,6 +103,7 @@ def _make_bundle(
         else {'env_name': 'MountainCar-v0', 'backend': 'sbx',
               'total_steps': 20}
     )
+    resolved_run_measurements = dict(extra_run_measurements or {})
     resolved_arm_keys: dict[str, object] = (
         dict(logical_arm_keys)
         if logical_arm_keys is not None
@@ -131,37 +130,14 @@ def _make_bundle(
             'seeds': list(_EVAL_SEEDS),
             'outcomes': ['return'],
         },
-        'run_measurements': ['exploration_breadth'],
+        'run_measurements': [
+            'exploration_breadth', *resolved_run_measurements,
+        ],
     }
     if include_assignment:
         contract['assignment'] = {
             'assurance': 'attested',
             'statement': 'condition order was shuffled before execution',
-        }
-    if include_protocol:
-        protocol: dict[str, object] = {
-            'confirmatory_pair_keys': sorted(
-                protocol_pair_keys
-                if protocol_pair_keys is not None
-                else training_seeds,
-            ),
-            'paired_arms': {
-                'baseline'
-                if not omit_logical_arm_keys
-                else _BASELINE_ARM: {'algorithm': {'ent_coef': 0.0}},
-                'entropy_bonus'
-                if not omit_logical_arm_keys
-                else _TREATMENT_ARM: {'algorithm': {'ent_coef': 0.01}},
-            },
-            'evaluation': {
-                'checkpoints': list(_CHECKPOINTS),
-                'seeds': list(_EVAL_SEEDS),
-            },
-        }
-        _write_json(root / 'prospective_protocol.json', protocol)
-        contract['prospective_protocol'] = {
-            'path': 'prospective_protocol.json',
-            'sha256': sha256_file(root / 'prospective_protocol.json'),
         }
     _write_json(root / 'contract.json', contract)
 
@@ -203,6 +179,7 @@ def _make_bundle(
                 'complete': True,
                 'exploration_breadth': 0.25 if arm == _BASELINE_ARM else 0.5,
                 **resolved_scope,
+                **resolved_run_measurements,
             })
             for checkpoint in _CHECKPOINTS:
                 for eval_seed in _EVAL_SEEDS:
@@ -254,6 +231,7 @@ def test_valid_bundle_derives_rows_and_receipt(tmp_path: Path) -> None:
 
     assert len(study.rows) == 4
     assert study.receipt.admissible
+    assert study.receipt.adapter_version == '1.1.0'
     assert study.receipt.n_pairs == 2
     assert study.receipt.study_id == _STUDY_ID
     assert {row['arm_key'] for row in study.rows} == {
@@ -289,11 +267,8 @@ def test_valid_bundle_derives_rows_and_receipt(tmp_path: Path) -> None:
         assert row['env_name'] == 'MountainCar-v0'
         assert row['program'] == 'external:sbx-ppo'
         assert row['corpus'] == _STUDY_ID
+        assert row['bundle_digest'] == study.receipt.bundle_digest
     assert _check_status(study.receipt, 'assignment') is CheckStatus.ATTESTED
-    assert (
-        _check_status(study.receipt, 'protocol_design_match')
-        is CheckStatus.VERIFIED
-    )
     assert (
         _check_status(study.receipt, 'run_measurements')
         is CheckStatus.ATTESTED
@@ -310,7 +285,7 @@ def test_recorded_contrast_is_receipt_bound(tmp_path: Path) -> None:
     assert study.contrast.treatment_value == 0.01
     assert study.contrast.bundle_digest == study.receipt.bundle_digest
     assert len(study.contrast.bundle_digest) == 64
-    assert study.contrast.assurance is CheckStatus.ATTESTED
+    assert study.contrast.assignment_status is CheckStatus.ATTESTED
 
 
 def test_round_trip_panel_analysis_recovers_contrast(
@@ -382,7 +357,7 @@ def test_analysis_call_accepts_panel_cells_dataframe(
 
 
 def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
-    _make_bundle(tmp_path, include_protocol=False)
+    _make_bundle(tmp_path)
     # Rewrite the contract + evaluations to a single checkpoint.
     contract_path = tmp_path / 'contract.json'
     contract = json.loads(contract_path.read_text(encoding='utf-8'))
@@ -446,6 +421,23 @@ def test_malformed_contract_json_fails_closed(tmp_path: Path) -> None:
     assert caught.value.checks[-1].status is CheckStatus.FAILED
 
 
+def test_bundle_local_prospective_protocol_is_rejected(
+    tmp_path: Path,
+) -> None:
+    """A co-sealed file cannot prove it pre-dated the observations."""
+    _make_bundle(tmp_path)
+    contract_path = tmp_path / 'contract.json'
+    contract = json.loads(contract_path.read_text(encoding='utf-8'))
+    contract['prospective_protocol'] = {'path': 'protocol.json'}
+    _write_json(contract_path, contract)
+    seal_bundle(tmp_path)
+
+    with pytest.raises(BundleValidationError) as caught:
+        adapt_study(tmp_path)
+    assert 'prospective_protocol is not supported' in str(caught.value)
+    assert caught.value.checks[-1].code == 'contract_schema'
+
+
 def test_undeclared_configuration_difference_fails(tmp_path: Path) -> None:
     _make_bundle(tmp_path, treatment_gamma=0.98)
 
@@ -468,7 +460,6 @@ def test_duplicate_logical_arm_keys_fail(tmp_path: Path) -> None:
     _make_bundle(
         tmp_path,
         logical_arm_keys={_BASELINE_ARM: 'same', _TREATMENT_ARM: 'same'},
-        include_protocol=False,
     )
 
     with pytest.raises(BundleValidationError) as caught:
@@ -566,26 +557,37 @@ def test_producer_field_colliding_with_trajectory_column_fails(
     assert caught.value.checks[-1].code == 'row_key_collision'
 
 
-def test_resealed_protocol_execution_mismatch_fails(tmp_path: Path) -> None:
-    _make_bundle(tmp_path, protocol_pair_keys=(8,))
+def test_scope_field_in_trajectory_namespace_fails_outside_grid(
+    tmp_path: Path,
+) -> None:
+    reserved_name = 'return_mean_at_999'
+    _make_bundle(
+        tmp_path,
+        scope={'env_name': 'MountainCar-v0', reserved_name: 1.0},
+    )
 
     with pytest.raises(BundleValidationError) as caught:
         adapt_study(tmp_path)
-    assert 'differ from the protocol' in str(caught.value)
+    assert caught.value.checks[-1].code == 'row_key_collision'
+    assert reserved_name in str(caught.value)
+
+
+def test_run_measurement_in_trajectory_namespace_fails_nonnumeric_suffix(
+    tmp_path: Path,
+) -> None:
+    reserved_name = 'return_mean_at_summary'
+    _make_bundle(
+        tmp_path,
+        extra_run_measurements={reserved_name: 1.0},
+    )
+
+    with pytest.raises(BundleValidationError) as caught:
+        adapt_study(tmp_path)
+    assert caught.value.checks[-1].code == 'row_key_collision'
+    assert reserved_name in str(caught.value)
 
 
 # ============ attested / unverifiable — never silently upgraded ============
-
-
-def test_absent_protocol_is_unverifiable_not_failure(tmp_path: Path) -> None:
-    _make_bundle(tmp_path, include_protocol=False)
-    study = adapt_study(tmp_path)
-
-    assert study.receipt.admissible
-    assert (
-        _check_status(study.receipt, 'protocol')
-        is CheckStatus.UNVERIFIABLE
-    )
 
 
 def test_absent_assignment_is_unverifiable(tmp_path: Path) -> None:
@@ -597,7 +599,7 @@ def test_absent_assignment_is_unverifiable(tmp_path: Path) -> None:
         _check_status(study.receipt, 'assignment')
         is CheckStatus.UNVERIFIABLE
     )
-    assert study.contrast.assurance is CheckStatus.UNVERIFIABLE
+    assert study.contrast.assignment_status is CheckStatus.UNVERIFIABLE
 
 
 def test_omitted_arm_key_mapping_defaults_to_condition_names(

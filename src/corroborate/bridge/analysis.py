@@ -41,12 +41,16 @@ Analyses are registered globally by `fn.__name__`. The naming is
 the consumption protocol: a bridge's parameter name must match a
 registered analysis name.
 
-`Analysis[**P, C, O]` preserves the wrapped fn's full surface —
-cells shape `C`, keyword surface `P`, result `O` — through the
+`Analysis[C, O, **P]` preserves the wrapped fn's full surface —
+cells shape `C`, result `O`, keyword surface `P` — through the
 wrapper (CLAUDE.md: ParamSpec preserves caller signature through
 generic wrappers), so direct exploration calls are checked
-against the analysis's real signature. The registry stores the
-erased upper bound `Analysis[..., object, object]` — the generic
+against the analysis's real signature. Keeping `C` and `O` first
+also preserves the original public `Analysis[Cells, Result]`
+annotation spelling; callers that need to spell the captured
+surface explicitly can supply `P` as the optional third argument.
+The registry stores the erased upper bound
+`Analysis[object, object, ...]` — the generic
 upper bound lives at the container boundary only; the runner's
 dynamically-filtered kwarg injection (`run_for`) rides the
 gradual `...` form.
@@ -56,13 +60,25 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Concatenate, Protocol, cast, overload
+from types import UnionType
+from typing import (
+    Annotated,
+    Concatenate,
+    Protocol,
+    TypeAliasType,
+    Union,
+    cast,
+    get_origin,
+    overload,
+)
 
 import polars as pl
 
 from corroborate._internals.introspection import (
+    get_attr_obj,
     get_param_annotation,
     get_param_default,
+    get_typing_args,
 )
 from corroborate._internals.polars import to_dicts
 from corroborate._internals.registry import Registry
@@ -70,9 +86,9 @@ from corroborate._internals.registry import Registry
 
 @dataclass(frozen=True, slots=True)
 class Analysis[
-    **P = ...,
     C = pl.DataFrame | Iterable[Mapping[str, object]],
     O = object,
+    **P = ...,
 ]:
     """Typed wrapper for a registered analysis.
 
@@ -100,10 +116,24 @@ class Analysis[
     dispatch (static types erase, so the conversion decision needs
     a runtime witness). Never set by authors; the signature is the
     truth."""
-    fn: Callable[Concatenate[C, P], O]
+    # `Callable[Concatenate[C, P], O]` would make the first
+    # parameter positional-only even when the wrapped function
+    # declares a normal positional-or-keyword `cells` parameter.
+    # Keep `.fn` gradual; `__call__` below is the surface whose
+    # remaining arguments are preserved precisely by `P`.
+    fn: Callable[..., O]
     name: str
     reads: tuple[str, ...] = field(default=())
-    accepts_dataframe: bool = field(default=False)
+    accepts_dataframe: bool = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Cache the cells-shape dispatch witness for every
+        construction path, including direct `Analysis(...)` use."""
+        object.__setattr__(
+            self,
+            'accepts_dataframe',
+            _first_param_accepts_dataframe(self.fn),
+        )
 
     def __call__(
         self,
@@ -129,30 +159,95 @@ class Analysis[
         `run_for`, kwargs are passed through unfiltered — and,
         via `P`, statically checked."""
         if isinstance(cells, pl.DataFrame) and not self.accepts_dataframe:
-            # cast: `accepts_dataframe=False` ⇔ the fn's declared
-            # cells shape is iterable-of-mappings (registration-time
-            # signature detection), so the materialised rows satisfy
-            # `C` at runtime — a coupling the static system can't see.
-            return self.fn(cast('C', to_dicts(cells)), *args, **kwargs)
-        # cast: either `cells` is not a DataFrame (the `C` arm of
-        # the input union), or it is one AND `accepts_dataframe`
-        # witnesses that the fn's declared `C` admits DataFrames.
-        return self.fn(cast('C', cells), *args, **kwargs)
+            return self.fn(to_dicts(cells), *args, **kwargs)
+        return self.fn(cells, *args, **kwargs)
+
+
+def _eval_annotation_name(
+    annotation: str,
+    fn: Callable[..., object],
+) -> object | None:
+    """Resolve one postponed annotation in `fn`'s namespace.
+
+    Only the cells annotation is evaluated. This intentionally
+    avoids `get_type_hints(fn)`, which would also resolve unrelated
+    parameter/return annotations and can fail on a
+    `TYPE_CHECKING`-only name elsewhere in the signature.
+    """
+    try:
+        globals_obj = get_attr_obj(fn, '__globals__')
+    except AttributeError:
+        return None
+    if not isinstance(globals_obj, dict):
+        return None
+    try:
+        resolved: object = eval(  # pyright: ignore[reportAny]
+            annotation, globals_obj,
+        )
+    except (AttributeError, NameError, SyntaxError, TypeError):
+        return None
+    return resolved
+
+
+def _annotation_accepts_dataframe(
+    annotation: object,
+    fn: Callable[..., object],
+    seen: set[int | str],
+) -> bool:
+    """Whether `annotation` admits a DataFrame at its top level.
+
+    Aliases, `Annotated`, and union arms are transparent. Other
+    generic arguments are deliberately opaque: for example,
+    `Iterable[DataFrameRow]` describes the row element type and
+    does *not* mean the cells object itself accepts a DataFrame.
+    """
+    if isinstance(annotation, str):
+        marker: int | str = f'str:{annotation}'
+        if marker in seen:
+            return False
+        seen.add(marker)
+        resolved = _eval_annotation_name(annotation, fn)
+        if resolved is None:
+            return False
+        return _annotation_accepts_dataframe(resolved, fn, seen)
+
+    marker = id(annotation)
+    if marker in seen:
+        return False
+    seen.add(marker)
+
+    if isinstance(annotation, TypeAliasType):
+        value = get_attr_obj(annotation, '__value__')
+        return _annotation_accepts_dataframe(value, fn, seen)
+
+    if isinstance(annotation, type):
+        try:
+            return issubclass(annotation, pl.DataFrame)
+        except TypeError:
+            return False
+
+    origin = get_origin(annotation)
+    args = get_typing_args(annotation)
+    if origin is Annotated:
+        return bool(args) and _annotation_accepts_dataframe(
+            args[0], fn, seen,
+        )
+    if origin is Union or origin is UnionType:
+        return any(
+            _annotation_accepts_dataframe(arg, fn, seen)
+            for arg in args
+        )
+    return False
 
 
 def _first_param_accepts_dataframe(fn: Callable[..., object]) -> bool:
     """Registration-time detection of `fn`'s cells shape.
 
-    Under PEP 563 (every analysis module uses `from __future__
-    import annotations`) the annotation is a string; textual
-    containment of ``'DataFrame'`` is the deliberate check —
-    resolving names instead (`typing.get_type_hints`) would
-    evaluate EVERY parameter's annotation and raise on any
-    `TYPE_CHECKING`-only name anywhere in the signature. The
-    failure modes are asymmetric in the right direction: a false
-    positive hands the fn the DataFrame it would have received
-    before `__call__` normalised at all (the pre-existing status
-    quo), never a new shape."""
+    Resolves only that first annotation in the function's own
+    globals. Top-level aliases/unions are supported without the
+    false positives produced by name substring matching or by
+    recursively treating generic element types as accepted input
+    containers."""
     try:
         sig = inspect.signature(fn)
     except (ValueError, TypeError):
@@ -162,13 +257,11 @@ def _first_param_accepts_dataframe(fn: Callable[..., object]) -> bool:
         annotation = get_param_annotation(param)
         if annotation is inspect.Parameter.empty:
             return False
-        # `str()` covers both PEP 563 string annotations and live
-        # class objects (whose repr names the class).
-        return 'DataFrame' in str(annotation)
+        return _annotation_accepts_dataframe(annotation, fn, set())
     return False
 
 
-type _StoredAnalysis = Analysis[..., object, object]
+type _StoredAnalysis = Analysis[object, object, ...]
 """Registry-side erasure — the generic upper bound at the
 container boundary, never at element use sites. `P = ...` keeps
 the runner's dynamically-filtered kwarg injection callable;
@@ -199,13 +292,13 @@ class _AnalysisDecorator(Protocol):
 
     def __call__[**P, C, O](
         self, fn: Callable[Concatenate[C, P], O], /,
-    ) -> Analysis[P, C, O]: ...
+    ) -> Analysis[C, O, P]: ...
 
 
 @overload
 def analysis[**P, C, O](
     fn: Callable[Concatenate[C, P], O], /,
-) -> Analysis[P, C, O]: ...
+) -> Analysis[C, O, P]: ...
 
 
 @overload
@@ -246,17 +339,16 @@ def analysis(
 
     def _build[**P, C, O](
         fn_inner: Callable[Concatenate[C, P], O],
-    ) -> Analysis[P, C, O]:
+    ) -> Analysis[C, O, P]:
         name = fn_inner.__name__
-        wrapper: Analysis[P, C, O] = Analysis(
+        wrapper: Analysis[C, O, P] = Analysis(
             fn=fn_inner,
             name=name,
             reads=reads,
-            accepts_dataframe=_first_param_accepts_dataframe(fn_inner),
         )
         # `Registry[_StoredAnalysis]` accepts this generic-parameter
         # erasure at the storage boundary; the `cast` lifts
-        # `Analysis[P, C, O]` through Python's invariant-generic
+        # `Analysis[C, O, P]` through Python's invariant-generic
         # constraint without a `# type: ignore`.
         _REGISTRY.register(name, cast('_StoredAnalysis', wrapper))
         return wrapper

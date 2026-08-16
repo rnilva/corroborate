@@ -42,6 +42,7 @@ from corroborate.bridge.analysis import (
 from corroborate.bridge.bridge import (
     Bridge,
     BridgeEvaluation,
+    RecordedContrastBinding,
     claim_bridge,
     evaluate,
 )
@@ -67,6 +68,7 @@ __all__ = [
     'BridgeEvaluation',
     'GateLevel',
     'GateResult',
+    'RecordedContrastBinding',
     'RefutationClass',
     'Verdict',
     'analysis',

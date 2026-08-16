@@ -35,8 +35,7 @@ Bundle format v1 — one directory, sealed by
   ``seeds`` extent + ``outcomes`` naming the numeric fields each
   evaluation record carries), optional ``run_measurements``
   (producer-computed per-run scalars admitted as attested),
-  optional ``assignment`` attestation, optional
-  ``prospective_protocol`` commitment.
+  and optional ``assignment`` attestation.
 - ``runs.jsonl`` — one record per seeded run: ``run_id``,
   ``physical_arm``, the ``pair_by`` value, ``config_path`` to the
   resolved configuration actually used, ``complete: true``, the
@@ -44,8 +43,7 @@ Bundle format v1 — one directory, sealed by
 - ``evaluations.jsonl`` — one record per (seeded run, evaluation
   checkpoint, evaluation seed) with the declared outcome fields.
 - ``provenance.json`` — producer identity + invocation record.
-- the referenced resolved-config JSON files (and optional
-  prospective-protocol document).
+- the referenced resolved-config JSON files.
 
 Mechanically verified: seal integrity, pair completeness (one
 seeded run per condition per pairing unit), configuration
@@ -55,7 +53,8 @@ scope consistency. Attested, never silently upgraded: assignment
 procedure, producer invocation, producer-computed measurements.
 
 Rows are one scalar cell per seeded run: identity + condition
-columns (``arm_key``, ``arm_is_baseline``), the scope fields, the
+columns (``arm_key``, ``arm_is_baseline``), the sealed
+``bundle_digest``, the scope fields, the
 intervention value at its dotted ``parameter_path`` (the
 framework's leaf-column convention), and per declared outcome a
 final-checkpoint mean (``<outcome>_mean``), a
@@ -65,14 +64,15 @@ and the evaluation trajectory as one scalar column per checkpoint
 exploring how the contrast evolves over training rather than only
 where it ended.
 
-The derived names — ``<outcome>_mean``, ``<outcome>_auc``,
-``<outcome>_mean_at_<checkpoint>`` — are adapter-reserved: a
-producer-declared scope field or run measurement colliding with
-one fails closed (``row_key_collision``) rather than being
-silently overwritten. A bundle sealed before the trajectory
-columns existed that used such a name for its own measurement is
-therefore rejected by this adapter version; rename the producer
-field and re-seal.
+The derived names — ``<outcome>_mean``, ``<outcome>_auc``, and the
+whole ``<outcome>_mean_at_`` namespace — are adapter-reserved: a
+producer-declared scope field or run measurement using one fails
+closed (``row_key_collision``) rather than being silently
+overwritten. The trajectory prefix is reserved independently of
+whether its suffix is a declared checkpoint. A bundle sealed
+before the trajectory columns existed that used such a name for
+its own measurement is therefore rejected by this adapter
+version; rename the producer field and re-seal.
 """
 from __future__ import annotations
 
@@ -111,7 +111,7 @@ __all__ = [
     'seal_bundle',
 ]
 
-ADAPTER_VERSION = '1.0.0'
+ADAPTER_VERSION = '1.1.0'
 
 _CONTRACT_VERSION = 1
 
@@ -152,8 +152,11 @@ class AdapterCheck:
 @dataclass(frozen=True, slots=True)
 class AdapterReceipt:
     """Audit record emitted only from the files actually consumed
-    — the serialisable artifact that travels with the panel so a
-    later reader can see what was proven vs merely attested."""
+    — stored beside the validated rows on ``AdaptedStudy`` so a
+    reader can see what was proven versus merely attested. A bare
+    ``Panel`` does not carry this full receipt (adapted cells retain
+    the bundle digest); keep the adapted study when the complete
+    assurance record matters."""
 
     adapter_version: str
     study_id: str
@@ -216,7 +219,7 @@ class RecordedContrast:
     baseline_value: float
     treatment_value: float
     bundle_digest: str
-    assurance: CheckStatus
+    assignment_status: CheckStatus
 
     @property
     def arm_keys(self) -> tuple[str, str]:
@@ -386,11 +389,14 @@ class _Contract:
     outcomes: tuple[str, ...]
     run_measurements: tuple[str, ...]
     assignment_statement: str | None
-    protocol_path: str | None
-    protocol_sha256: str | None
 
 
 def _parse_contract(raw: Mapping[str, object]) -> _Contract:
+    if 'prospective_protocol' in raw:
+        raise ValueError(
+            'prospective_protocol is not supported: a bundle-local seal '
+            'cannot establish when a claim was authored',
+        )
     study_id = _as_str(raw.get('study_id'), 'study_id')
     pair_by = _as_str(raw.get('pair_by'), 'pair_by')
     pair_by_config_path_raw = raw.get('pair_by_config_path')
@@ -488,19 +494,6 @@ def _parse_contract(raw: Mapping[str, object]) -> _Contract:
             assignment.get('statement'), 'assignment.statement',
         )
 
-    protocol_raw = raw.get('prospective_protocol')
-    if protocol_raw is None:
-        protocol_path = None
-        protocol_sha256 = None
-    else:
-        protocol = _as_mapping(protocol_raw, 'prospective_protocol')
-        protocol_path = _as_str(
-            protocol.get('path'), 'prospective_protocol.path',
-        )
-        protocol_sha256 = _as_str(
-            protocol.get('sha256'), 'prospective_protocol.sha256',
-        )
-
     return _Contract(
         study_id=study_id,
         pair_by=pair_by,
@@ -512,8 +505,6 @@ def _parse_contract(raw: Mapping[str, object]) -> _Contract:
         outcomes=outcomes,
         run_measurements=run_measurements,
         assignment_statement=assignment_statement,
-        protocol_path=protocol_path,
-        protocol_sha256=protocol_sha256,
     )
 
 
@@ -685,6 +676,16 @@ class _Adaptation:
             'evaluation_outcomes',
             'evaluation outcome names must be unique',
         )
+        trajectory_prefixes = tuple(
+            f'{outcome}_mean_at_' for outcome in contract.outcomes
+        )
+        for producer_name in (*contract.scope, *contract.run_measurements):
+            self._require(
+                not producer_name.startswith(trajectory_prefixes),
+                'row_key_collision',
+                f'producer-declared column {producer_name!r} uses an '
+                'adapter-reserved trajectory namespace',
+            )
         return contract
 
     def _read_provenance(self) -> str:
@@ -942,97 +943,6 @@ class _Adaptation:
         )
         return index
 
-    def _verify_protocol(
-        self,
-        contract: _Contract,
-        entries: Mapping[str, ManifestEntry],
-        pairs: Mapping[int, tuple[_Run, ...]],
-    ) -> None:
-        if contract.protocol_path is None:
-            self._note(
-                'protocol',
-                CheckStatus.UNVERIFIABLE,
-                'no prospective protocol committed; the design is admitted '
-                'retrospectively',
-            )
-            return
-        c = contract.contrast
-        try:
-            protocol_file = safe_bundle_path(
-                self._root, contract.protocol_path,
-            )
-        except ValueError as exc:
-            self._fail('protocol_committed', str(exc))
-        self._require(
-            contract.protocol_path in entries
-            and sha256_file(protocol_file) == contract.protocol_sha256,
-            'protocol_committed',
-            'prospective protocol is absent or differs from its committed '
-            'digest',
-        )
-        self._pass(
-            'protocol_committed', 'verified prospective protocol digest',
-        )
-        document = self._load_object(
-            contract.protocol_path, 'prospective_protocol',
-        )
-        try:
-            protocol_pair_keys = tuple(
-                _as_int(value, 'protocol pair key')
-                for value in _as_list(
-                    document.get('confirmatory_pair_keys'),
-                    'prospective_protocol.confirmatory_pair_keys',
-                )
-            )
-            arms_document = _as_mapping(
-                document.get('paired_arms'),
-                'prospective_protocol.paired_arms',
-            )
-            baseline_key = c.arm_keys[c.baseline_arm]
-            treatment_key = c.arm_keys[c.treatment_arm]
-            protocol_baseline_value = _as_finite_number(
-                _get_path(
-                    _as_mapping(
-                        arms_document.get(baseline_key),
-                        f'prospective_protocol.paired_arms[{baseline_key!r}]',
-                    ),
-                    c.parameter_path,
-                ),
-                'protocol baseline value',
-            )
-            protocol_treatment_value = _as_finite_number(
-                _get_path(
-                    _as_mapping(
-                        arms_document.get(treatment_key),
-                        f'prospective_protocol.paired_arms'
-                        f'[{treatment_key!r}]',
-                    ),
-                    c.parameter_path,
-                ),
-                'protocol treatment value',
-            )
-            evaluation_document = _as_mapping(
-                document.get('evaluation'),
-                'prospective_protocol.evaluation',
-            )
-        except _SCHEMA_ERRORS as exc:
-            self._fail('protocol_schema', str(exc))
-        self._require(
-            protocol_pair_keys == tuple(sorted(pairs))
-            and protocol_baseline_value == c.baseline_value
-            and protocol_treatment_value == c.treatment_value
-            and evaluation_document.get('checkpoints')
-            == list(contract.checkpoints)
-            and evaluation_document.get('seeds')
-            == list(contract.eval_seeds),
-            'protocol_design_match',
-            'executed pair keys, conditions, or evaluation extent differ '
-            'from the protocol',
-        )
-        self._pass(
-            'protocol_design_match', 'executed design matches the protocol',
-        )
-
     def _put(
         self,
         row: dict[str, MeasurementLeaf],
@@ -1053,6 +963,7 @@ class _Adaptation:
         intervention_by_run: Mapping[str, float],
         evaluations: Mapping[tuple[str, int, int], Mapping[str, float]],
         producer: str,
+        sealed_bundle_digest: str,
     ) -> tuple[Mapping[str, MeasurementLeaf], ...]:
         c = contract.contrast
         rows: list[Mapping[str, MeasurementLeaf]] = []
@@ -1060,6 +971,7 @@ class _Adaptation:
             row: dict[str, MeasurementLeaf] = {}
             self._put(row, 'id', run_id)
             self._put(row, 'corpus', contract.study_id)
+            self._put(row, 'bundle_digest', sealed_bundle_digest)
             self._put(row, 'program', f'external:{producer}')
             self._put(row, 'pair_id', str(run.pair_value))
             self._put(row, contract.pair_by, run.pair_value)
@@ -1130,23 +1042,27 @@ class _Adaptation:
         pairs = self._verify_pairs(contract, runs)
         intervention_by_run = self._verify_config_isolation(contract, runs)
         evaluations = self._read_evaluations(contract, runs)
-        self._verify_protocol(contract, entries, pairs)
         if contract.assignment_statement is not None:
             self._note(
                 'assignment',
                 CheckStatus.ATTESTED,
                 contract.assignment_statement,
             )
-            assurance = CheckStatus.ATTESTED
+            assignment_status = CheckStatus.ATTESTED
         else:
             self._note(
                 'assignment',
                 CheckStatus.UNVERIFIABLE,
                 'assignment process was not mechanically recorded',
             )
-            assurance = CheckStatus.UNVERIFIABLE
+            assignment_status = CheckStatus.UNVERIFIABLE
         rows = self._derive_rows(
-            contract, runs, intervention_by_run, evaluations, producer,
+            contract,
+            runs,
+            intervention_by_run,
+            evaluations,
+            producer,
+            computed_digest,
         )
         c = contract.contrast
         contrast = RecordedContrast(
@@ -1156,7 +1072,7 @@ class _Adaptation:
             baseline_value=c.baseline_value,
             treatment_value=c.treatment_value,
             bundle_digest=computed_digest,
-            assurance=assurance,
+            assignment_status=assignment_status,
         )
         receipt = AdapterReceipt(
             adapter_version=ADAPTER_VERSION,

@@ -1,47 +1,35 @@
-"""Claim-bridge — typed authored edge declaration on the
-measurable graph, with `holds_when` threshold body.
+"""Claim bridges — executable test modules on the measurable graph.
 
-A claim bridge is the authoring unit of the measurable-graph
-file protocol. The author writes a Python function whose
-*signature* IS the declaration:
+A bridge is the atomic claim-authoring unit:
 
-  - **Function name** = bridge name.
-  - **Defaulted kwargs `source`, `target`, `direction`, `tier`** =
-    structural fields of the edge.
-  - **Other defaulted kwargs** = the params bag the framework
-    forwards to analyses at evaluation time (`treatment_arm`,
-    `pair_by`, `env_name`, `dag`, ...).
-  - **Parameters WITHOUT defaults** = analysis fixtures the
-    framework injects by name. The type annotation
-    (`paired_g: PairedGResult`) is for the IDE/type-checker;
-    runtime resolution is by parameter name against the
-    `@analysis` registry.
+* decorator arguments declare the structural edge, scope, pairing axes,
+  evidential tier, and predicted direction;
+* function parameters without defaults are registered analysis fixtures,
+  injected by name at evaluation time;
+* defaulted function parameters configure those analyses and the verdict
+  thresholds; and
+* the function body maps the injected evidence to a ``Verdict``.
 
-  - **Function body** = the `holds_when` threshold — explicit
-    sign / magnitude / power criterion, returning a `Verdict`.
+The resulting module is independent of any observed data. It resembles a
+pytest test that consumes fixtures, with scientific metadata made explicit:
 
-The decorator is no-arg: `@claim_bridge` reads everything from
-the function's signature. Like a pytest test that consumes
-fixtures, but with the test's metadata sitting as keyword
-defaults.
-
-    @claim_bridge
+    @claim_bridge(
+        source='<intervention_parameter>',
+        target='<outcome_metric>',
+        direction=Direction.DIRECT,
+        tier=Tier.INTERVENTIONAL,
+        pair_by=('seed',),
+        predicted_direction='a_gt_b',
+    )
     def treatment_helps_outcome(
         paired_g: PairedGResult,
         *,
-        source: str = '<outcome_metric>',
-        target: str = '<outcome_metric>',
-        direction: Direction = Direction.DIRECT,
-        tier: Tier = Tier.ASSOCIATIONAL,
-        treatment_arm: str = 'treatment',
-        baseline_arm: str = 'baseline',
-        pair_by: tuple[str, ...] = ('seed',),
-        env_name: str = '<env>',
+        minimum_pairs: int = 30,
     ) -> Verdict:
+        if paired_g.n_pairs < minimum_pairs:
+            return Verdict.POWER_INSUFFICIENT
         if paired_g.g > 0.3 and paired_g.p_value < 0.05:
             return Verdict.HELD
-        if paired_g.n_pairs < 30:
-            return Verdict.POWER_INSUFFICIENT
         return Verdict.NO_EFFECT
 """
 from __future__ import annotations
@@ -52,17 +40,20 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
 from types import MappingProxyType
-from typing import cast
+from typing import Protocol, cast
 
 import polars as pl
 
 from corroborate._internals.introspection import get_param_default
+from corroborate.bridge._filter import filter_cells
 from corroborate.bridge.deferred_scope import DeferredScope
 from corroborate.bridge.admission import (
     AUTO_GATES,
     AdmissionGate,
     GateLevel,
     GateResult,
+    distinct_units,
+    exogenous_source,
 )
 from corroborate.bridge.analysis import resolve_for_holds_when
 from corroborate.bridge.verdict import RefutationClass, Verdict
@@ -97,6 +88,34 @@ from corroborate.graph.causal import Direction, Tier  # noqa: E402
 type BridgeEndpoint = (
     str | Measurable[Mapping[str, object], object] | DoEffect
 )
+
+
+class RecordedContrastBinding(Protocol):
+    """Verified runtime binding for an externally executed contrast.
+
+    The bridge layer depends only on this structural surface, not on
+    ``corroborate.data.adapter``.  ``RecordedContrast`` satisfies it,
+    while the authored bridge remains independent of any bundle or
+    producer-specific arm labels.
+    """
+
+    @property
+    def parameter_path(self) -> str: ...
+
+    @property
+    def baseline_key(self) -> str: ...
+
+    @property
+    def treatment_key(self) -> str: ...
+
+    @property
+    def baseline_value(self) -> float: ...
+
+    @property
+    def treatment_value(self) -> float: ...
+
+    @property
+    def bundle_digest(self) -> str: ...
 
 
 def endpoint_name(e: BridgeEndpoint) -> str:
@@ -225,7 +244,7 @@ class Bridge:
     the framework hands to the analysis. The cache flows as a
     `pl.DataFrame`; `evaluate()` applies `df.filter(scope)`
     (with missing-column null-padding via
-    `_filter_with_missing_cols`) before converting to dicts and
+    `filter_cells`) before converting to dicts and
     forwarding. `None` means "match all". Replaces the legacy
     `env_name` / `extra_filters` / `extra_min_pairs` /
     `extra_max_pairs` / `cell_predicate` kwargs that used to
@@ -384,6 +403,11 @@ class BridgeEvaluation:
     downstream consumers (extent-cluster grouping, walks) can key
     by edge endpoints without re-loading the Bridge.
 
+    `evidence_digest`: content identity of an externally adapted
+    bundle when evaluation used a recorded contrast. ``None`` for
+    native/ordinary cell sets. This makes cached evaluation records
+    distinguish evidence from different sealed bundles.
+
     `extent_hash`: stable BLAKE2b identity of the set of cell IDs admitted by
     the bridge's effective scope (`bridge.scope ∧ module_scope`).
     Two bridges with the same `(source_name, target_name,
@@ -404,6 +428,7 @@ class BridgeEvaluation:
     refutation_class: 'RefutationClass | None' = None
     source_name: str = ''
     target_name: str = ''
+    evidence_digest: str | None = None
     extent_hash: int = 0
     """**Sub-classification of NO_EFFECT** (or, more rarely, of
     POWER_INSUFFICIENT). Bridge bodies that distinguish "predicted
@@ -649,61 +674,13 @@ def claim_bridge(
     return _decorator
 
 
-def _filter_with_missing_cols(
-    df: pl.DataFrame, expr: pl.Expr,
-) -> pl.DataFrame:
-    """Apply `expr` as a filter to `df`. For columns referenced
-    by `expr` but absent from `df`:
-
-    - If the name resolves in the `@measurable` registry, compute
-      it per-cell (with shared dep memoisation via
-      `evaluate_with_measurables`) and add it as a column. This
-      is the "bridges-verify-against-raw-traces" path: when a
-      bridge declares `scope = pl.col('jensen_dormancy_gap')
-      >= 0` and the input DataFrame is a raw `runs.parquet`
-      without that measurable yet, the framework computes it on
-      the fly.
-    - Otherwise, pre-fill as null. Universal-cache schema
-      heterogeneity (corpus A has `reward_scale`, corpus B
-      doesn't, neither corpus computed it) lands here — null
-      rows fail the predicate naturally (polars filter excludes
-      null-result rows), matching the legacy `_matches_filters`
-      "missing key → False" semantics."""
-    # `expr.meta.root_names()` returns one entry per `pl.col(...)`
-    # reference, so a predicate like
-    # `(pl.col('n_step') == 1) | (pl.col('n_step') == 3)` yields
-    # `['n_step', 'n_step']`. Deduplicate before threading through
-    # the missing-column resolution so the downstream
-    # `df.with_columns([pl.lit(None).alias(c) for c in ...])` can't
-    # emit two `pl.lit(None).alias('n_step')` expressions (which
-    # polars rejects with a duplicate-name ComputeError).
-    referenced = list(dict.fromkeys(expr.meta.root_names()))
-    missing = [c for c in referenced if c not in df.columns]
-    if not missing:
-        return df.filter(expr)
-
-    from corroborate.measurables import compute_missing_columns
-    # `compute_missing_columns` resolves whichever names are
-    # registered measurables and adds them as columns; names that
-    # aren't registered remain absent and get null-padded so the
-    # filter excludes them naturally (matching the legacy
-    # `_matches_filters` "missing key → False" semantics).
-    df = compute_missing_columns(df, missing)
-    truly_missing = [c for c in missing if c not in df.columns]
-    if truly_missing:
-        df = df.with_columns(
-            [pl.lit(None).alias(c) for c in truly_missing],
-        )
-
-    return df.filter(expr)
-
-
 def evaluate(
     bridge: Bridge,
     cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
     module_scope: pl.Expr | None = None,
+    recorded_contrast: RecordedContrastBinding | None = None,
 ) -> BridgeEvaluation:
     """Run a bridge against a cell-set: apply `bridge.scope`
     as a polars filter, resolve each fixture (a `holds_when` parameter
@@ -745,6 +722,17 @@ def evaluate(
     Bridges that intentionally violate the module-level filter
     must move to a different hypothesis module.
 
+    `recorded_contrast` binds an externally executed, verified
+    two-arm contrast at evaluation time.  The bridge still declares
+    the data-independent edge (for example ``gamma -> return_mean``);
+    the binding supplies the producer-specific arm keys and verifies
+    its intervention path, arm values, and sealed bundle digest against
+    the cells.
+    Analyses then consume ``bridge.target`` as their measured source,
+    exactly as they do for an executable ``DoEffect``.  Supplying both
+    forms is an error: a recorded contrast is evidence about an action
+    performed elsewhere, not an operation Corroborate can re-apply.
+
     Raises `TypeError` if the Bridge has no `holds_when` body —
     `@claim_bridge` always populates it; this guard catches direct
     `Bridge(...)` construction with `holds_when=None`."""
@@ -754,6 +742,78 @@ def evaluate(
             f'body — @claim_bridge always populates it; constructing '
             f'a Bridge directly with holds_when=None is unsupported.',
         )
+    # One-shot iterables must survive both deferred-scope resolution and
+    # the eventual analysis pass. Materialise them once at the boundary.
+    if not isinstance(cells, pl.DataFrame):
+        cells = [dict(cell) for cell in cells]
+    recorded_arm_keys: tuple[str, str] | None = None
+    if recorded_contrast is not None:
+        if isinstance(bridge.source, DoEffect):
+            raise ValueError(
+                f'evaluate({bridge.name!r}): cannot combine an executable '
+                'DoEffect source with recorded_contrast',
+            )
+        if not isinstance(bridge.source, str):
+            raise ValueError(
+                f'evaluate({bridge.name!r}): recorded_contrast requires '
+                'a string source naming its parameter path',
+            )
+        if bridge.source_name != recorded_contrast.parameter_path:
+            raise ValueError(
+                f'evaluate({bridge.name!r}): bridge source '
+                f'{bridge.source_name!r} does not match recorded contrast '
+                f'parameter path {recorded_contrast.parameter_path!r}',
+            )
+        recorded_arm_keys = (
+            recorded_contrast.baseline_key,
+            recorded_contrast.treatment_key,
+        )
+        if recorded_arm_keys[0] == recorded_arm_keys[1]:
+            raise ValueError(
+                f'evaluate({bridge.name!r}): recorded contrast arm '
+                f'keys must be distinct; got {recorded_arm_keys[0]!r}',
+            )
+        recorded_rows = (
+            cast(list[dict[str, object]], cells.to_dicts())
+            if isinstance(cells, pl.DataFrame)
+            else cells
+        )
+        expected_values = {
+            recorded_contrast.baseline_key: recorded_contrast.baseline_value,
+            recorded_contrast.treatment_key: recorded_contrast.treatment_value,
+        }
+        seen_arms: set[str] = set()
+        for cell in recorded_rows:
+            cell_digest = cell.get('bundle_digest')
+            if cell_digest != recorded_contrast.bundle_digest:
+                raise ValueError(
+                    f'evaluate({bridge.name!r}): recorded contrast digest '
+                    f'{recorded_contrast.bundle_digest!r} does not match '
+                    f'cell bundle digest {cell_digest!r}',
+                )
+            arm = cell.get('arm_key')
+            if not isinstance(arm, str) or arm not in expected_values:
+                continue
+            seen_arms.add(arm)
+            source_value = cell.get(recorded_contrast.parameter_path)
+            expected_value = expected_values[arm]
+            if (
+                isinstance(source_value, bool)
+                or not isinstance(source_value, (int, float))
+                or not math.isfinite(float(source_value))
+                or float(source_value) != expected_value
+            ):
+                raise ValueError(
+                    f'evaluate({bridge.name!r}): arm {arm!r} records '
+                    f'{recorded_contrast.parameter_path}={source_value!r}; '
+                    f'contrast binds it to {expected_value!r}',
+                )
+        missing_arms = set(recorded_arm_keys).difference(seen_arms)
+        if missing_arms:
+            raise ValueError(
+                f'evaluate({bridge.name!r}): recorded contrast arm(s) '
+                f'{sorted(missing_arms)!r} are absent from the cells',
+            )
     # Effective scope = bridge.scope ∧ module_scope (either may
     # be None). Polars' `&` is the framework-honest composition.
     #
@@ -805,7 +865,7 @@ def evaluate(
             cells_list = list(cells)
             df = pl.from_dicts(cells_list) if cells_list else pl.DataFrame()
         if df.height > 0:
-            df = _filter_with_missing_cols(df, effective_scope)
+            df = filter_cells(df, effective_scope)
         filtered_cells = (
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []
@@ -829,6 +889,17 @@ def evaluate(
     all_gates: tuple[AdmissionGate, ...] = AUTO_GATES + bridge.gates
     warnings: list[GateResult] = []
     for gate in all_gates:
+        # A recorded intervention repeats one condition value across
+        # experimental units by construction, just like a DoEffect's arm
+        # indicator. ``pair_by`` — not the parameter's value cardinality —
+        # determines the independent units for its paired analysis. It is
+        # also evidence of an executed contrast, so the native-substrate
+        # exogenous-source gate does not reinterpret its parameter path as
+        # an unexecuted author-controlled leaf.
+        if recorded_contrast is not None and gate in (
+            distinct_units, exogenous_source,
+        ):
+            continue
         result = gate(bridge, filtered_cells, claim=claim)
         if result is None or result.passed:
             continue
@@ -843,20 +914,30 @@ def evaluate(
                 source_name=bridge.source_name,
                 target_name=bridge.target_name,
                 extent_hash=extent_hash,
+                evidence_digest=(
+                    recorded_contrast.bundle_digest
+                    if recorded_contrast is not None else None
+                ),
             )
         warnings.append(result)
     # Contrast resolution:
     #   - `source = DoEffect(...)` → contrast = the DoEffect, and
     #     the analysis's `source` slot maps to bridge.target_name
     #     (the measurement column).
+    #   - `recorded_contrast=...` → bind the verified external arm
+    #     labels without putting bundle-specific data in the bridge;
+    #     the analysis source maps to bridge.target_name.
     #   - `source = str | Measurable` → no contrast; the name flows
     #     directly as the analysis's source. Correlational bridges,
     #     or bridges where the author wants paired_g to compute on
     #     a non-outcome measurable.
-    contrast: DoEffect | None
+    contrast: DoEffect | RecordedContrastBinding | None
     source_for_analysis: str
     if isinstance(bridge.source, DoEffect):
         contrast = bridge.source
+        source_for_analysis = bridge.target_name
+    elif recorded_contrast is not None:
+        contrast = recorded_contrast
         source_for_analysis = bridge.target_name
     else:
         contrast = None
@@ -871,7 +952,10 @@ def evaluate(
         **dict(bridge.params),
     }
     if contrast is not None:
-        arm_keys = contrast.arm_keys()
+        if isinstance(contrast, DoEffect):
+            arm_keys = contrast.arm_keys()
+        else:
+            arm_keys = (contrast.baseline_key, contrast.treatment_key)
         bridge_params['arm_keys'] = arm_keys
         # Binary compat: when N=2, inject treatment_arm /
         # baseline_arm so existing bridges with default kwargs
@@ -938,6 +1022,10 @@ def evaluate(
         source_name=bridge.source_name,
         target_name=bridge.target_name,
         extent_hash=extent_hash,
+        evidence_digest=(
+            recorded_contrast.bundle_digest
+            if recorded_contrast is not None else None
+        ),
     )
 
 
@@ -1060,7 +1148,7 @@ def measurable_names_for_bridges(
                 except Exception:  # noqa: BLE001
                     # If polars metadata extraction fails, fall through
                     # — the missing-column path in
-                    # `_filter_with_missing_cols` will surface the error
+                    # `filter_cells` will surface the error
                     # at evaluate-time instead.
                     pass
         for name in candidates:
@@ -1075,6 +1163,7 @@ __all__ = [
     'BridgeEndpoint',
     'BridgeEvaluation',
     'Direction',
+    'RecordedContrastBinding',
     'Tier',
     'claim_bridge',
     'endpoint_name',
