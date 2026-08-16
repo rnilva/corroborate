@@ -112,9 +112,13 @@ can prove are marked `VERIFIED`; producer statements remain
 
 [`examples/sb3_demo/`](examples/sb3_demo/) walks through this
 with stable-baselines3 DQN: training, bundle production,
-adaptation, and a pre-registered directional test. It runs on CPU
-in a few minutes, and a bundle from a real run is committed so
-the analysis half can be run without training.
+adaptation, exploration on the adapted panel (the per-checkpoint
+trajectory, a design-free paired probe), and a directional test
+under a declared design — with the receipt recording whether that
+design was sealed prospectively or, as in most studies, declared
+at analysis time. It runs on CPU in a few minutes, and a bundle
+from a real run is committed so the analysis half can be run
+without training.
 
 ## Repository layout
 

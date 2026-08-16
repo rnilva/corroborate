@@ -7,7 +7,10 @@ seen — here, ordinary
 DQN. The training script contains no corroborate imports.
 
 The study: whether gamma = 0.99 outperforms gamma = 0.80 on
-CartPole-v1 at 25k steps.
+CartPole-v1 at 25k steps. Like most real studies it starts by
+looking: the adapted run set is explored first, and the
+directional claim is declared afterwards — with the receipt
+recording exactly that register.
 
 ## 1. Train (`train.py`, pure SB3)
 
@@ -25,7 +28,7 @@ and one resolved-config JSON per run.
 A bundle from a real run of this script is committed, so step 2
 can be run without training.
 
-## 2. Verify, adapt, analyse (`analyze.py`, corroborate only)
+## 2. Verify and adapt (`analyze.py`, corroborate only)
 
 ```bash
 uv run python examples/sb3_demo/analyze.py
@@ -54,10 +57,19 @@ Statements only the producer can make remain `ATTESTED` or
 `UNVERIFIABLE`. A malformed bundle raises with the same
 vocabulary instead of parsing permissively.
 
-The adapted run set is a `Panel`:
+The `protocol` line is the study's epistemic register, typed: no
+design was sealed before the runs existed, so whatever is claimed
+later is admitted retrospectively. That is the ordinary register
+of exploratory work — recorded, not penalised.
+
+## 3. Explore
+
+The adapted run set is a `Panel`; its cells are a polars
+DataFrame that registered analyses accept directly. Nothing in
+this step requires a declared design.
 
 ```text
-panel: 6 seeded runs × 12 columns
+panel: 6 seeded runs × 17 columns
 ┌─────────────┬──────────┬──────┬───────┬─────────────┐
 │ id          ┆ arm_key  ┆ seed ┆ gamma ┆ return_mean │
 ╞═════════════╪══════════╪══════╪═══════╪═════════════╡
@@ -70,11 +82,38 @@ panel: 6 seeded runs × 12 columns
 └─────────────┴──────────┴──────┴───────┴─────────────┘
 ```
 
-## 3. The pre-registered test
+The adapter derives one `return_mean_at_<step>` column per
+evaluation checkpoint, so the trajectory — not just the final
+mean — is explorable:
 
-The claim is declared before outcomes are read
-(`DirectionalDesign`: one-sided, alpha 0.05, SESOI dz = 0.5,
-3 planned pairs):
+```text
+mean return per checkpoint (seeds pooled per condition):
+┌──────────┬───────┬───────┬───────┬───────┬───────┐
+│ arm_key  ┆ 5000  ┆ 10000 ┆ 15000 ┆ 20000 ┆ 25000 │
+╞══════════╪═══════╪═══════╪═══════╪═══════╪═══════╡
+│ gamma080 ┆ 210.9 ┆ 172.7 ┆ 182.9 ┆ 208.0 ┆ 186.3 │
+│ gamma099 ┆ 164.3 ┆ 172.9 ┆ 199.7 ┆ 135.8 ┆ 124.1 │
+└──────────┴───────┴───────┴───────┴───────┴───────┘
+```
+
+Gamma 0.99 is behind at 5k, level by 10k, ahead at 15k — then
+falls away over the last two checkpoints while gamma 0.80 holds.
+At this training length the intuitive claim runs the other way,
+and the trajectory says why a final-checkpoint reading alone
+would mislead: the deficit is late-training degradation, not
+slower convergence still in progress.
+
+A design-free paired probe quantifies the same contrast:
+
+```text
+probe: Δ(return_mean) = -62.2 ± 40.0  g=-0.51  pairs helped: 33% of 3
+```
+
+## 4. A directional claim under a declared design
+
+Exploration sharpened the question; now the claim is stated as a
+frozen design (`DirectionalDesign`: one-sided, alpha 0.05, SESOI
+dz = 0.5, 3 planned pairs) and tested:
 
 ```text
 claim: gamma 0.99 > gamma 0.80 on return_mean
@@ -83,11 +122,28 @@ claim: gamma 0.99 > gamma 0.80 on return_mean
   verdict: POWER_INSUFFICIENT (UNDERPOWERED)
 ```
 
-At this training length the point estimate runs against the
-claim, and three pairs are not enough evidence to settle it
-either way. The verdict is therefore `POWER_INSUFFICIENT` rather
-than `NO_EFFECT`; with more seeds (`--seeds 8`) the verdict
-follows whatever the data supports.
+The design is declared at analysis time, and the receipt already
+recorded what that means: retrospective. At this training length
+the point estimate runs against the claim, and three pairs are
+not enough evidence to settle it either way. The verdict is
+therefore `POWER_INSUFFICIENT` rather than `NO_EFFECT`; with more
+seeds (`--seeds 8`) the verdict follows whatever the data
+supports.
+
+## 5. From exploration to confirmation
+
+The exploratory pass produced a directional, scoped claim — and a
+mechanism suspicion (late-training degradation at high gamma)
+worth its own study. To test the claim in the confirmatory
+register, seal the design *before* training the fresh seeds: the
+contract's optional `prospective_protocol` field commits a
+document (by path and SHA-256) naming the confirmatory pair keys,
+the per-condition configurations, and the evaluation extent. The
+adapter then verifies the digest and that the executed study
+matches the sealed design (`protocol_committed` and
+`protocol_design_match`, both `VERIFIED`) — "pre-registered"
+becomes a machine-checked property of the record rather than a
+sentence in prose.
 
 ## Producer-side cost
 
