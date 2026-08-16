@@ -81,11 +81,11 @@ from enum import Enum
 import polars as pl
 from scipy import stats
 
+from corroborate.analyses.dynamic_mediation import ColumnOrMeasurable
 from corroborate.analyses.dynamic_mediation.pc_adjacency import (
     DynamicPCResult, dynamic_pc_adjacency,
 )
 from corroborate.bridge.analysis import analysis
-from corroborate.measurables.measurable import Measurable
 
 
 class LeakAdjudication(Enum):
@@ -220,7 +220,7 @@ def mediator_leak_adjudication(
     *,
     mediator_per_burst: str,
     sibling_per_burst: str | tuple[str, ...],
-    outcome_per_burst: str | Measurable[Mapping[str, object], object],
+    outcome_per_burst: ColumnOrMeasurable,
     arm_field: str = 'arm_key',
     stratify_by: tuple[str, ...] = ('env_name',),
     min_n_per_burst: int = 8,
@@ -287,7 +287,18 @@ def mediator_leak_adjudication(
             joint_pc_per_stratum={},
         )
 
-    common_kwargs = dict(
+    # Two runs against the same PC configuration; kwargs are spelled
+    # explicitly at each site so the forwards stay checked against
+    # `dynamic_pc_adjacency`'s real signature (a shared kwargs dict
+    # would erase them to `dict[str, object]`).
+    # Sibling-only run: pass the sibling set as-is to dynamic_pc, which
+    # already accepts tuple-or-string. Single sibling → depth-1; tuple
+    # → depth-k where k = len(tuple).
+    sibling_res = dynamic_pc_adjacency.fn(
+        cells,
+        mediator_per_burst=(
+            sibling_tuple[0] if len(sibling_tuple) == 1 else sibling_tuple
+        ),
         arm_field=arm_field,
         outcome_per_burst=outcome_per_burst,
         stratify_by=stratify_by,
@@ -295,19 +306,16 @@ def mediator_leak_adjudication(
         alpha=alpha,
         n_bootstrap=n_bootstrap,
     )
-    # Sibling-only run: pass the sibling set as-is to dynamic_pc, which
-    # already accepts tuple-or-string. Single sibling → depth-1; tuple
-    # → depth-k where k = len(tuple).
-    sibling_res = dynamic_pc_adjacency.fn(
-        cells,
-        mediator_per_burst=sibling_tuple[0] if len(sibling_tuple) == 1 else sibling_tuple,
-        **common_kwargs,
-    )
     # Joint run: (mediator, *siblings) at depth-(k+1).
     joint_res = dynamic_pc_adjacency.fn(
         cells,
         mediator_per_burst=joint_set,
-        **common_kwargs,
+        arm_field=arm_field,
+        outcome_per_burst=outcome_per_burst,
+        stratify_by=stratify_by,
+        min_n_per_burst=min_n_per_burst,
+        alpha=alpha,
+        n_bootstrap=n_bootstrap,
     )
 
     strata = sorted(set(sibling_res.keys()) & set(joint_res.keys()))

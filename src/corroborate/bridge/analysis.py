@@ -40,13 +40,23 @@ runs it on the cells, and injects the result.
 Analyses are registered globally by `fn.__name__`. The naming is
 the consumption protocol: a bridge's parameter name must match a
 registered analysis name.
+
+`Analysis[**P, C, O]` preserves the wrapped fn's full surface —
+cells shape `C`, keyword surface `P`, result `O` — through the
+wrapper (CLAUDE.md: ParamSpec preserves caller signature through
+generic wrappers), so direct exploration calls are checked
+against the analysis's real signature. The registry stores the
+erased upper bound `Analysis[..., object, object]` — the generic
+upper bound lives at the container boundary only; the runner's
+dynamically-filtered kwarg injection (`run_for`) rides the
+gradual `...` form.
 """
 from __future__ import annotations
 
 import inspect
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import cast, overload
+from typing import Concatenate, Protocol, cast, overload
 
 import polars as pl
 
@@ -59,12 +69,22 @@ from corroborate._internals.registry import Registry
 
 
 @dataclass(frozen=True, slots=True)
-class Analysis[R: Mapping[str, object], O]:
-    """Typed wrapper for a registered analysis. `fn` takes the
-    corpus as its first positional argument plus keyword
-    parameters that the bridge populates at run time. `O` is the
-    typed result the bridge `holds_when` consumes; `name` is the
-    lookup key (= `fn.__name__`).
+class Analysis[
+    **P = ...,
+    C = pl.DataFrame | Iterable[Mapping[str, object]],
+    O = object,
+]:
+    """Typed wrapper for a registered analysis.
+
+    Generic over the wrapped fn's full surface: `C` is the cells
+    shape the fn declares for its first positional parameter, `P`
+    captures the remaining (keyword) parameters, and `O` is the
+    typed result the bridge `holds_when` consumes. A direct call
+    through `__call__` is therefore checked against the analysis's
+    real signature — a mistyped kwarg, or an iterable handed to a
+    DataFrame-native analysis, is a pyright error at the call
+    site, not a runtime TypeError. `name` is the lookup key
+    (= `fn.__name__`).
 
     `reads` declares record-key columns the analysis touches off
     the cell record directly (i.e. `cell['<key>']`-style),
@@ -76,15 +96,21 @@ class Analysis[R: Mapping[str, object], O]:
 
     `accepts_dataframe` records whether `fn`'s cells parameter
     admits a `pl.DataFrame` — detected once at registration from
-    the declared signature, consumed by `__call__`'s input
-    dispatch. Never set by authors; the signature is the truth."""
-    fn: Callable[..., O]
+    the declared signature, consumed by `__call__`'s runtime input
+    dispatch (static types erase, so the conversion decision needs
+    a runtime witness). Never set by authors; the signature is the
+    truth."""
+    fn: Callable[Concatenate[C, P], O]
     name: str
     reads: tuple[str, ...] = field(default=())
     accepts_dataframe: bool = field(default=False)
 
     def __call__(
-        self, cells: Iterable[R] | pl.DataFrame, /, **params: object,
+        self,
+        cells: C | pl.DataFrame,
+        /,
+        *args: P.args,
+        **kwargs: P.kwargs,
     ) -> O:
         """Run the analysis directly on a corpus or a Panel's cells.
 
@@ -99,12 +125,19 @@ class Analysis[R: Mapping[str, object], O]:
         admits a DataFrame receive it untouched (their canonical
         fast path — no conversion round-trip), and iterable-only
         analyses get it materialised to per-row mappings once,
-        here. Iterable input always delegates untouched; unlike
-        `run_for`, kwargs are passed through unfiltered — the
-        caller owns them."""
+        here. Iterable input always delegates untouched. Unlike
+        `run_for`, kwargs are passed through unfiltered — and,
+        via `P`, statically checked."""
         if isinstance(cells, pl.DataFrame) and not self.accepts_dataframe:
-            return self.fn(to_dicts(cells), **params)
-        return self.fn(cells, **params)
+            # cast: `accepts_dataframe=False` ⇔ the fn's declared
+            # cells shape is iterable-of-mappings (registration-time
+            # signature detection), so the materialised rows satisfy
+            # `C` at runtime — a coupling the static system can't see.
+            return self.fn(cast('C', to_dicts(cells)), *args, **kwargs)
+        # cast: either `cells` is not a DataFrame (the `C` arm of
+        # the input union), or it is one AND `accepts_dataframe`
+        # witnesses that the fn's declared `C` admits DataFrames.
+        return self.fn(cast('C', cells), *args, **kwargs)
 
 
 def _first_param_accepts_dataframe(fn: Callable[..., object]) -> bool:
@@ -135,12 +168,18 @@ def _first_param_accepts_dataframe(fn: Callable[..., object]) -> bool:
     return False
 
 
-_REGISTRY: Registry[Analysis[Mapping[str, object], object]] = Registry()
+type _StoredAnalysis = Analysis[..., object, object]
+"""Registry-side erasure — the generic upper bound at the
+container boundary, never at element use sites. `P = ...` keeps
+the runner's dynamically-filtered kwarg injection callable;
+`C = object` admits any cells shape; registry consumers read
+`.fn` / `.name` / `.reads`, they don't re-narrow elements."""
 
 
-def get_registered(
-    name: str,
-) -> Analysis[Mapping[str, object], object] | None:
+_REGISTRY: Registry[_StoredAnalysis] = Registry()
+
+
+def get_registered(name: str) -> _StoredAnalysis | None:
     """Look up an analysis by name. Returns None if not registered."""
     return _REGISTRY.get(name)
 
@@ -150,35 +189,45 @@ def registered_names() -> tuple[str, ...]:
     return _REGISTRY.names()
 
 
-@overload
-def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
-    fn: Callable[..., O], /,
-) -> Analysis[R, O]: ...
+class _AnalysisDecorator(Protocol):
+    """Return type of the `@analysis(reads=...)` factory form —
+    generic at APPLICATION time, so `P` / `C` / `O` solve against
+    the decorated fn rather than collapsing to the class type-param
+    defaults at the factory call (the pre-ParamSpec behaviour,
+    which erased every reads-declaring analysis's result to
+    `object`)."""
+
+    def __call__[**P, C, O](
+        self, fn: Callable[Concatenate[C, P], O], /,
+    ) -> Analysis[P, C, O]: ...
 
 
 @overload
-def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
-    *, reads: tuple[str, ...] = (),
-) -> Callable[[Callable[..., O]], Analysis[R, O]]: ...
+def analysis[**P, C, O](
+    fn: Callable[Concatenate[C, P], O], /,
+) -> Analysis[P, C, O]: ...
 
 
-def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
-    fn: Callable[..., O] | None = None,
+@overload
+def analysis(*, reads: tuple[str, ...] = ()) -> _AnalysisDecorator: ...
+
+
+def analysis(
+    fn: Callable[..., object] | None = None,
     /,
     *,
     reads: tuple[str, ...] = (),
-) -> Analysis[R, O] | Callable[[Callable[..., O]], Analysis[R, O]]:
+) -> object:
     """Register `fn` as a framework analysis. Name is taken from
     `fn.__name__`; rename the function to rename the analysis.
 
-    The wrapped function's first positional arg is the corpus
-    (`Iterable[R]` or whatever shape the analysis consumes); the
-    rest are keyword parameters supplied by the bridge's
-    structural fields + params bag at run time. The type-param
-    defaults (PEP 696) keep `paired_g`, `paired_g_per_burst`, etc.
-    callable from standalone analysis scripts as
-    `Analysis[Mapping[str, object], <Result>]` rather than
-    `Analysis[Unknown, <Result>]`.
+    The wrapped function's first positional arg is the corpus —
+    `C` in the wrapper's type. The remaining parameters are
+    captured as `P` (PEP 612 `Concatenate`) and the result as `O`,
+    so a direct exploration call like `paired_g(panel.cells,
+    source=...)` is checked against the analysis's real signature.
+    The bridge path is unaffected: `run_for` supplies kwargs
+    dynamically through the registry's erased view.
 
     Two decorator forms:
 
@@ -195,22 +244,21 @@ def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
     compute step (otherwise the trace data goes away before the
     analysis sees it)."""
 
-    def _build(fn_inner: Callable[..., O]) -> Analysis[R, O]:
+    def _build[**P, C, O](
+        fn_inner: Callable[Concatenate[C, P], O],
+    ) -> Analysis[P, C, O]:
         name = fn_inner.__name__
-        wrapper: Analysis[R, O] = Analysis(
+        wrapper: Analysis[P, C, O] = Analysis(
             fn=fn_inner,
             name=name,
             reads=reads,
             accepts_dataframe=_first_param_accepts_dataframe(fn_inner),
         )
-        # `Registry[Analysis[Mapping[str, object], object]]` accepts
-        # this generic-parameter narrowing at the storage boundary;
-        # the `cast` lifts `Analysis[R, O]` through Python's
-        # invariant-generic constraint without a `# type: ignore`.
-        _REGISTRY.register(
-            name,
-            cast('Analysis[Mapping[str, object], object]', wrapper),
-        )
+        # `Registry[_StoredAnalysis]` accepts this generic-parameter
+        # erasure at the storage boundary; the `cast` lifts
+        # `Analysis[P, C, O]` through Python's invariant-generic
+        # constraint without a `# type: ignore`.
+        _REGISTRY.register(name, cast('_StoredAnalysis', wrapper))
         return wrapper
 
     if fn is None:
@@ -219,7 +267,7 @@ def analysis[R: Mapping[str, object] = Mapping[str, object], O = object](
 
 
 def _kwargs_for(
-    analysis_obj: Analysis[Mapping[str, object], object],
+    analysis_obj: _StoredAnalysis,
     bridge_params: Mapping[str, object],
 ) -> dict[str, object]:
     """Pick the subset of `bridge_params` whose keys are accepted
@@ -247,7 +295,7 @@ def _kwargs_for(
 
 
 def run_for(
-    analysis_obj: Analysis[Mapping[str, object], object],
+    analysis_obj: _StoredAnalysis,
     cells: Iterable[Mapping[str, object]],
     bridge_params: Mapping[str, object],
 ) -> object:

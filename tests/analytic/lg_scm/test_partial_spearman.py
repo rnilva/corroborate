@@ -443,16 +443,24 @@ def test_partial_spearman_dataframe_input_identical_to_cells() -> None:
     import polars as pl
 
     cells = _build_cells()
-    kwargs = {
-        'x': 'x_mean',
-        'y': 'y_mean',
-        'conditioning': ('z_mean',),
-        'stratify_by': 'env_name',
-    }
-    result_cells = partial_spearman.fn(cells, **kwargs)
-    result_panel = partial_spearman.fn(
-        pl.DataFrame(cells), **kwargs,
-    )
+
+    # A closure rather than a shared kwargs dict: the single
+    # spelling of the arguments stays statically checked against
+    # the analysis signature (a dict would erase them to
+    # `dict[str, object]`).
+    def run(
+        cells_in: pl.DataFrame | list[Mapping[str, object]],
+    ):
+        return partial_spearman.fn(
+            cells_in,
+            x='x_mean',
+            y='y_mean',
+            conditioning=('z_mean',),
+            stratify_by='env_name',
+        )
+
+    result_cells = run(cells)
+    result_panel = run(pl.DataFrame(cells))
     assert result_panel.rho_pooled == result_cells.rho_pooled
     assert result_panel.p_value == result_cells.p_value
     assert result_panel.n_obs_total == result_cells.n_obs_total

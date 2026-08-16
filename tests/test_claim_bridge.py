@@ -607,8 +607,12 @@ def test_analysis_wrapper_is_directly_callable() -> None:
         {'v': 1.0}, {'v': 2.0}, {'v': 3.0}, {'v': 4.0},
     ]
     assert _scaled_mean(cells, scale=10.0) == 25.0
+    # With `Analysis[**P, C, O]` the mismatched kwarg is a STATIC
+    # error at the call site; the ignore keeps the runtime
+    # demonstration for unchecked callers (scripts outside pyright's
+    # scope still get the TypeError, not a silent drop).
     with pytest.raises(TypeError):
-        _scaled_mean(cells, not_a_param=1)
+        _scaled_mean(cells, not_a_param=1)  # pyright: ignore[reportCallIssue]
 
 
 def test_analysis_call_dispatches_dataframe_by_signature() -> None:
@@ -642,6 +646,34 @@ def test_analysis_call_dispatches_dataframe_by_signature() -> None:
     assert _df_native_probe(df) == ('dataframe', 3)
     assert _iterable_probe(df) == ('rows', 3)
     assert _iterable_probe([{'a': 1}]) == ('rows', 1)
+
+
+def test_analysis_call_preserves_wrapped_signature_statically() -> None:
+    """`Analysis[**P, C, O]` preserves the wrapped fn's surface
+    through `__call__` (CLAUDE.md: ParamSpec preserves caller
+    signature through generic wrappers): the result type is the
+    fn's declared return type, checked here with `assert_type`
+    under the pyright-strict gate that runs on tests. The negative
+    direction — a mistyped kwarg is a static reportCallIssue — is
+    pinned by the ignore in
+    test_analysis_wrapper_is_directly_callable."""
+    from typing import assert_type
+
+    from corroborate.analyses.paired.paired_g import paired_g
+
+    cells = [
+        c for c in _synthetic_cells()
+        if c.get('env_name') == 'TestEnv'
+    ]
+    result = paired_g(
+        cells,
+        treatment_arm=_TREATMENT_KEY,
+        baseline_arm=_BASELINE_KEY,
+        pair_by=('seed',),
+        source='eval_best_burst_mean',
+    )
+    assert_type(result, PairedGResult)
+    assert result.n_pairs == 30
 
 
 def test_dataframe_native_registered_analyses_detected() -> None:

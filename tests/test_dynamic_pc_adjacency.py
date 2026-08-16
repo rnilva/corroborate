@@ -1396,16 +1396,22 @@ def test_pc_depth_2_bootstrap_edge_counts_reproducible() -> None:
     df = _build_two_mediator_full_mediation_panel(
         n_bursts=4, seed=604,
     )
-    kwargs = dict(
-        arm_field='arm_key',
-        mediator_per_burst=('z1_pb', 'z2_pb'),
-        outcome_per_burst='outcome_pb',
-        stratify_by=('env_name', 'gamma'),
-        n_bootstrap=40,
-        bootstrap_seed=7,
-    )
-    r1 = _get_single_stratum(dynamic_pc_adjacency.fn(df, **kwargs))
-    r2 = _get_single_stratum(dynamic_pc_adjacency.fn(df, **kwargs))
+    # A closure rather than a shared kwargs dict keeps the one
+    # spelling of the call statically checked against the analysis
+    # signature.
+    def run_once():
+        return _get_single_stratum(dynamic_pc_adjacency.fn(
+            df,
+            arm_field='arm_key',
+            mediator_per_burst=('z1_pb', 'z2_pb'),
+            outcome_per_burst='outcome_pb',
+            stratify_by=('env_name', 'gamma'),
+            n_bootstrap=40,
+            bootstrap_seed=7,
+        ))
+
+    r1 = run_once()
+    r2 = run_once()
     bec1 = r1.bootstrap_edge_counts
     bec2 = r2.bootstrap_edge_counts
     assert bec1 is not None and bec2 is not None

@@ -1850,16 +1850,22 @@ def test_depth_2_bootstrap_reproducible_and_recomputed_via_multi() -> None:
     calls. Confirms the multi-mediator bootstrap kernel inherits
     deterministic RNG behaviour from the depth-1 sibling."""
     df = _build_two_mediator_panel(n_bursts=4, seed=705)
-    kwargs = dict(
-        arm_field='arm_key',
-        mediator_per_burst=('z1_pb', 'z2_pb'),
-        outcome_per_burst='outcome_pb',
-        stratify_by=('env_name', 'gamma'),
-        n_bootstrap=40,
-        bootstrap_seed=11,
-    )
-    r1 = _get_single_stratum(dynamic_partial_spearman.fn(df, **kwargs))
-    r2 = _get_single_stratum(dynamic_partial_spearman.fn(df, **kwargs))
+    # A closure rather than a shared kwargs dict keeps the one
+    # spelling of the call statically checked against the analysis
+    # signature.
+    def run_once():
+        return _get_single_stratum(dynamic_partial_spearman.fn(
+            df,
+            arm_field='arm_key',
+            mediator_per_burst=('z1_pb', 'z2_pb'),
+            outcome_per_burst='outcome_pb',
+            stratify_by=('env_name', 'gamma'),
+            n_bootstrap=40,
+            bootstrap_seed=11,
+        ))
+
+    r1 = run_once()
+    r2 = run_once()
     bp1 = r1.bootstrap_partial
     bp2 = r2.bootstrap_partial
     assert bp1 is not None and bp2 is not None

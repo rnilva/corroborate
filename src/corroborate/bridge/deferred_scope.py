@@ -24,13 +24,22 @@ This closes the framework's "use the correlation edge directly"
 gap (γ in the original discussion)."""
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 
 import polars as pl
 
 from corroborate.analyses.panel.stratum_panel import StratumPanel
 from corroborate.bridge.analysis import Analysis
+
+# The exact cells shape `stratum_panel` (and any dual-input panel
+# builder) declares. `Analysis` is invariant in its cells
+# parameter, so the field spells it precisely; `...` leaves the
+# keyword surface gradual — `resolve` feeds `panel_kwargs`
+# dynamically by design.
+type _PanelAnalysis = Analysis[
+    ..., pl.DataFrame | Iterable[Mapping[str, object]], StratumPanel,
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +51,7 @@ class DeferredScope:
     pass it. `keep` is a per-stratum predicate. `stratify_column`
     names the column whose values are filtered on. `static_scope`
     is AND-combined with the dynamic filter."""
-    panel_analysis: Analysis[Mapping[str, object], StratumPanel]
+    panel_analysis: _PanelAnalysis
     panel_kwargs: Mapping[str, object]
     keep: Callable[[StratumPanel, int], bool]
     stratify_column: str
@@ -77,7 +86,7 @@ class DeferredScope:
 
 def scope_from_panel(
     *,
-    panel_analysis: Analysis[Mapping[str, object], StratumPanel],
+    panel_analysis: _PanelAnalysis,
     panel_kwargs: Mapping[str, object],
     keep: Callable[[StratumPanel, int], bool],
     stratify_column: str = 'env_name',
