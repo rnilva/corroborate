@@ -1,12 +1,21 @@
-"""Prospective directional inference for paired experimental units.
+"""Directional inference for paired experimental units under a frozen design.
 
 Unlike an observed-effect/MDE gate, this analysis keeps design power and
 observed evidence separate:
 
-* a frozen ``DirectionalDesign`` describes the pre-registered design;
+* a frozen ``DirectionalDesign`` describes the declared design;
 * a paired t statistic and interval describe the observed mean contrast; and
 * two noncentral-t equivalence tests ask whether the standardised effect is
-  contained in the prospectively declared ``[-sesoi_dz, +sesoi_dz]`` region.
+  contained in the design's declared ``[-sesoi_dz, +sesoi_dz]`` region.
+
+Whether the design was committed *before* the run set existed —
+pre-registered — is provenance, not something this module can assert:
+an external study records it by sealing a ``prospective_protocol`` in
+its bundle, and the adapter receipt's ``protocol`` check reports the
+register (verified-prospective vs admitted-retrospectively). A design
+authored at analysis time is a retrospective declaration — equally
+valid input, honestly labelled by the receipt that travels with the
+panel.
 
 The experimental unit is one matched key in ``pair_by``. Repeated episodes,
 environments, transitions, or checkpoints within a run must be reduced before
@@ -14,8 +23,8 @@ this analysis; they do not increase ``n_pairs``.
 
 As a member of the paired family this inherits the seed-pairing
 restriction: off-limits in RL substrate bridges that pool across strata
-(seed-pseudo-replication); valid for single-stratum prospective designs
-and synthetic SCM tests.
+(seed-pseudo-replication); valid for single-stratum designs and
+synthetic SCM tests.
 """
 from __future__ import annotations
 
@@ -37,13 +46,20 @@ type DirectionalAlternative = Literal['greater', 'less']
 
 @dataclass(frozen=True, slots=True)
 class DirectionalDesign:
-    """The pre-registration, committed before the run set is seen.
+    """One frozen directional design — the five knobs bound as a value.
 
-    Bundling these five knobs makes "one frozen design" a value that
-    can be authored once, passed whole, and echoed whole into the
-    result — the analysis never re-derives design decisions from data.
-    Construction validates the design, so an incoherent
-    pre-registration fails closed before any cell is read.
+    Bundling them makes the design something that can be authored
+    once, passed whole, and echoed whole into the result — the
+    analysis never re-derives design decisions from data.
+    Construction validates the design, so an incoherent one fails
+    closed before any cell is read.
+
+    This value carries no claim about *when* it was authored.
+    Pre-registration is provenance: a sealed
+    ``prospective_protocol`` in an external bundle, reported by the
+    adapter receipt's ``protocol`` check (see the module
+    docstring). Declaring a design here and now — the exploratory
+    register — is the ordinary case.
     """
 
     # The predicted sign of the contrast; committing it up front is what
@@ -55,7 +71,7 @@ class DirectionalDesign:
     # Smallest standardised effect of scientific interest — the TOST
     # equivalence region is [-sesoi_dz, +sesoi_dz].
     sesoi_dz: float = 0.5
-    # Prospective admission gate on completed independent pairs; below
+    # Declared admission gate on completed independent pairs; below
     # it the verdict is inconclusive no matter how large the effect.
     minimum_pairs: int = 2
     # The intended fixed design size, retained so the report shows how
@@ -194,21 +210,21 @@ def paired_directional(
     arm_field: str = 'arm_key',
     design: DirectionalDesign,
 ) -> PairedDirectionalResult:
-    """Evaluate a prospectively designed paired directional contrast.
+    """Evaluate a paired directional contrast under a frozen design.
 
-    ``design`` has no default: the pre-registration must be stated by
-    the caller, even when it is just ``DirectionalDesign()``.
+    ``design`` has no default: the design must be stated by the
+    caller, even when it is just ``DirectionalDesign()`` — the
+    verdict is only meaningful relative to a declared design.
 
     ``arm_field`` names the condition column; the default ``'arm_key'``
     (the fingerprint the runner stamps on each seeded run) covers every
     in-tree use — the parameter exists for run sets built outside the
     runner, matching the rest of the paired family.
 
-    Duplicate ``(condition, pair_by)`` buckets always raise: in a
-    prospective design the experimental unit is fixed before data, so
-    silently mean-aggregating duplicates (``paired_g``'s
-    ``dedupe_strategy='mean'``) would be a post-hoc analytic choice.
-    Tighten ``pair_by`` instead.
+    Duplicate ``(condition, pair_by)`` buckets always raise: the
+    design fixes the experimental unit, so silently mean-aggregating
+    duplicates (``paired_g``'s ``dedupe_strategy='mean'``) would be a
+    post-hoc analytic choice. Tighten ``pair_by`` instead.
 
     The support test is the ordinary one-sided paired t-test for a mean
     contrast of zero. ``design.sesoi_dz`` is the smallest standardised
@@ -217,7 +233,7 @@ def paired_directional(
     distribution at noncentralities ``±sesoi_dz * sqrt(n)``; it is not
     inferred from a non-significant support test.
 
-    ``design.minimum_pairs`` is a prospective admission threshold, not
+    ``design.minimum_pairs`` is a declared admission threshold, not
     a function of the observed effect. A caller may set it to the
     power-derived minimum completed independent pairs and retain a
     larger ``planned_pairs`` for the intended fixed design.
@@ -300,7 +316,7 @@ def paired_directional(
 def paired_directional_verdict(
     result: PairedDirectionalResult,
 ) -> tuple[Verdict, RefutationClass | None]:
-    """Map prospective directional evidence to a Corroborate verdict.
+    """Map directional evidence under a frozen design to a verdict.
 
     Priority is scientifically conservative:
 

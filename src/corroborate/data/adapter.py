@@ -58,8 +58,12 @@ Rows are one scalar cell per seeded run: identity + condition
 columns (``arm_key``, ``arm_is_baseline``), the scope fields, the
 intervention value at its dotted ``parameter_path`` (the
 framework's leaf-column convention), and per declared outcome a
-final-checkpoint mean (``<outcome>_mean``) and a
-checkpoint-normalised area under the curve (``<outcome>_auc``).
+final-checkpoint mean (``<outcome>_mean``), a
+checkpoint-normalised area under the curve (``<outcome>_auc``),
+and the evaluation trajectory as one scalar column per checkpoint
+(``<outcome>_mean_at_<checkpoint>``) — the panel-side surface for
+exploring how the contrast evolves over training rather than only
+where it ended.
 """
 from __future__ import annotations
 
@@ -1075,6 +1079,20 @@ class _Adaptation:
                         contract.checkpoints, per_checkpoint_means,
                     ),
                 )
+                # The trajectory itself, one scalar column per
+                # checkpoint. Rows are scalar-leaf mappings by
+                # contract, so the evaluation-window axis lands as
+                # flat checkpoint-keyed columns rather than a list
+                # column — null-padded on diagonal concat across
+                # studies with different checkpoint grids.
+                for checkpoint, checkpoint_mean in zip(
+                    contract.checkpoints, per_checkpoint_means,
+                ):
+                    self._put(
+                        row,
+                        f'{outcome}_mean_at_{checkpoint}',
+                        checkpoint_mean,
+                    )
             for name, value in run.measurements.items():
                 self._put(row, name, value)
             rows.append(row)

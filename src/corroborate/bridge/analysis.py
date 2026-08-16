@@ -48,7 +48,10 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import cast, overload
 
+import polars as pl
+
 from corroborate._internals.introspection import get_param_default
+from corroborate._internals.polars import to_dicts
 from corroborate._internals.registry import Registry
 
 
@@ -71,16 +74,26 @@ class Analysis[R: Mapping[str, object], O]:
     name: str
     reads: tuple[str, ...] = field(default=())
 
-    def __call__(self, cells: Iterable[R], /, **params: object) -> O:
-        """Run the analysis directly on a corpus.
+    def __call__(
+        self, cells: Iterable[R] | pl.DataFrame, /, **params: object,
+    ) -> O:
+        """Run the analysis directly on a corpus or a Panel's cells.
 
         Bridges never need this — the runner resolves analyses by
         parameter name and injects the typed result (`run_for`).
         It exists because exploration code and test fixtures
         otherwise fail with ``TypeError: 'Analysis' object is not
         callable``, which sends the reader looking for `.fn`.
-        Delegating keeps one code path; unlike `run_for`, kwargs
-        are passed through unfiltered — the caller owns them."""
+
+        A `pl.DataFrame` (typically `panel.cells`) is materialised
+        to per-row mappings once, here — the exploration surface's
+        native shape works against every registered analysis
+        regardless of whether the analysis's own signature accepts
+        a DataFrame. Iterable input delegates untouched, keeping
+        one code path; unlike `run_for`, kwargs are passed through
+        unfiltered — the caller owns them."""
+        if isinstance(cells, pl.DataFrame):
+            return self.fn(to_dicts(cells), **params)
         return self.fn(cells, **params)
 
 

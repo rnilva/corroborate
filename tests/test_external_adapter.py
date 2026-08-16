@@ -60,10 +60,20 @@ def _return_value(
     return base + checkpoint / 10.0 + (eval_seed - 101) + (pair_key - 7)
 
 
+def _expected_return_mean_at(
+    *, base: float, checkpoint: int, pair_key: int,
+) -> float:
+    """Per-checkpoint mean over the two evaluation seeds:
+    base + checkpoint/10 + 0.5 + (pair_key - 7)."""
+    return base + checkpoint / 10.0 + 0.5 + (pair_key - 7)
+
+
 def _expected_return_mean(*, base: float, pair_key: int) -> float:
     """Final-checkpoint mean over the two evaluation seeds:
     base + 2.0 + 0.5 + (pair_key - 7)."""
-    return base + _CHECKPOINTS[-1] / 10.0 + 0.5 + (pair_key - 7)
+    return _expected_return_mean_at(
+        base=base, checkpoint=_CHECKPOINTS[-1], pair_key=pair_key,
+    )
 
 
 def _expected_return_auc(*, base: float, pair_key: int) -> float:
@@ -264,6 +274,14 @@ def test_valid_bundle_derives_rows_and_receipt(tmp_path: Path) -> None:
         assert row['return_auc'] == _expected_return_auc(
             base=base, pair_key=pair_key,
         )
+        # The evaluation trajectory lands as one scalar column per
+        # checkpoint, alongside the final-mean/AUC projections.
+        for checkpoint in _CHECKPOINTS:
+            assert row[
+                f'return_mean_at_{checkpoint}'
+            ] == _expected_return_mean_at(
+                base=base, checkpoint=checkpoint, pair_key=pair_key,
+            )
         # Intervention value lands at its dotted leaf path.
         assert row['algorithm.ent_coef'] == (
             0.0 if row['arm_is_baseline'] is True else 0.01
@@ -331,6 +349,38 @@ def test_round_trip_panel_analysis_recovers_contrast(
     assert result.welch_df == pytest.approx(2.0, rel=1e-12)
 
 
+def test_analysis_call_accepts_panel_cells_dataframe(
+    tmp_path: Path,
+) -> None:
+    """`Analysis.__call__` materialises a polars DataFrame at the
+    entry, so `panel.cells` works against any registered analysis
+    without a caller-side `.to_dicts()` — and agrees exactly with
+    the explicit dict-input path on the same adapted study."""
+    _make_bundle(tmp_path)
+    study = adapt_study(tmp_path)
+    panel = study.to_panel()
+
+    from_frame = arm_mean_diff(
+        panel.cells,
+        source='return_mean',
+        treatment_arm=study.contrast.treatment_key,
+        baseline_arm=study.contrast.baseline_key,
+        pair_by=('training_seed',),
+    )
+    from_rows = arm_mean_diff(
+        panel.cells.to_dicts(),
+        source='return_mean',
+        treatment_arm=study.contrast.treatment_key,
+        baseline_arm=study.contrast.baseline_key,
+        pair_by=('training_seed',),
+    )
+    # repr equality: total over every dataclass field (none are
+    # repr=False) and NaN-tolerant, where `==` would fail on the
+    # legitimately-NaN pairing diagnostic (n_paired < 5 here).
+    assert repr(from_frame) == repr(from_rows)
+    assert from_frame.mean_diff == _TREATMENT_BASE - _BASELINE_BASE
+
+
 def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
     _make_bundle(tmp_path, include_protocol=False)
     # Rewrite the contract + evaluations to a single checkpoint.
@@ -352,6 +402,7 @@ def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
     study = adapt_study(tmp_path)
     for row in study.rows:
         assert row['return_auc'] == row['return_mean']
+        assert row['return_mean_at_20'] == row['return_mean']
 
 
 # ============ fail-closed obligations ============
