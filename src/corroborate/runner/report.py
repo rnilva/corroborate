@@ -81,6 +81,9 @@ class BridgeReportEntry:
     refutation_class: str | None = None
     assumption_violations: tuple[str, ...] = ()
     extent_hash: int = 0
+    # Value contrast: the claim's own (baseline, treatment)
+    # parameter values, when the bridge declares one.
+    contrast: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -387,6 +390,7 @@ def _build_bridge_entry(
         direction=bridge.direction.value,
         tier=bridge.tier.name.lower(),
         pair_by=tuple(bridge.pair_by),
+        contrast=bridge.contrast,
         predicted_direction=bridge.predicted_direction,
         scope_repr=scope_repr,
         params=MappingProxyType(_coerce_bridge_params(bridge.name, bridge.params)),

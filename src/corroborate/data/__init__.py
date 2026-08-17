@@ -13,25 +13,18 @@ resolution path. The bridge author's exploratory probe and
 their production bridge converge through the SAME @analysis
 primitives, not through a shared Panel type.
 
-External studies enter this surface through the adapter
-(`corroborate.data.adapter`): a bundle produced by any
-implementation is verified + normalised by `adapt_study`, and the
-resulting `AdaptedStudy` hands its rows to `Panel` via
-`to_panel()` — external record in, panel + admissibility receipt
-out.
+Externally-produced runs enter through `load_runs`
+(`corroborate.data.loader`): a directory of plain producer files
+becomes a DataFrame of one row per run, ready for polars
+exploration, `Panel.from_dataframe`, or direct bridge
+evaluation. The loader is a reader, not a gatekeeper — study-
+design checks live on the claim being evaluated, as admission
+gates.
 
 See `corroborate/data/panel.py` for the load-bearing types."""
 from __future__ import annotations
 
-from corroborate.data.adapter import (
-    AdaptedStudy,
-    AdapterCheck,
-    AdapterReceipt,
-    BundleValidationError,
-    CheckStatus,
-    RecordedContrast,
-    adapt_study,
-)
+from corroborate.data.loader import load_runs
 from corroborate.data.panel import (
     CorpusSource,
     DerivedSpec,
@@ -41,16 +34,10 @@ from corroborate.data.panel import (
 )
 
 __all__ = [
-    'AdaptedStudy',
-    'AdapterCheck',
-    'AdapterReceipt',
-    'BundleValidationError',
-    'CheckStatus',
     'CorpusSource',
     'DerivedSpec',
     'MeasurableAvailability',
     'Panel',
     'PanelDiagnostics',
-    'RecordedContrast',
-    'adapt_study',
+    'load_runs',
 ]

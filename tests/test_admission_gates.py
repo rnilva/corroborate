@@ -28,12 +28,14 @@ from corroborate.bridge.admission import (
     AdmissionGate,
     GateLevel,
     GateResult,
+    contrast_isolation,
     distinct_arms,
     distinct_units,
     exogenous_scope,
     exogenous_source,
     is_endogenous,
     no_predicted_direction,
+    pair_completeness,
     resolved_source,
 )
 from corroborate.bridge.bridge import (
@@ -373,17 +375,20 @@ def test_no_predicted_direction_silent_when_set() -> None:
 # ---------- AUTO_GATES wiring ----------
 
 
-def test_auto_gates_tuple_contains_all_six() -> None:
+def test_auto_gates_tuple_contains_all_eight() -> None:
     """Sanity: the framework's auto-gate list is exactly the
-    six functions shipped post-Phase-A0 (resolved_source added
-    so typo'd source strings surface before the endogeneity
-    test classifies them as endogenous-by-elimination;
-    distinct_units added so a source that varies at a coarser
-    grain than the cell reports its effective n instead of
-    letting the row count stand in for it)."""
+    eight shipped functions (resolved_source added so typo'd
+    source strings surface before the endogeneity test classifies
+    them as endogenous-by-elimination; distinct_units added so a
+    source that varies at a coarser grain than the cell reports
+    its effective n instead of letting the row count stand in for
+    it; contrast_isolation + pair_completeness added so a value
+    contrast's design quality is checked per claim, per extent,
+    on the verdict record)."""
     assert AUTO_GATES == (
         distinct_arms, resolved_source, distinct_units,
-        exogenous_source, exogenous_scope, no_predicted_direction,
+        exogenous_source, exogenous_scope, contrast_isolation,
+        pair_completeness, no_predicted_direction,
     )
 
 

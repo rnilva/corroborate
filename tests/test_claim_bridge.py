@@ -18,7 +18,6 @@ The smoke proves:
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
 from typing import cast
 
 import polars as pl
@@ -29,7 +28,7 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.paired.paired_g import PairedGResult
 from corroborate.bridge.bridge import (
-    Bridge, Direction, RecordedContrastBinding, Tier, claim_bridge, evaluate,
+    Bridge, Direction, Tier, claim_bridge, evaluate,
 )
 from corroborate.core.claim import claim
 from corroborate.core.intervention import DoEffect, Intervention
@@ -160,49 +159,22 @@ def test_bridge_no_effect_when_signal_absent() -> None:
     assert out.verdict == Verdict.NO_EFFECT
 
 
-@dataclass(frozen=True, slots=True)
-class _RecordedContrast:
-    parameter_path: str = 'gamma'
-    baseline_key: str = 'producer-control'
-    treatment_key: str = 'producer-high-gamma'
-    baseline_value: float = 0.8
-    treatment_value: float = 0.99
-
-
-def _recorded_contrast(**overrides: object) -> RecordedContrastBinding:
-    values: dict[str, object] = {
-        'parameter_path': 'gamma',
-        'baseline_key': 'producer-control',
-        'treatment_key': 'producer-high-gamma',
-        'baseline_value': 0.8,
-        'treatment_value': 0.99,
-        **overrides,
-    }
-    return _RecordedContrast(
-        parameter_path=cast(str, values['parameter_path']),
-        baseline_key=cast(str, values['baseline_key']),
-        treatment_key=cast(str, values['treatment_key']),
-        baseline_value=cast(float, values['baseline_value']),
-        treatment_value=cast(float, values['treatment_value']),
-    )
-
-
-def _recorded_cells(
+def _contrast_cells(
     seeds: range = range(12),
 ) -> list[dict[str, object]]:
+    """External-style cells: parameter value + outcome, no arm
+    vocabulary of any kind."""
     rows: list[dict[str, object]] = []
     for seed in seeds:
         rows.extend((
             {
                 'id': f'control-{seed}',
-                'arm_key': 'producer-control',
                 'seed': seed,
                 'gamma': 0.8,
                 'return_mean': float(seed) / 100.0,
             },
             {
                 'id': f'high-{seed}',
-                'arm_key': 'producer-high-gamma',
                 'seed': seed,
                 'gamma': 0.99,
                 'return_mean': 1.0 + float(seed) / 100.0,
@@ -213,99 +185,153 @@ def _recorded_cells(
 
 @claim_bridge(
     source='gamma',
+    contrast=(0.8, 0.99),
     target='return_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     pair_by=('seed',),
     predicted_direction='a_gt_b',
 )
-def higher_recorded_gamma_helps(
+def higher_gamma_value_helps(
     paired_g: PairedGResult,
 ) -> Verdict:
     return Verdict.HELD if paired_g.mean_diff > 0.0 else Verdict.NO_EFFECT
 
 
-def test_recorded_contrast_binds_external_arms_at_evaluation() -> None:
-    """The claim declares an estimand, not producer arm labels."""
-    out = evaluate(
-        higher_recorded_gamma_helps,
-        _recorded_cells(),
-        recorded_contrast=_recorded_contrast(),
-    )
+def test_value_contrast_labels_conditions_from_the_claim() -> None:
+    """The claim carries its own (baseline, treatment) parameter
+    values; conditions are derived from the source column, and no
+    producer arm vocabulary exists anywhere in the pipeline."""
+    cells = _contrast_cells()
+    out = evaluate(higher_gamma_value_helps, cells)
     assert out.verdict is Verdict.HELD
     result = cast(PairedGResult, out.analysis_results['paired_g'])
     assert result.measurable == 'return_mean'
-    assert result.baseline_arm == 'producer-control'
-    assert result.treatment_arm == 'producer-high-gamma'
+    assert result.baseline_arm == 'gamma=0.8'
+    assert result.treatment_arm == 'gamma=0.99'
     assert result.n_pairs == 12
+    # The caller's cells are not mutated by the label derivation.
+    assert all('contrast_arm' not in c for c in cells)
 
 
-def test_recorded_contrast_keeps_intervention_semantics_with_claim() -> None:
+def test_value_contrast_keeps_intervention_semantics_with_claim() -> None:
+    """`gamma` is a leaf of the outermost claim; the value contrast
+    is evidence of an executed intervention, so the endogeneity
+    gates must not reclassify the bridge as unexecuted."""
     out = evaluate(
-        higher_recorded_gamma_helps,
-        _recorded_cells(),
-        recorded_contrast=_recorded_contrast(),
+        higher_gamma_value_helps,
+        _contrast_cells(),
         claim=_external_program,
     )
     assert out.verdict is Verdict.HELD
 
 
-def test_recorded_contrast_rejects_incompatible_claim_source() -> None:
-    with pytest.raises(ValueError, match='does not match.*parameter path'):
-        _ = evaluate(
-            higher_recorded_gamma_helps,
-            _recorded_cells(),
-            recorded_contrast=_recorded_contrast(
-                parameter_path='learning_rate',
-            ),
+def test_value_contrast_requires_string_source() -> None:
+    with pytest.raises(TypeError, match='requires a string `source`'):
+        @claim_bridge(
+            source=INTERVENTION,
+            contrast=(0.8, 0.99),
+            target='return_mean',
+            direction=Direction.DIRECT,
+            tier=Tier.INTERVENTIONAL,
         )
+        def _doubly_declared(paired_g: PairedGResult) -> Verdict:
+            return Verdict.HELD
 
 
-def test_recorded_contrast_rejects_duplicate_arm_keys() -> None:
-    with pytest.raises(ValueError, match='arm keys must be distinct'):
-        _ = evaluate(
-            higher_recorded_gamma_helps,
-            _recorded_cells(),
-            recorded_contrast=_recorded_contrast(
-                treatment_key='producer-control',
-            ),
+def test_value_contrast_requires_two_distinct_finite_values() -> None:
+    with pytest.raises(TypeError, match='must be distinct'):
+        @claim_bridge(
+            source='gamma',
+            contrast=(0.99, 0.99),
+            target='return_mean',
+            direction=Direction.DIRECT,
+            tier=Tier.INTERVENTIONAL,
         )
+        def _collapsed(paired_g: PairedGResult) -> Verdict:
+            return Verdict.HELD
 
-
-def test_recorded_contrast_rejects_arm_value_mismatch() -> None:
-    cells = _recorded_cells()
-    cells[0]['gamma'] = 0.99
-    with pytest.raises(ValueError, match='contrast binds it to 0.8'):
-        _ = evaluate(
-            higher_recorded_gamma_helps,
-            cells,
-            recorded_contrast=_recorded_contrast(),
+    with pytest.raises(TypeError, match='finite numbers'):
+        @claim_bridge(
+            source='gamma',
+            contrast=(0.8, float('nan')),
+            target='return_mean',
+            direction=Direction.DIRECT,
+            tier=Tier.INTERVENTIONAL,
         )
+        def _non_finite(paired_g: PairedGResult) -> Verdict:
+            return Verdict.HELD
 
 
-def test_recorded_contrast_pools_batches_of_the_same_study() -> None:
+def test_value_contrast_requires_both_values_in_scope() -> None:
+    only_baseline = [
+        c for c in _contrast_cells() if c['gamma'] == 0.8
+    ]
+    with pytest.raises(ValueError, match='no scoped cells at contrast'):
+        _ = evaluate(higher_gamma_value_helps, only_baseline)
+
+
+def test_value_contrast_rejects_reserved_column_collision() -> None:
+    cells = _contrast_cells()
+    cells[0]['contrast_arm'] = 'stale-label'
+    with pytest.raises(ValueError, match='reserved column'):
+        _ = evaluate(higher_gamma_value_helps, cells)
+
+
+def test_value_contrast_pools_batches_of_the_same_study() -> None:
     """Evidence is a live record: a later batch of seeds joins the
-    earlier one, the SAME contrast binds the pooled cells, and the
-    verdict recomputes over all of it — running more seeds and
-    watching the verdict move is the system's point, not a hazard."""
-    pooled = _recorded_cells(range(12)) + _recorded_cells(range(12, 20))
-    out = evaluate(
-        higher_recorded_gamma_helps,
-        pooled,
-        recorded_contrast=_recorded_contrast(),
-    )
+    earlier one, the claim's own contrast values bind the pooled
+    cells, and the verdict recomputes over all of it — running
+    more seeds and watching the verdict move is the system's
+    point, not a hazard."""
+    pooled = _contrast_cells(range(12)) + _contrast_cells(range(12, 20))
+    out = evaluate(higher_gamma_value_helps, pooled)
     assert out.verdict is Verdict.HELD
     result = cast(PairedGResult, out.analysis_results['paired_g'])
     assert result.n_pairs == 20
 
 
-def test_recorded_contrast_cannot_override_executable_doeffect() -> None:
-    with pytest.raises(ValueError, match='DoEffect.*recorded_contrast'):
-        _ = evaluate(
-            treatment_helps_outcome,
-            _synthetic_cells(),
-            recorded_contrast=_recorded_contrast(),
+def test_contrast_isolation_blocks_a_rider_column() -> None:
+    """A column constant within each condition but different across
+    them is the signature of a confound (or a producer arm label —
+    indistinguishable mechanically); the gate blocks rather than
+    letting the verdict stand on an unisolated contrast."""
+    cells = _contrast_cells()
+    for cell in cells:
+        cell['exploration_schedule'] = (
+            'long' if cell['gamma'] == 0.99 else 'short'
         )
+    out = evaluate(higher_gamma_value_helps, cells)
+    assert out.verdict is Verdict.INADMISSIBLE
+    assert out.blocked_by is not None
+    assert out.blocked_by.gate_name == 'contrast_isolation'
+    assert 'exploration_schedule' in out.blocked_by.message
+
+
+def test_contrast_isolation_downgrades_to_warn_at_single_cells() -> None:
+    """At one cell per condition nothing distinguishes the contrast
+    from any co-varying column — unverifiable, not blocked."""
+    out = evaluate(higher_gamma_value_helps, _contrast_cells(range(1)))
+    assert out.verdict is not Verdict.INADMISSIBLE
+    assert any(
+        w.gate_name == 'contrast_isolation' for w in out.warnings
+    )
+
+
+def test_pair_completeness_warns_on_missing_partner() -> None:
+    """Paired analyses drop incomplete pairs silently; the gate
+    makes the drop visible on the verdict record."""
+    cells = [
+        c for c in _contrast_cells(range(3)) if c['id'] != 'high-2'
+    ]
+    out = evaluate(higher_gamma_value_helps, cells)
+    assert out.verdict is Verdict.HELD
+    warning = next(
+        w for w in out.warnings if w.gate_name == 'pair_completeness'
+    )
+    assert '1 of 3' in warning.message
+    result = cast(PairedGResult, out.analysis_results['paired_g'])
+    assert result.n_pairs == 2
 
 
 @claim_bridge(

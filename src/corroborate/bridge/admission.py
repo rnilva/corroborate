@@ -32,6 +32,7 @@ structural rules.
 from __future__ import annotations
 
 import functools
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -102,6 +103,14 @@ def is_endogenous(name: str, claim: Claim[..., object]) -> bool:
 
 if TYPE_CHECKING:
     from corroborate.bridge.bridge import Bridge
+
+
+CONTRAST_ARM_FIELD = 'contrast_arm'
+"""Evaluation-transient column `evaluate()` stamps on the scoped
+cells of a value-contrast bridge — the derived condition label
+(`'gamma=0.99'`). Reserved: evaluation raises if the input
+already carries it. Defined here so the contrast-quality gates
+and `bridge.py` share one spelling without an import cycle."""
 
 
 class GateLevel(Enum):
@@ -438,6 +447,129 @@ def no_predicted_direction(
     )
 
 
+def _normalised(value: object) -> object:
+    """NaN reads as missing for constancy checks — two NaNs must
+    not count as 'different values' (float NaN != NaN)."""
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return value
+
+
+def contrast_isolation(
+    bridge: 'Bridge',
+    cells: Sequence[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
+) -> GateResult | None:
+    """BLOCK: a value-contrast whose scoped cells differ in some
+    OTHER column that is constant within each condition — the
+    signature of a confound riding the contrast (a knob that
+    changed together with the claimed parameter). Checked over
+    exactly the cells this claim admits, at every evaluation, so
+    a confound entering the growing record flips the verdict to
+    INADMISSIBLE instead of passing silently. Quality control
+    lives here — per claim, per extent, on the verdict record —
+    rather than at a data-loading door, because "the contrast is
+    isolated" is a property of the cells a claim admits, not of a
+    file format.
+
+    Downgraded to WARN when either condition has fewer than two
+    cells — at n=1 per condition nothing distinguishes the
+    contrast from any co-varying column."""
+    del claim
+    if bridge.contrast is None:
+        return None
+    by_arm: dict[str, list[Mapping[str, object]]] = {}
+    for cell in cells:
+        label = cell.get(CONTRAST_ARM_FIELD)
+        if isinstance(label, str):
+            by_arm.setdefault(label, []).append(cell)
+    if len(by_arm) != 2 or any(len(rows) < 2 for rows in by_arm.values()):
+        return GateResult(
+            gate_name='contrast_isolation',
+            level=GateLevel.WARN,
+            passed=False,
+            message=(
+                'contrast isolation unverifiable: fewer than two '
+                'cells per condition — nothing distinguishes the '
+                'contrast from a co-varying column at n=1'
+            ),
+        )
+    ignore = {
+        CONTRAST_ARM_FIELD, bridge.source_name, 'id', *bridge.pair_by,
+    }
+    rows_a, rows_b = by_arm.values()
+    columns: set[str] = set()
+    for cell in (*rows_a, *rows_b):
+        columns.update(cell.keys())
+    riders: list[str] = []
+    for column in sorted(columns.difference(ignore)):
+        try:
+            values_a = {_normalised(row.get(column)) for row in rows_a}
+            values_b = {_normalised(row.get(column)) for row in rows_b}
+        except TypeError:
+            # Unhashable cell values (list-typed trajectory /
+            # trace columns) aren't configuration; skip.
+            continue
+        if len(values_a) == 1 and len(values_b) == 1 and values_a != values_b:
+            riders.append(column)
+    if riders:
+        shown = ', '.join(riders[:5])
+        more = f' (+{len(riders) - 5} more)' if len(riders) > 5 else ''
+        return GateResult(
+            gate_name='contrast_isolation',
+            level=GateLevel.BLOCK,
+            passed=False,
+            message=(
+                f'column(s) constant within each condition but '
+                f'different across them — a confound rides the '
+                f'{bridge.source_name!r} contrast: {shown}{more}'
+            ),
+        )
+    return GateResult(
+        gate_name='contrast_isolation',
+        level=GateLevel.BLOCK,
+        passed=True,
+        message='scoped cells differ only in the contrast parameter',
+    )
+
+
+def pair_completeness(
+    bridge: 'Bridge',
+    cells: Sequence[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
+) -> GateResult | None:
+    """WARN: pairing units of a value contrast missing one
+    condition. Paired analyses drop incomplete pairs silently;
+    the gate makes the drop visible on the verdict record."""
+    del claim
+    if bridge.contrast is None or not bridge.pair_by:
+        return None
+    arms_by_unit: dict[tuple[object, ...], set[str]] = {}
+    for cell in cells:
+        label = cell.get(CONTRAST_ARM_FIELD)
+        if not isinstance(label, str):
+            continue
+        unit = tuple(cell.get(key) for key in bridge.pair_by)
+        arms_by_unit.setdefault(unit, set()).add(label)
+    incomplete = sum(
+        1 for arms in arms_by_unit.values() if len(arms) < 2
+    )
+    if incomplete:
+        return GateResult(
+            gate_name='pair_completeness',
+            level=GateLevel.WARN,
+            passed=False,
+            message=(
+                f'{incomplete} of {len(arms_by_unit)} pairing '
+                f'unit(s) missing one condition; paired analyses '
+                f'drop them'
+            ),
+        )
+    return None
+
+
 # Auto-gates run on every bridge before its body. Per-bridge
 # `gates=(...)` are appended to this tuple at evaluate-time.
 # `resolved_source` runs first so a typo'd source surfaces with
@@ -452,20 +584,25 @@ AUTO_GATES: tuple[AdmissionGate, ...] = (
     distinct_units,
     exogenous_source,
     exogenous_scope,
+    contrast_isolation,
+    pair_completeness,
     no_predicted_direction,
 )
 
 
 __all__ = [
     'AUTO_GATES',
+    'CONTRAST_ARM_FIELD',
     'AdmissionGate',
     'GateLevel',
     'GateResult',
+    'contrast_isolation',
     'distinct_arms',
     'distinct_units',
     'exogenous_scope',
     'exogenous_source',
     'is_endogenous',
     'no_predicted_direction',
+    'pair_completeness',
     'resolved_source',
 ]

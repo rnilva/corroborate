@@ -40,7 +40,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
 from types import MappingProxyType
-from typing import Protocol, cast
+from typing import cast
 
 import polars as pl
 
@@ -49,6 +49,7 @@ from corroborate.bridge._filter import filter_cells
 from corroborate.bridge.deferred_scope import DeferredScope
 from corroborate.bridge.admission import (
     AUTO_GATES,
+    CONTRAST_ARM_FIELD,
     AdmissionGate,
     GateLevel,
     GateResult,
@@ -90,29 +91,12 @@ type BridgeEndpoint = (
 )
 
 
-class RecordedContrastBinding(Protocol):
-    """Verified runtime binding for an externally executed contrast.
-
-    The bridge layer depends only on this structural surface, not on
-    ``corroborate.data.adapter``.  ``RecordedContrast`` satisfies it,
-    while the authored bridge remains independent of any bundle or
-    producer-specific arm labels.
-    """
-
-    @property
-    def parameter_path(self) -> str: ...
-
-    @property
-    def baseline_key(self) -> str: ...
-
-    @property
-    def treatment_key(self) -> str: ...
-
-    @property
-    def baseline_value(self) -> float: ...
-
-    @property
-    def treatment_value(self) -> float: ...
+def contrast_arm_label(source_name: str, value: float) -> str:
+    """Condition label derived from the claimed parameter value —
+    `'gamma=0.99'`. Conditions of a value contrast are parameter
+    values, not producer arm names; the label exists only so
+    arm-shaped analyses and reports have something readable."""
+    return f'{source_name}={value:g}'
 
 
 def endpoint_name(e: BridgeEndpoint) -> str:
@@ -254,13 +238,24 @@ class Bridge:
     tuple forwarded to analyses that compute paired contrasts.
     Typed Bridge field (rather than holds_when default) since
     81% of bridges use the same `('seed',)` value and never
-    consume it in their body."""
+    consume it in their body.
+
+    `contrast: tuple[float, float] | None` — (baseline, treatment)
+    VALUES of a string `source` parameter, for contrasts executed
+    outside the framework. The two values are part of the claim
+    ("gamma 0.99 beats gamma 0.80"), so they live here, versioned
+    with the rest of it — never bound from the data side at run
+    time. At evaluate() the framework labels scoped cells by their
+    source-column value and threads the derived condition labels
+    into arm-shaped analyses; producer condition names never
+    enter."""
     name: str
     source: BridgeEndpoint
     target: BridgeEndpoint
     direction: Direction = Direction.DIRECT
     tier: Tier = Tier.ASSOCIATIONAL
     pair_by: tuple[str, ...] = ('seed',)
+    contrast: tuple[float, float] | None = None
     scope: 'pl.Expr | DeferredScope | None' = None
     predicted_direction: PredictedDirection | None = None
     holds_when: Callable[..., 'Verdict | tuple[Verdict, RefutationClass | None]'] | None = None
@@ -549,6 +544,49 @@ def _require_predicted_direction(
     )
 
 
+def _require_contrast(
+    contrast: object,
+    source: BridgeEndpoint,
+    fn_name: str,
+) -> tuple[float, float] | None:
+    """Validate the value-contrast declaration at decoration time.
+
+    The contrast belongs to the claim, so an incoherent one is an
+    import-time error: exactly two distinct finite values, and a
+    string source naming the parameter column they are values of
+    (an executable DoEffect carries its own contrast; combining
+    the two would declare the intervention twice)."""
+    if contrast is None:
+        return None
+    if not isinstance(source, str):
+        raise TypeError(
+            f'@claim_bridge {fn_name!r}: `contrast` requires a string '
+            f'`source` naming the parameter column its values belong '
+            f'to; got source={source!r}',
+        )
+    if not (
+        isinstance(contrast, tuple)
+        and len(contrast) == 2
+        and all(
+            not isinstance(v, bool) and isinstance(v, (int, float))
+            and math.isfinite(float(v))
+            for v in contrast
+        )
+    ):
+        raise TypeError(
+            f'@claim_bridge {fn_name!r}: `contrast` must be a '
+            f'(baseline_value, treatment_value) tuple of finite '
+            f'numbers; got {contrast!r}',
+        )
+    baseline_value, treatment_value = float(contrast[0]), float(contrast[1])
+    if baseline_value == treatment_value:
+        raise TypeError(
+            f'@claim_bridge {fn_name!r}: contrast values must be '
+            f'distinct; got {baseline_value!r} twice',
+        )
+    return (baseline_value, treatment_value)
+
+
 def claim_bridge(
     *,
     source: BridgeEndpoint,
@@ -556,6 +594,7 @@ def claim_bridge(
     direction: Direction = Direction.DIRECT,
     tier: Tier = Tier.ASSOCIATIONAL,
     pair_by: tuple[str, ...] = ('seed',),
+    contrast: tuple[float, float] | None = None,
     scope: 'pl.Expr | DeferredScope | None' = None,
     predicted_direction: PredictedDirection | None = None,
     gates: tuple[AdmissionGate, ...] = (),
@@ -617,6 +656,9 @@ def claim_bridge(
     pair_by_validated = _require_pair_by(
         pair_by, '<claim_bridge decorator>',
     )
+    contrast_validated = _require_contrast(
+        contrast, source_validated, '<claim_bridge decorator>',
+    )
     scope_validated = _require_scope(
         scope, '<claim_bridge decorator>',
     )
@@ -656,6 +698,7 @@ def claim_bridge(
             direction=direction_validated,
             tier=tier_validated,
             pair_by=pair_by_validated,
+            contrast=contrast_validated,
             scope=scope_validated,
             holds_when=fn,
             predicted_direction=predicted_direction_validated,
@@ -671,7 +714,6 @@ def evaluate(
     *,
     claim: Claim[..., object] | None = None,
     module_scope: pl.Expr | None = None,
-    recorded_contrast: RecordedContrastBinding | None = None,
 ) -> BridgeEvaluation:
     """Run a bridge against a cell-set: apply `bridge.scope`
     as a polars filter, resolve each fixture (a `holds_when` parameter
@@ -713,15 +755,14 @@ def evaluate(
     Bridges that intentionally violate the module-level filter
     must move to a different hypothesis module.
 
-    `recorded_contrast` binds an externally executed, verified
-    two-arm contrast at evaluation time.  The bridge still declares
-    the data-independent edge (for example ``gamma -> return_mean``);
-    the binding supplies the producer-specific arm keys and verifies
-    its intervention path and arm values against the cells.
-    Analyses then consume ``bridge.target`` as their measured source,
-    exactly as they do for an executable ``DoEffect``.  Supplying both
-    forms is an error: a recorded contrast is evidence about an action
-    performed elsewhere, not an operation Corroborate can re-apply.
+    A bridge with a value `contrast` (a contrast executed outside
+    the framework) needs nothing extra here: the claim already
+    carries its two parameter values, so scoped cells are labelled
+    by their source-column value, the derived condition labels are
+    threaded into arm-shaped analyses, and the contrast-quality
+    admission gates run over exactly the cells this claim admits.
+    Producer condition names never enter — same call as any other
+    bridge.
 
     Raises `TypeError` if the Bridge has no `holds_when` body —
     `@claim_bridge` always populates it; this guard catches direct
@@ -736,67 +777,6 @@ def evaluate(
     # the eventual analysis pass. Materialise them once at the boundary.
     if not isinstance(cells, pl.DataFrame):
         cells = [dict(cell) for cell in cells]
-    recorded_arm_keys: tuple[str, str] | None = None
-    if recorded_contrast is not None:
-        if isinstance(bridge.source, DoEffect):
-            raise ValueError(
-                f'evaluate({bridge.name!r}): cannot combine an executable '
-                'DoEffect source with recorded_contrast',
-            )
-        if not isinstance(bridge.source, str):
-            raise ValueError(
-                f'evaluate({bridge.name!r}): recorded_contrast requires '
-                'a string source naming its parameter path',
-            )
-        if bridge.source_name != recorded_contrast.parameter_path:
-            raise ValueError(
-                f'evaluate({bridge.name!r}): bridge source '
-                f'{bridge.source_name!r} does not match recorded contrast '
-                f'parameter path {recorded_contrast.parameter_path!r}',
-            )
-        recorded_arm_keys = (
-            recorded_contrast.baseline_key,
-            recorded_contrast.treatment_key,
-        )
-        if recorded_arm_keys[0] == recorded_arm_keys[1]:
-            raise ValueError(
-                f'evaluate({bridge.name!r}): recorded contrast arm '
-                f'keys must be distinct; got {recorded_arm_keys[0]!r}',
-            )
-        recorded_rows = (
-            cast(list[dict[str, object]], cells.to_dicts())
-            if isinstance(cells, pl.DataFrame)
-            else cells
-        )
-        expected_values = {
-            recorded_contrast.baseline_key: recorded_contrast.baseline_value,
-            recorded_contrast.treatment_key: recorded_contrast.treatment_value,
-        }
-        seen_arms: set[str] = set()
-        for cell in recorded_rows:
-            arm = cell.get('arm_key')
-            if not isinstance(arm, str) or arm not in expected_values:
-                continue
-            seen_arms.add(arm)
-            source_value = cell.get(recorded_contrast.parameter_path)
-            expected_value = expected_values[arm]
-            if (
-                isinstance(source_value, bool)
-                or not isinstance(source_value, (int, float))
-                or not math.isfinite(float(source_value))
-                or float(source_value) != expected_value
-            ):
-                raise ValueError(
-                    f'evaluate({bridge.name!r}): arm {arm!r} records '
-                    f'{recorded_contrast.parameter_path}={source_value!r}; '
-                    f'contrast binds it to {expected_value!r}',
-                )
-        missing_arms = set(recorded_arm_keys).difference(seen_arms)
-        if missing_arms:
-            raise ValueError(
-                f'evaluate({bridge.name!r}): recorded contrast arm(s) '
-                f'{sorted(missing_arms)!r} are absent from the cells',
-            )
     # Effective scope = bridge.scope ∧ module_scope (either may
     # be None). Polars' `&` is the framework-honest composition.
     #
@@ -853,6 +833,44 @@ def evaluate(
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []
         )
+    contrast_labels: tuple[str, str] | None = None
+    if bridge.contrast is not None:
+        # Label scoped cells by their source-column value — the
+        # claim's own (baseline, treatment) values, no producer
+        # names. Cells matching neither value keep no label and are
+        # invisible to arm-shaped analyses; the contrast-quality
+        # gates group by these labels.
+        baseline_value, treatment_value = bridge.contrast
+        contrast_labels = (
+            contrast_arm_label(bridge.source_name, baseline_value),
+            contrast_arm_label(bridge.source_name, treatment_value),
+        )
+        seen_labels: set[str] = set()
+        for cell in filtered_cells:
+            if CONTRAST_ARM_FIELD in cell:
+                raise ValueError(
+                    f'evaluate({bridge.name!r}): cells already carry '
+                    f'the reserved column {CONTRAST_ARM_FIELD!r}',
+                )
+            source_value = cell.get(bridge.source_name)
+            if (
+                isinstance(source_value, bool)
+                or not isinstance(source_value, (int, float))
+                or not math.isfinite(float(source_value))
+            ):
+                continue
+            if float(source_value) == baseline_value:
+                cell[CONTRAST_ARM_FIELD] = contrast_labels[0]
+                seen_labels.add(contrast_labels[0])
+            elif float(source_value) == treatment_value:
+                cell[CONTRAST_ARM_FIELD] = contrast_labels[1]
+                seen_labels.add(contrast_labels[1])
+        missing_labels = set(contrast_labels).difference(seen_labels)
+        if missing_labels:
+            raise ValueError(
+                f'evaluate({bridge.name!r}): no scoped cells at '
+                f'contrast value(s) {sorted(missing_labels)!r}',
+            )
     n_cells_in_scope = len(filtered_cells)
     # extent_hash: process-portable identity of the bridge's admitted
     # cell-set on the current cache. Set semantics mean two bridges
@@ -872,14 +890,14 @@ def evaluate(
     all_gates: tuple[AdmissionGate, ...] = AUTO_GATES + bridge.gates
     warnings: list[GateResult] = []
     for gate in all_gates:
-        # A recorded intervention repeats one condition value across
+        # A value contrast repeats one condition value across
         # experimental units by construction, just like a DoEffect's arm
         # indicator. ``pair_by`` — not the parameter's value cardinality —
         # determines the independent units for its paired analysis. It is
         # also evidence of an executed contrast, so the native-substrate
         # exogenous-source gate does not reinterpret its parameter path as
         # an unexecuted author-controlled leaf.
-        if recorded_contrast is not None and gate in (
+        if bridge.contrast is not None and gate in (
             distinct_units, exogenous_source,
         ):
             continue
@@ -903,23 +921,23 @@ def evaluate(
     #   - `source = DoEffect(...)` → contrast = the DoEffect, and
     #     the analysis's `source` slot maps to bridge.target_name
     #     (the measurement column).
-    #   - `recorded_contrast=...` → bind the verified external arm
-    #     labels without putting bundle-specific data in the bridge;
-    #     the analysis source maps to bridge.target_name.
+    #   - `bridge.contrast = (baseline, treatment)` → the claim's
+    #     own parameter values; condition labels were derived above
+    #     and the analysis source maps to bridge.target_name.
     #   - `source = str | Measurable` → no contrast; the name flows
     #     directly as the analysis's source. Correlational bridges,
     #     or bridges where the author wants paired_g to compute on
     #     a non-outcome measurable.
-    contrast: DoEffect | RecordedContrastBinding | None
+    arm_keys: tuple[str, ...] | None
     source_for_analysis: str
     if isinstance(bridge.source, DoEffect):
-        contrast = bridge.source
+        arm_keys = bridge.source.arm_keys()
         source_for_analysis = bridge.target_name
-    elif recorded_contrast is not None:
-        contrast = recorded_contrast
+    elif contrast_labels is not None:
+        arm_keys = contrast_labels
         source_for_analysis = bridge.target_name
     else:
-        contrast = None
+        arm_keys = None
         source_for_analysis = bridge.source_name
     bridge_params: dict[str, object] = {
         'source': source_for_analysis,
@@ -930,11 +948,11 @@ def evaluate(
         'pair_by': bridge.pair_by,
         **dict(bridge.params),
     }
-    if contrast is not None:
-        if isinstance(contrast, DoEffect):
-            arm_keys = contrast.arm_keys()
-        else:
-            arm_keys = (contrast.baseline_key, contrast.treatment_key)
+    if contrast_labels is not None:
+        # Arm-shaped analyses read conditions off the derived label
+        # column rather than a producer-stamped arm_key.
+        bridge_params['arm_field'] = CONTRAST_ARM_FIELD
+    if arm_keys is not None:
         bridge_params['arm_keys'] = arm_keys
         # Binary compat: when N=2, inject treatment_arm /
         # baseline_arm so existing bridges with default kwargs
@@ -1138,7 +1156,6 @@ __all__ = [
     'BridgeEndpoint',
     'BridgeEvaluation',
     'Direction',
-    'RecordedContrastBinding',
     'Tier',
     'claim_bridge',
     'endpoint_name',

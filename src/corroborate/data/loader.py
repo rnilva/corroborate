@@ -1,0 +1,287 @@
+"""Load externally-produced run records into a DataFrame.
+
+`load_runs` is a convenience reader, not a gatekeeper: it turns a
+directory of plain producer files into the framework's canonical
+cell shape (one row per seeded run, path-keyed scalar columns) and
+nothing else. It holds no opinion about study design — pairing,
+configuration isolation, and evidence quality are claims about a
+*contrast*, so they are checked by the admission gates of the
+claim being evaluated, scoped to exactly the cells that claim
+admits. A producer who already has a DataFrame skips this module
+entirely.
+
+Directory layout (only ``runs.jsonl`` is required)::
+
+    <root>/
+      runs.jsonl           one record per run; ``run_id`` required,
+                           other scalar fields become columns,
+                           ``config_path`` points at the resolved
+                           configuration actually used
+      configs/<run>.json   flattened into dotted-path columns
+                           (``gamma``, ``optimizer.lr``, ...)
+      evaluations.jsonl    one record per (run, checkpoint[, eval
+                           seed]); numeric fields are outcomes
+      provenance.json      optional; ``producer`` becomes the
+                           ``program`` column
+
+From the evaluation records the loader derives, per run and per
+outcome field, the final-checkpoint mean (``<outcome>_mean``), a
+checkpoint-normalised area under the curve (``<outcome>_auc``),
+and the trajectory as one scalar column per checkpoint
+(``<outcome>_mean_at_<checkpoint>``) — means taken over whatever
+evaluation seeds were logged at that checkpoint.
+
+Malformed structure raises a plain ``ValueError`` (duplicate run
+ids, duplicate evaluation records, evaluations for unknown runs,
+conflicting values for one column). There is no verdict
+vocabulary here; evidence is a live record that this module
+merely reads.
+"""
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping
+from pathlib import Path
+from typing import TypeIs
+
+import polars as pl
+
+from corroborate.data._run_io import read_json, read_jsonl, safe_run_path
+from corroborate.corpus.schema import MeasurementLeaf
+
+
+def _is_scalar(value: object) -> TypeIs[MeasurementLeaf]:
+    return isinstance(value, (str, int, float, bool))
+
+
+def _is_number(value: object) -> TypeIs[int | float]:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _put(
+    row: dict[str, MeasurementLeaf],
+    key: str,
+    value: MeasurementLeaf,
+    *,
+    run_id: str,
+) -> None:
+    """Set a column on a run's row; a repeated key is tolerated
+    only when the values agree (producers often stamp e.g. ``seed``
+    on both the run record and the configuration), because that is
+    the one case where accepting it loses nothing."""
+    if key in row and row[key] != value:
+        raise ValueError(
+            f'load_runs: run {run_id!r} has conflicting values for '
+            f'column {key!r}: {row[key]!r} != {value!r}',
+        )
+    row[key] = value
+
+
+def _flatten_config(
+    config: Mapping[str, object],
+    *,
+    prefix: str = '',
+) -> dict[str, MeasurementLeaf]:
+    """Nested configuration mapping → dotted-path scalar leaves.
+
+    Non-scalar leaves (arrays, nulls) have no scalar-column shape
+    and are skipped; the resolved config file remains the complete
+    record."""
+    flat: dict[str, MeasurementLeaf] = {}
+    for key, value in config.items():
+        path = f'{prefix}{key}'
+        if isinstance(value, Mapping):
+            # Runtime invariant: json.loads mapping keys are str.
+            nested = {str(k): v for k, v in value.items()}
+            flat.update(_flatten_config(nested, prefix=f'{path}.'))
+        elif _is_scalar(value):
+            flat[path] = value
+    return flat
+
+
+def _normalised_auc(
+    checkpoints: tuple[int, ...],
+    means: tuple[float, ...],
+) -> float:
+    """Trapezoid area over the checkpoint axis, normalised by its
+    span — reduces to the single checkpoint mean when the run was
+    evaluated once."""
+    if len(checkpoints) == 1:
+        return means[0]
+    area = 0.0
+    for index in range(len(checkpoints) - 1):
+        step = float(checkpoints[index + 1] - checkpoints[index])
+        area += step * (means[index] + means[index + 1]) / 2.0
+    return area / float(checkpoints[-1] - checkpoints[0])
+
+
+def _as_checkpoint(value: object, where: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(
+            f'load_runs: {where}: checkpoint must be an integer, '
+            f'got {value!r}',
+        )
+    return value
+
+
+def _read_evaluations(
+    root: Path,
+) -> dict[str, dict[int, dict[str, list[float]]]]:
+    """``evaluations.jsonl`` → per-run, per-checkpoint outcome
+    samples (one sample per logged evaluation seed)."""
+    path = root / 'evaluations.jsonl'
+    by_run: dict[str, dict[int, dict[str, list[float]]]] = {}
+    if not path.is_file():
+        return by_run
+    seen: set[tuple[str, int, object]] = set()
+    for record in read_jsonl(path):
+        run_id = record.get('run_id')
+        if not isinstance(run_id, str):
+            raise ValueError(
+                'load_runs: evaluation record without a string run_id: '
+                f'{record!r}',
+            )
+        checkpoint = _as_checkpoint(
+            record.get('checkpoint'), f'evaluation of run {run_id!r}',
+        )
+        eval_seed = record.get('eval_seed')
+        key = (run_id, checkpoint, eval_seed)
+        if key in seen:
+            raise ValueError(
+                f'load_runs: duplicate evaluation record for run '
+                f'{run_id!r} at checkpoint {checkpoint} '
+                f'(eval_seed={eval_seed!r}) — distinguish repeated '
+                'evaluations by eval_seed',
+            )
+        seen.add(key)
+        outcomes = by_run.setdefault(run_id, {}).setdefault(checkpoint, {})
+        for field, value in record.items():
+            if field in ('run_id', 'checkpoint', 'eval_seed'):
+                continue
+            if _is_number(value):
+                outcomes.setdefault(field, []).append(float(value))
+    return by_run
+
+
+def _derive_outcomes(
+    row: dict[str, MeasurementLeaf],
+    per_checkpoint: Mapping[int, Mapping[str, list[float]]],
+    *,
+    run_id: str,
+) -> None:
+    checkpoints = tuple(sorted(per_checkpoint))
+    outcome_names = sorted(
+        {name for samples in per_checkpoint.values() for name in samples},
+    )
+    for outcome in outcome_names:
+        grid = tuple(
+            cp for cp in checkpoints if outcome in per_checkpoint[cp]
+        )
+        means = tuple(
+            math.fsum(per_checkpoint[cp][outcome])
+            / len(per_checkpoint[cp][outcome])
+            for cp in grid
+        )
+        _put(row, f'{outcome}_mean', means[-1], run_id=run_id)
+        _put(
+            row, f'{outcome}_auc', _normalised_auc(grid, means),
+            run_id=run_id,
+        )
+        # The trajectory as flat checkpoint-keyed scalar columns —
+        # null-padded on diagonal concat across run sets with
+        # different checkpoint grids.
+        for checkpoint, mean in zip(grid, means):
+            _put(
+                row, f'{outcome}_mean_at_{checkpoint}', mean,
+                run_id=run_id,
+            )
+
+
+def load_runs(
+    root: Path | str,
+    *,
+    corpus: str | None = None,
+) -> pl.DataFrame:
+    """Read a producer's run directory into one row per run.
+
+    ``corpus`` names the run set in the ``corpus`` column
+    (defaults to the directory name) so rows from several
+    directories stay distinguishable after concatenation — the
+    concatenation itself is plain ``pl.concat(..., how='diagonal')``,
+    batches of a growing study being one run set that happens to
+    arrive in parts."""
+    root_path = Path(root)
+    runs_path = root_path / 'runs.jsonl'
+    if not runs_path.is_file():
+        raise ValueError(f'load_runs: {runs_path} does not exist')
+    raw_runs = read_jsonl(runs_path)
+    if not raw_runs:
+        raise ValueError(f'load_runs: {runs_path} is empty')
+
+    program: str | None = None
+    provenance_path = root_path / 'provenance.json'
+    if provenance_path.is_file():
+        provenance = read_json(provenance_path)
+        if isinstance(provenance, Mapping):
+            producer = provenance.get('producer')
+            if isinstance(producer, str):
+                program = producer
+
+    evaluations = _read_evaluations(root_path)
+
+    rows: list[dict[str, MeasurementLeaf]] = []
+    seen_run_ids: set[str] = set()
+    for raw in raw_runs:
+        run_id = raw.get('run_id')
+        if not isinstance(run_id, str) or not run_id:
+            raise ValueError(
+                f'load_runs: run record without a string run_id: {raw!r}',
+            )
+        if run_id in seen_run_ids:
+            raise ValueError(f'load_runs: duplicate run_id {run_id!r}')
+        seen_run_ids.add(run_id)
+        row: dict[str, MeasurementLeaf] = {'id': run_id}
+        _put(
+            row, 'corpus',
+            corpus if corpus is not None else root_path.name,
+            run_id=run_id,
+        )
+        if program is not None:
+            _put(row, 'program', program, run_id=run_id)
+        for field, value in raw.items():
+            if field in ('run_id', 'config_path'):
+                continue
+            if _is_scalar(value):
+                _put(row, field, value, run_id=run_id)
+        config_path = raw.get('config_path')
+        if config_path is not None:
+            if not isinstance(config_path, str):
+                raise ValueError(
+                    f'load_runs: run {run_id!r} config_path must be a '
+                    f'string, got {config_path!r}',
+                )
+            config = read_json(safe_run_path(root_path, config_path))
+            if not isinstance(config, Mapping):
+                raise ValueError(
+                    f'load_runs: {config_path} must contain a JSON '
+                    'object',
+                )
+            # Runtime invariant: json.loads mapping keys are str.
+            typed_config = {str(k): v for k, v in config.items()}
+            for key, value in _flatten_config(typed_config).items():
+                _put(row, key, value, run_id=run_id)
+        per_checkpoint = evaluations.pop(run_id, None)
+        if per_checkpoint is not None:
+            _derive_outcomes(row, per_checkpoint, run_id=run_id)
+        rows.append(row)
+
+    if evaluations:
+        unknown = sorted(evaluations)
+        raise ValueError(
+            f'load_runs: evaluations.jsonl references run id(s) not in '
+            f'runs.jsonl: {unknown!r}',
+        )
+    return pl.from_dicts(rows, infer_schema_length=None)
+
+
+__all__ = ['load_runs']

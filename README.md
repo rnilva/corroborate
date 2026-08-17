@@ -103,51 +103,55 @@ uv run corroborate hypothesis experiments.findings.<name> --render evidence.svg
 
 ## Using external runs
 
-Training runs produced by other codebases can be ingested
-without modifying the training code. The producer writes a small
-bundle (run and evaluation records, resolved configurations, and
-a short `contract.json` describing the study);
-`corroborate.data.adapt_study` verifies the bundle and returns an
-`AdaptedStudy`: validated rows, a recorded contrast, and an
-admissibility receipt. Checks the files can prove are marked
-`VERIFIED`; producer statements remain `ATTESTED` or
-`UNVERIFIABLE`.
+Training runs produced by other codebases evaluate without
+modifying the training code, and without any corroborate-specific
+files on the producer's side. `corroborate.data.load_runs` reads
+a directory of ordinary run records (run ids, resolved configs,
+evaluations) into a DataFrame — one row per run, configuration
+flattened to dotted-path columns, per-checkpoint outcome
+aggregates derived. It is a reader, not a gatekeeper.
 
-The claim remains an ordinary, data-independent `@claim_bridge`
-module. At evaluation time, the verified contrast supplies the
-external producer's arm labels:
+The claim is an ordinary, data-independent `@claim_bridge`
+module. A bridge whose contrast was executed outside the
+framework declares its two parameter values directly:
 
 ```python
-from corroborate.bridge.bridge import evaluate
-from corroborate.data import adapt_study
-from my_claims import higher_gamma_improves_return
-
-study = adapt_study('path/to/bundle')
-panel = study.to_panel()                 # optional exploration
-result = evaluate(
-    higher_gamma_improves_return,        # authored test module
-    panel.cells,
-    recorded_contrast=study.contrast,    # runtime data binding
+@claim_bridge(
+    source='gamma',
+    contrast=(0.80, 0.99),          # baseline, treatment values
+    target='return_mean',
+    pair_by=('seed',),
+    predicted_direction='a_gt_b',
+    ...
 )
+def higher_gamma_improves_return(...) -> ...: ...
+
+df = load_runs('path/to/runs')
+result = evaluate(higher_gamma_improves_return, df)
 ```
 
-The bridge declares the measurable edge, scope, predicted
-direction, analysis configuration, and verdict rule. It does not
-import the bundle or hard-code producer-specific condition names.
-The record is live: run more seeds, re-adapt, and the same bridge
-recomputes — batches of the same study pool, and a verdict that
-moves with the evidence is the system working. (Runs logged your
-own way need no bundle at all: any DataFrame is a panel via
-`Panel.from_dataframe`, and bridges evaluate against it
-directly.)
+Conditions are derived from the source column's values — no
+producer arm labels exist anywhere. Study-design quality is
+checked where the hypothesis layer owns it, by admission gates
+over exactly the cells the claim admits: `contrast_isolation`
+blocks (verdict `INADMISSIBLE`) if any other column moved
+together with the contrasted parameter, and `pair_completeness`
+warns on the verdict record when a pairing unit is missing one
+condition.
+
+The record is live: run more seeds, re-load, and the same bridge
+recomputes — batches concatenate with plain `pl.concat`, and a
+verdict that moves with the evidence is the system working. (Runs
+logged your own way need no loader at all: any DataFrame with the
+named columns evaluates directly, and `Panel.from_dataframe`
+offers the exploration surface.)
 
 [`examples/sb3_demo/`](examples/sb3_demo/) walks through this
-with stable-baselines3 DQN: training, bundle production,
-adaptation, descriptive exploration on the adapted panel, and
-evaluation of an executable claim module through the same bridge
-path used by native studies. It runs on CPU in a few minutes, and
-a bundle from a real run is committed so the analysis half can be
-run without training.
+with stable-baselines3 DQN: training, loading, descriptive
+exploration in plain polars, and evaluation of an executable
+claim module through the same bridge path used by native studies.
+It runs on CPU in a few minutes, and files from a real run are
+committed so the analysis half can be run without training.
 
 ## Repository layout
 

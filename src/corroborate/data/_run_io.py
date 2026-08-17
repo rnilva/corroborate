@@ -1,8 +1,8 @@
-"""Path-safe reads for external study bundles.
+"""Path-safe reads for externally-produced run directories.
 
-Private support module for `corroborate.data.adapter`: JSON /
-JSONL decoding plus escape-proof path resolution. A bundle is a
-plain directory of files — evidence is a live, growing record,
+Private support module for `corroborate.data.loader`: JSON /
+JSONL decoding plus escape-proof path resolution. A run
+directory is plain files — evidence is a live, growing record,
 not a frozen artifact, so there is no seal here: integrity over
 time is the producer's version control's job, and the framework's
 verdicts recompute whenever the record grows (that is the point
@@ -14,17 +14,17 @@ import json
 from pathlib import Path, PurePosixPath
 
 
-def safe_bundle_path(root: Path, relative: str) -> Path:
-    """Resolve a bundle-relative path, rejecting absolute /
-    escaping paths — a hostile contract must not read outside the
-    bundle."""
+def safe_run_path(root: Path, relative: str) -> Path:
+    """Resolve a root-relative path, rejecting absolute / escaping
+    paths — a hostile run record must not read outside its
+    directory."""
     posix = PurePosixPath(relative)
     if posix.is_absolute() or '..' in posix.parts or not posix.parts:
-        raise ValueError(f'unsafe bundle path: {relative!r}')
+        raise ValueError(f'unsafe run-relative path: {relative!r}')
     root_resolved = root.resolve()
     candidate = root_resolved.joinpath(*posix.parts).resolve()
     if not candidate.is_relative_to(root_resolved):
-        raise ValueError(f'bundle path escapes root: {relative!r}')
+        raise ValueError(f'path escapes the run directory: {relative!r}')
     return candidate
 
 
