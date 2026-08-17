@@ -78,9 +78,10 @@ def test_static_scope_is_applied_before_panel_and_in_final_expr() -> None:
 
 
 def test_panel_analysis_receives_prefiltered_dataframe() -> None:
-    """`resolve` hands the panel analysis the pre-filtered cells as
-    a DataFrame directly — one path, no per-shape dispatch; the
-    analysis's own entry normalisation owns any conversion."""
+    """With a static scope, `resolve` builds the DataFrame once
+    (the filter needs it) and hands the FILTERED frame over
+    directly — the analysis's own entry normalisation owns any
+    further conversion."""
     seen: list[type[object]] = []
 
     @analysis
@@ -95,9 +96,36 @@ def test_panel_analysis_receives_prefiltered_dataframe() -> None:
         panel_analysis=_dataframe_panel,
         panel_kwargs={},
         keep=lambda _panel, _index: True,
+        static_scope=pl.col('env_name') == 'A',
     )
     _ = scope.resolve([{'env_name': 'A'}])
     assert seen == [pl.DataFrame]
+
+
+def test_rows_pass_through_untouched_without_static_scope() -> None:
+    """Without a static scope there is nothing to filter, so the
+    caller's rows reach the panel analysis as the SAME object — no
+    rows → DataFrame → rows round trip for row-consuming panel
+    builders (regression guard for the conversion the canonical
+    union made tempting)."""
+    received: list[object] = []
+
+    @analysis
+    def _identity_probe_panel(
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    ) -> StratumPanel:
+        received.append(cells)
+        return _empty_panel(as_rows(cells))
+
+    scope = scope_from_panel(
+        panel_analysis=_identity_probe_panel,
+        panel_kwargs={},
+        keep=lambda _panel, _index: True,
+    )
+    rows: list[dict[str, object]] = [{'env_name': 'A'}]
+    _ = scope.resolve(rows)
+    assert received == [rows]
+    assert received[0] is rows
 
 
 def test_missing_static_column_is_null_padded_before_panel() -> None:
@@ -124,9 +152,9 @@ def test_missing_static_column_is_null_padded_before_panel() -> None:
 def test_generator_cells_survive_deferred_scope_and_analysis() -> None:
     @analysis
     def _count_deferred_cells(
-        cells: Iterable[Mapping[str, object]],
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
     ) -> int:
-        return len(list(cells))
+        return len(list(as_rows(cells)))
 
     @analysis
     def _all_strata_panel(

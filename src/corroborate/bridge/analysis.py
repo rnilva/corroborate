@@ -47,8 +47,10 @@ once at its own entry — `as_rows` for row-consuming bodies,
 (the two directions of the conversion boundary). The wrapper
 therefore adds no hidden conversion: `__call__` is pure typed
 delegation, and `panel.cells` works against the whole registry
-by convention rather than by dispatch. The convention is pinned
-by a registry-wide test, not enforced by runtime reflection.
+by contract rather than by dispatch. The contract is enforced at
+registration — `@analysis` rejects a first parameter that does
+not spell the union — and a registry-wide test proves the whole
+shipped surface passed it.
 
 `Analysis[C, O, **P]` preserves the wrapped fn's full surface —
 cells shape `C`, result `O`, keyword surface `P` — through the
@@ -73,8 +75,48 @@ from typing import Concatenate, Protocol, cast, overload
 
 import polars as pl
 
-from corroborate._internals.introspection import get_param_default
+from corroborate._internals.introspection import (
+    get_param_annotation,
+    get_param_default,
+)
 from corroborate._internals.registry import Registry
+
+_CANONICAL_CELLS = 'pl.DataFrame | Iterable[Mapping[str, object]]'
+
+
+def _require_canonical_cells(fn: Callable[..., object]) -> None:
+    """Registration gate for the canonical cells contract.
+
+    Every analysis declares the union — spelled literally, starting
+    ``pl.DataFrame | `` — on its first parameter, and normalises at
+    its own entry (module docstring). The check is textual by
+    design: the contract is a spelling convention, like the
+    framework's other load-bearing identifiers, so validation needs
+    no annotation resolution machinery, and a violation is an
+    import-time TypeError naming the fix — never a silent
+    mis-dispatch at call time."""
+    try:
+        sig = inspect.signature(fn)
+    except (ValueError, TypeError):
+        # Signature-less callables (C builtins) can't be checked;
+        # nothing in-tree registers one.
+        return
+    params = list(sig.parameters.values())
+    annotation: object = inspect.Parameter.empty
+    if params:
+        annotation = get_param_annotation(params[0])
+    if (
+        annotation is inspect.Parameter.empty
+        or not str(annotation).startswith('pl.DataFrame | ')
+    ):
+        raise TypeError(
+            f'@analysis {fn.__name__!r}: the first (cells) parameter '
+            f'must declare the canonical union '
+            f'"{_CANONICAL_CELLS}" (spelled literally) and normalise '
+            f'at entry — `as_rows(cells)` for row-consuming bodies, '
+            f'`cells_to_dataframe(cells)` for DataFrame-consuming '
+            f'ones; got {str(annotation)!r}',
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +258,7 @@ def analysis(
     def _build[**P, C, O](
         fn_inner: Callable[Concatenate[C, P], O],
     ) -> Analysis[C, O, P]:
+        _require_canonical_cells(fn_inner)
         name = fn_inner.__name__
         wrapper: Analysis[C, O, P] = Analysis(
             fn=fn_inner,

@@ -69,14 +69,21 @@ class DeferredScope:
     ) -> pl.Expr:
         """Build the panel from `cells`, apply `keep` per stratum,
         return `pl.col(stratify_column).is_in([surviving]) & static_scope`."""
-        # One path: every analysis accepts the canonical cells
-        # union, so the pre-filtered DataFrame is handed over
-        # directly — the fn normalises at its own entry.
-        panel_df = pl.from_dicts(cells) if cells else pl.DataFrame()
-        if self.static_scope is not None:
-            panel_df = filter_cells(panel_df, self.static_scope)
+        # Every analysis accepts the canonical cells union, so no
+        # per-shape dispatch is needed — but conversion is not free:
+        # without a static pre-filter the caller's rows pass through
+        # untouched (a rows → DataFrame → rows round trip for a
+        # row-consuming panel builder would be pure waste); with one,
+        # the DataFrame is built because `filter_cells` needs it, and
+        # the filtered frame is handed over directly.
+        panel_cells: pl.DataFrame | list[dict[str, object]]
+        if self.static_scope is None:
+            panel_cells = cells
+        else:
+            panel_df = pl.from_dicts(cells) if cells else pl.DataFrame()
+            panel_cells = filter_cells(panel_df, self.static_scope)
         panel = self.panel_analysis.fn(
-            panel_df,
+            panel_cells,
             **self.panel_kwargs,
         )
         try:

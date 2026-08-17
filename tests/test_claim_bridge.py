@@ -532,7 +532,7 @@ def test_evaluate_forwards_predicted_direction_to_analyses() -> None:
 
     @analysis
     def _captures_pd(
-        cells: list[Mapping[str, object]],
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
         *,
         predicted_direction: object,
         source: str = 'A',
@@ -745,15 +745,16 @@ def test_analysis_wrapper_is_directly_callable() -> None:
 
     Closed form: mean of {1, 2, 3, 4} scaled by 10 = 25.0 exactly
     (exact rational arithmetic — no sampling bound applies)."""
+    from corroborate._internals.polars import as_rows
     from corroborate.bridge.analysis import analysis
 
     @analysis
     def _scaled_mean(
-        cells: list[Mapping[str, object]],
+        cells: pl.DataFrame | Iterable[Mapping[str, object]],
         *,
         scale: float = 1.0,
     ) -> float:
-        vals = [float(cast(float, c['v'])) for c in cells]
+        vals = [float(cast(float, c['v'])) for c in as_rows(cells)]
         return scale * sum(vals) / len(vals)
 
     cells: list[Mapping[str, object]] = [
@@ -839,18 +840,57 @@ def test_analysis_call_preserves_wrapped_signature_statically() -> None:
     assert result.n_pairs == 30
 
 
-def test_every_registered_analysis_accepts_the_cells_union() -> None:
-    """Registry-wide convention guard for the exploration contract:
-    every production analysis declares the canonical cells union
-    (`pl.DataFrame | Iterable[Mapping[str, object]]`) and
-    normalises at its own entry, so `panel.cells` works against the
-    whole registry with no wrapper-side conversion. Signature
-    reflection lives HERE, in one test, instead of in runtime
-    dispatch. Test-local probes (registered from test modules) are
-    exempt — the convention binds `corroborate.*` analyses."""
-    import inspect
+def test_analysis_registration_rejects_noncanonical_cells() -> None:
+    """`@analysis` is the enforcement point for the canonical cells
+    contract: a first parameter that does not spell the union fails
+    registration with an instructive TypeError — at import time,
+    never as a silent mis-shape at call time. Missing annotations
+    fail the same way."""
+    from corroborate.bridge.analysis import analysis
 
+    with pytest.raises(TypeError, match='canonical union'):
+
+        @analysis
+        def _rows_only_probe(
+            cells: Iterable[Mapping[str, object]],
+        ) -> int:
+            return len(list(cells))
+
+    with pytest.raises(TypeError, match='canonical union'):
+
+        @analysis
+        def _frame_only_probe(cells: pl.DataFrame) -> int:
+            return cells.height
+
+    with pytest.raises(TypeError, match='canonical union'):
+
+        @analysis
+        def _unannotated_probe(cells) -> int:  # pyright: ignore[reportMissingParameterType]
+            del cells
+            return 0
+
+
+def test_every_registered_analysis_accepts_the_cells_union() -> None:
+    """Registry-wide proof that the shipped analysis surface passed
+    the registration gate: every `corroborate.analyses` submodule is
+    imported EXPLICITLY here (pkgutil walk), so the check does not
+    depend on the package `__init__`'s wiring or on which other
+    test modules happened to import first — a new analysis module
+    left out of `__init__` is still discovered and still checked.
+    Conformance itself is enforced by `@analysis` at registration;
+    this guard proves coverage. Test-local probes (registered from
+    test modules) are outside the `corroborate.*` filter."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    import corroborate.analyses as analyses_pkg
     from corroborate.bridge.analysis import get_registered, registered_names
+
+    for module_info in pkgutil.walk_packages(
+        analyses_pkg.__path__, prefix='corroborate.analyses.',
+    ):
+        importlib.import_module(module_info.name)
 
     production_names = [
         name for name in registered_names()
