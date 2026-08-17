@@ -4,17 +4,18 @@ This example measures the integration cost of using corroborate
 on training runs produced by an implementation it has never
 seen — here, ordinary
 [stable-baselines3](https://github.com/DLR-RM/stable-baselines3)
-DQN. The training script contains no corroborate imports and
-writes no corroborate-specific files.
+DQN. The training script is exactly what an SB3 tutorial writes —
+no corroborate imports, no recording code, no extra files — and
+the analysis reads SB3's own artifacts.
 
 The question: whether gamma = 0.99 outperforms gamma = 0.80 on
 CartPole-v1 at 25k steps. `sb3_claim.py` codifies it as an
 executable, data-independent claim; `analyze.py` loads the runs,
 explores them with plain polars, then evaluates the claim.
 
-(Runs logged your own way — monitor CSVs, a tensorboard scrape —
-skip the loader entirely: read them into a DataFrame and evaluate
-the claim against it directly.)
+(Runs logged your own way — a directory of plain JSON records —
+load via `corroborate.data.load_runs` instead, and any DataFrame
+with the named columns evaluates directly.)
 
 ## 1. Train (`train.py`, pure SB3)
 
@@ -22,39 +23,49 @@ the claim against it directly.)
 uv run examples/sb3_demo/train.py --seeds 3 --steps 25000   # ~10 min on CPU
 ```
 
-Two gamma values, three paired seeds each. At five checkpoints,
-each run is evaluated once per fixed evaluation seed. The script
-writes what any careful experimenter records anyway: `runs.jsonl`
-(one line per run: id + which config ran it), one resolved-config
-JSON per run, `evaluations.jsonl`, and an optional
-`provenance.json`.
-
-Files from a real run of this script are committed, so the
-analysis can be run without training.
-
-## 2. Load (`analyze.py`, corroborate only)
-
-```bash
-uv run python examples/sb3_demo/analyze.py
-```
-
-`load_runs` reads the directory into one row per run: config
-flattened to dotted-path columns, evaluations aggregated per
-checkpoint, `return_mean` / `return_auc` / one
-`return_mean_at_<step>` column per checkpoint derived. It is a
-reader, not a gatekeeper — no verdicts here.
+Two gamma values, three paired seeds each: construct `DQN`, train
+with an `EvalCallback` (5 evaluation episodes every 5k steps),
+`model.save()`. What lands on disk is SB3's output, nothing else:
 
 ```text
-loaded: 6 runs × 21 columns
+runs/
+  gamma080-s0/model.zip           model.save()
+  gamma080-s0/evaluations.npz     EvalCallback's evaluation log
+  ...
+```
+
+Artifacts from a real run of this script are committed, so the
+analysis can be run without training.
+
+## 2. Load (`analyze.py`, corroborate's side)
+
+```bash
+uv run --with 'stable-baselines3>=2.3' examples/sb3_demo/analyze.py
+```
+
+`corroborate_rl.sb3.load_sb3_runs` reads the folder into one row
+per run. Configuration comes from each checkpoint's own `data`
+record — `model.save()` dumps the algorithm's resolved state, and
+intersecting it with the DQN constructor's signature separates
+what was *configured* (`gamma`, `buffer_size`, `seed`, …) from
+runtime state (`num_timesteps`, the decayed `exploration_rate`).
+Evaluations come from `evaluations.npz`, aggregated per
+checkpoint into `return_mean`, `return_auc`, and one
+`return_mean_at_<step>` column each. The checkpoint doesn't
+record which environment it trained on, so the analyst states
+that known context in plain polars (`with_columns`).
+
+```text
+loaded: 6 runs × 26 columns
 ┌─────────────┬──────┬───────┬─────────────┐
 │ id          ┆ seed ┆ gamma ┆ return_mean │
 ╞═════════════╪══════╪═══════╪═════════════╡
-│ gamma080-s0 ┆ 0    ┆ 0.8   ┆ 156.2       │
-│ gamma080-s1 ┆ 1    ┆ 0.8   ┆ 162.6       │
-│ gamma080-s2 ┆ 2    ┆ 0.8   ┆ 240.2       │
-│ gamma099-s0 ┆ 0    ┆ 0.99  ┆ 100.2       │
-│ gamma099-s1 ┆ 1    ┆ 0.99  ┆ 166.4       │
-│ gamma099-s2 ┆ 2    ┆ 0.99  ┆ 105.8       │
+│ gamma080-s0 ┆ 0    ┆ 0.8   ┆ 157.0       │
+│ gamma080-s1 ┆ 1    ┆ 0.8   ┆ 205.8       │
+│ gamma080-s2 ┆ 2    ┆ 0.8   ┆ 173.6       │
+│ gamma099-s0 ┆ 0    ┆ 0.99  ┆ 98.8        │
+│ gamma099-s1 ┆ 1    ┆ 0.99  ┆ 238.0       │
+│ gamma099-s2 ┆ 2    ┆ 0.99  ┆ 86.2        │
 └─────────────┴──────┴───────┴─────────────┘
 ```
 
@@ -69,26 +80,26 @@ mean return per checkpoint (seeds pooled per condition):
 ┌───────┬───────┬───────┬───────┬───────┬───────┐
 │ gamma ┆ 5000  ┆ 10000 ┆ 15000 ┆ 20000 ┆ 25000 │
 ╞═══════╪═══════╪═══════╪═══════╪═══════╪═══════╡
-│ 0.8   ┆ 210.9 ┆ 172.7 ┆ 182.9 ┆ 208.0 ┆ 186.3 │
-│ 0.99  ┆ 164.3 ┆ 172.9 ┆ 199.7 ┆ 135.8 ┆ 124.1 │
+│ 0.8   ┆ 189.5 ┆ 173.1 ┆ 184.8 ┆ 248.5 ┆ 178.8 │
+│ 0.99  ┆ 196.5 ┆ 175.5 ┆ 184.9 ┆ 145.0 ┆ 141.0 │
 └───────┴───────┴───────┴───────┴───────┴───────┘
 
 Δ(return_mean) per seed (gamma 0.99 − 0.80):
-┌──────┬───────┬───────┬────────┐
-│ seed ┆ 0.99  ┆ 0.8   ┆ delta  │
-╞══════╪═══════╪═══════╪════════╡
-│ 0    ┆ 100.2 ┆ 156.2 ┆ -56.0  │
-│ 1    ┆ 166.4 ┆ 162.6 ┆ 3.8    │
-│ 2    ┆ 105.8 ┆ 240.2 ┆ -134.4 │
-└──────┴───────┴───────┴────────┘
+┌──────┬───────┬───────┬───────┐
+│ seed ┆ 0.8   ┆ 0.99  ┆ delta │
+╞══════╪═══════╪═══════╪═══════╡
+│ 0    ┆ 157.0 ┆ 98.8  ┆ -58.2 │
+│ 1    ┆ 205.8 ┆ 238.0 ┆ 32.2  │
+│ 2    ┆ 173.6 ┆ 86.2  ┆ -87.4 │
+└──────┴───────┴───────┴───────┘
 ```
 
-Gamma 0.99 is behind at 5k, level by 10k, ahead at 15k — then
-falls away over the last two checkpoints while gamma 0.80 holds.
-In these three paired seeds, that trajectory is consistent with a
-late decline at the higher gamma. It is descriptive evidence, not
-enough by itself to distinguish degradation from noisy or slower
-learning.
+The two conditions track each other through 15k steps — then
+gamma 0.99 falls away over the last two checkpoints while gamma
+0.80 holds. In these three paired seeds, that trajectory is
+consistent with a late decline at the higher gamma. It is
+descriptive evidence, not enough by itself to distinguish
+degradation from noisy or slower learning.
 
 ## 4. Author and evaluate the claim
 
@@ -122,12 +133,13 @@ The bridge is exactly what a native one looks like — no external
 special case. `tier=INTERVENTIONAL` on the assigned parameter
 says the contrast was executed; the scope pins which two values
 it compares. Evaluation adds one fact from the data side: which
-columns were *configuration*, derived from the run directory's
-own config files — never hand-listed:
+columns were *configuration* — recovered from the checkpoints
+themselves, never hand-listed:
 
 ```python
 evaluation = evaluate(
-    higher_gamma_improves_return, df, leaves=config_columns(RUNS),
+    higher_gamma_improves_return, df,
+    leaves=sb3_config_columns(RUNS, DQN),
 )
 ```
 
@@ -147,8 +159,8 @@ report.
 
 ```text
 claim: gamma 0.99 > gamma 0.80 on return_mean
-  n_pairs=3  mean_diff=-62.2 (CI -179.0..+54.6)
-  dz=-0.90  p=0.8698
+  n_pairs=3  mean_diff=-37.8 (CI -142.9..+67.3)
+  dz=-0.61  p=0.7981
   verdict: POWER_INSUFFICIENT (UNDERPOWERED)
 ```
 
@@ -165,24 +177,13 @@ recomputes on the larger run set — batches concatenate with plain
 `pl.concat`, because a growing study is one run set that happens
 to arrive in parts. A verdict that moves as evidence accretes is
 the system working; the hypothesis layer's drift discipline
-exists precisely to notice it.
-
-The same claim module also runs against anyone else's runs with
-the same measurable schema — the contrast values live in the
-claim, so nothing producer-specific needs to be supplied at
-evaluation time. The gates re-check isolation and pairing on
-every evaluation, over whatever the record has become.
+exists precisely to notice it. The gates re-check contrast
+presence, isolation, and pairing on every evaluation, over
+whatever the record has become.
 
 ## Producer-side cost
 
-Zero corroborate-specific files. `train.py` records run ids,
-resolved configs, evaluations, and provenance — records a
-careful experiment keeps regardless of what analyses them later.
-
-Already have a folder of ordinary SB3 outputs — checkpoint zips
-plus `EvalCallback`'s `evaluations.npz` — with no such files?
-`corroborate_rl.sb3.load_sb3_runs` reads those artifacts
-directly (configuration is recovered from the checkpoint's own
-`data` record, intersected with the algorithm constructor's
-signature), so the answer to "can I use this if I just train
-things in SB3?" is: point it at the log folder you already have.
+Zero. Not zero files — zero *anything*: `train.py` is the
+tutorial-shaped SB3 script, and the analysis reads the artifacts
+SB3 already writes. If you have a folder of checkpoint zips and
+`EvalCallback` logs from last month, this works on it today.

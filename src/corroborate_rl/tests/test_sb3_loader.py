@@ -227,6 +227,23 @@ def test_runs_without_evaluations_load_config_only(tmp_path: Path) -> None:
     assert 'return_mean' not in df.columns
 
 
+def test_stray_subdirectories_are_walked_past(tmp_path: Path) -> None:
+    """Real log folders carry non-run subdirectories (tensorboard
+    logs, stray tooling output); a reader skips them and raises
+    only when NO subdirectory carries a checkpoint."""
+    run_dir = tmp_path / 'run-a'
+    _write_checkpoint(run_dir / 'model.zip', gamma=0.9, seed=0)
+    (tmp_path / 'tb_logs').mkdir()
+    (tmp_path / 'tb_logs' / 'events.out.tfevents.0').write_text('')
+    df = load_sb3_runs(tmp_path, _FakeDQN)
+    assert df['id'].to_list() == ['run-a']
+
+    empty = tmp_path / 'no-runs-here'
+    (empty / 'tb_logs').mkdir(parents=True)
+    with pytest.raises(ValueError, match='no run directories'):
+        load_sb3_runs(empty, _FakeDQN)
+
+
 def test_pooling_sb3_batches_is_plain_concat(tmp_path: Path) -> None:
     _make_sb3_runs(tmp_path / 'batch_a', seeds=(0, 1))
     _make_sb3_runs(tmp_path / 'batch_b', seeds=(2, 3))

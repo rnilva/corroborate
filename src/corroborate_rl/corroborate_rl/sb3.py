@@ -118,17 +118,33 @@ def checkpoint_config(
     return config
 
 
-def _first_zip(run_dir: Path) -> Path:
+def _first_zip(run_dir: Path) -> Path | None:
+    """The run's checkpoint zip, or None for a directory that is
+    not a run (a tensorboard folder, a stray subdirectory) — real
+    log folders carry those, and a reader should walk past them."""
     preferred = [run_dir / 'model.zip', run_dir / 'best_model.zip']
     for candidate in preferred:
         if candidate.is_file():
             return candidate
     others = sorted(run_dir.glob('*.zip'))
-    if not others:
+    return others[0] if others else None
+
+
+def _run_zips(root: Path) -> list[tuple[Path, Path]]:
+    """(run_dir, checkpoint zip) for each subdirectory of `root`
+    that carries one; raises only when none do."""
+    pairs = [
+        (run_dir, zip_path)
+        for run_dir in sorted(d for d in root.iterdir() if d.is_dir())
+        for zip_path in [_first_zip(run_dir)]
+        if zip_path is not None
+    ] if root.is_dir() else []
+    if not pairs:
         raise ValueError(
-            f'corroborate_rl.sb3: no checkpoint zip in {run_dir}',
+            f'corroborate_rl.sb3: no run directories with a '
+            f'checkpoint zip under {root}',
         )
-    return others[0]
+    return pairs
 
 
 def _evaluations(
@@ -185,16 +201,8 @@ def load_sb3_runs(
     name. Pair with `sb3_config_columns(root, algo)` for the leaf
     registry `evaluate(..., leaves=...)` consumes."""
     root_path = Path(root)
-    run_dirs = sorted(
-        d for d in root_path.iterdir() if d.is_dir()
-    ) if root_path.is_dir() else []
-    if not run_dirs:
-        raise ValueError(
-            f'corroborate_rl.sb3: {root_path} contains no run '
-            f'directories',
-        )
     rows: list[dict[str, MeasurementLeaf]] = []
-    for run_dir in run_dirs:
+    for run_dir, zip_path in _run_zips(root_path):
         run_id = run_dir.name
         row: dict[str, MeasurementLeaf] = {'id': run_id}
         _put(
@@ -202,7 +210,7 @@ def load_sb3_runs(
             corpus if corpus is not None else root_path.name,
             run_id=run_id,
         )
-        config = checkpoint_config(_first_zip(run_dir), algo)
+        config = checkpoint_config(zip_path, algo)
         for key, value in _flatten_config(config).items():
             _put(row, key, value, run_id=run_id)
         npz_path = run_dir / 'evaluations.npz'
@@ -220,18 +228,9 @@ def sb3_config_columns(
     union of dotted-path column names the runs' checkpoint configs
     flatten to. Counterpart of `corroborate.data.config_columns`
     for records whose config artifact is the checkpoint zip."""
-    root_path = Path(root)
-    run_dirs = sorted(
-        d for d in root_path.iterdir() if d.is_dir()
-    ) if root_path.is_dir() else []
-    if not run_dirs:
-        raise ValueError(
-            f'corroborate_rl.sb3: {root_path} contains no run '
-            f'directories',
-        )
     names: set[str] = set()
-    for run_dir in run_dirs:
-        config = checkpoint_config(_first_zip(run_dir), algo)
+    for _run_dir, zip_path in _run_zips(Path(root)):
+        config = checkpoint_config(zip_path, algo)
         names.update(_flatten_config(config))
     return frozenset(names)
 

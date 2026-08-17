@@ -105,11 +105,15 @@ uv run corroborate hypothesis experiments.findings.<name> --render evidence.svg
 
 Training runs produced by other codebases evaluate without
 modifying the training code, and without any corroborate-specific
-files on the producer's side. `corroborate.data.load_runs` reads
-a directory of ordinary run records (run ids, resolved configs,
-evaluations) into a DataFrame — one row per run, configuration
-flattened to dotted-path columns, per-checkpoint outcome
-aggregates derived. It is a reader, not a gatekeeper.
+files on the producer's side. For stable-baselines3,
+`corroborate_rl.sb3.load_sb3_runs` reads the artifacts SB3
+already writes — `model.save()` checkpoint zips plus
+`EvalCallback` `evaluations.npz` — into a DataFrame, one row per
+run, configuration flattened to dotted-path columns,
+per-checkpoint outcome aggregates derived. For runs logged in
+your own format, `corroborate.data.load_runs` reads a directory
+of plain JSON records into the same shape. Both are readers, not
+gatekeepers.
 
 The claim is an ordinary, data-independent `@claim_bridge`
 module — the same shape as a native bridge, with no external
@@ -157,14 +161,13 @@ named columns evaluates directly, and `Panel.from_dataframe`
 offers the exploration surface.)
 
 [`examples/sb3_demo/`](examples/sb3_demo/) walks through this
-with stable-baselines3 DQN: training, loading, descriptive
-exploration in plain polars, and evaluation of an executable
-claim module through the same bridge path used by native studies.
-It runs on CPU in a few minutes, and files from a real run are
-committed so the analysis half can be run without training. For
-runs you already have — SB3 checkpoint zips plus `EvalCallback`
-`evaluations.npz`, no extra files — `corroborate_rl.sb3` reads
-those artifacts directly into the same shape.
+with stable-baselines3 DQN: a tutorial-shaped training script
+with zero recording code, loading of SB3's own artifacts,
+descriptive exploration in plain polars, and evaluation of an
+executable claim module through the same bridge path used by
+native studies. It runs on CPU in a few minutes, and artifacts
+from a real run are committed so the analysis half can be run
+without training.
 
 ## Repository layout
 
