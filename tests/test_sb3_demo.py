@@ -8,7 +8,7 @@ from corroborate.analyses.paired.paired_directional import (
 )
 from corroborate.bridge.bridge import evaluate
 from corroborate.bridge.verdict import RefutationClass, Verdict
-from corroborate.data import load_runs
+from corroborate.data import config_columns, load_runs
 
 from examples.sb3_demo.sb3_claim import higher_gamma_improves_return
 
@@ -19,7 +19,9 @@ _RUNS = Path(__file__).parents[1] / 'examples' / 'sb3_demo' / 'runs'
 def test_loaded_runs_evaluate_data_independent_claim_module() -> None:
     df = load_runs(_RUNS)
 
-    evaluation = evaluate(higher_gamma_improves_return, df)
+    evaluation = evaluate(
+        higher_gamma_improves_return, df, leaves=config_columns(_RUNS),
+    )
 
     assert evaluation.n_cells_in_scope == 6
     assert evaluation.extent_hash != 0

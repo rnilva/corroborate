@@ -29,6 +29,7 @@ from corroborate.bridge.admission import (
     GateLevel,
     GateResult,
     contrast_isolation,
+    contrast_present,
     distinct_arms,
     distinct_units,
     exogenous_scope,
@@ -375,20 +376,23 @@ def test_no_predicted_direction_silent_when_set() -> None:
 # ---------- AUTO_GATES wiring ----------
 
 
-def test_auto_gates_tuple_contains_all_eight() -> None:
+def test_auto_gates_tuple_contains_all_nine() -> None:
     """Sanity: the framework's auto-gate list is exactly the
-    eight shipped functions (resolved_source added so typo'd
-    source strings surface before the endogeneity test classifies
-    them as endogenous-by-elimination; distinct_units added so a
-    source that varies at a coarser grain than the cell reports
-    its effective n instead of letting the row count stand in for
-    it; contrast_isolation + pair_completeness added so a value
-    contrast's design quality is checked per claim, per extent,
-    on the verdict record)."""
+    nine shipped functions, in diagnostic-priority order —
+    `resolved_source` before the endogeneity test so typo'd
+    sources surface as typos; `contrast_present` and
+    `exogenous_source` before `distinct_units` so a value-contrast
+    record without its contrast, and a native leaf-sourced
+    interventional bridge, each hear the structural diagnosis
+    rather than the effective-n symptom; the contrast-quality
+    gates (`contrast_isolation`, `pair_completeness`) after the
+    structural gates, checking the derived conditions per claim,
+    per extent, on the verdict record."""
     assert AUTO_GATES == (
-        distinct_arms, resolved_source, distinct_units,
-        exogenous_source, exogenous_scope, contrast_isolation,
-        pair_completeness, no_predicted_direction,
+        distinct_arms, resolved_source, contrast_present,
+        exogenous_source, distinct_units, exogenous_scope,
+        contrast_isolation, pair_completeness,
+        no_predicted_direction,
     )
 
 
@@ -570,8 +574,9 @@ def test_per_bridge_gate_appended_and_blocks() -> None:
         cells: Sequence[Mapping[str, object]],
         *,
         claim: object = None,
+        leaves: frozenset[str] | None = None,
     ) -> GateResult | None:
-        del bridge, cells, claim
+        del bridge, cells, claim, leaves
         return GateResult(
             gate_name='custom',
             level=GateLevel.BLOCK,

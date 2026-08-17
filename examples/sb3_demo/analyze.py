@@ -24,7 +24,7 @@ from corroborate.analyses.paired.paired_directional import (
     PairedDirectionalResult,
 )
 from corroborate.bridge.bridge import evaluate
-from corroborate.data import load_runs
+from corroborate.data import config_columns, load_runs
 from sb3_claim import higher_gamma_improves_return
 
 RUNS = Path(__file__).parent / 'runs'
@@ -57,11 +57,16 @@ print('\nΔ(return_mean) per seed (gamma 0.99 − 0.80):')
 print(paired)
 
 # ── 3. evaluate the authored claim test ─────────────────────────
-# The claim module owns the contrast values, scope, predicted
-# direction, statistical configuration, and verdict rule; the
-# admission gates check contrast isolation and pair completeness
-# over exactly the cells the claim admits.
-evaluation = evaluate(higher_gamma_improves_return, df)
+# The claim module owns the estimand and verdict rule; the data
+# side registers which columns were configuration (derived from
+# the run directory's config files — the producer's own record of
+# what was assigned). Conditions derive from the gamma column's
+# scoped values, and the admission gates check contrast presence,
+# isolation, and pair completeness over exactly the cells the
+# claim admits.
+evaluation = evaluate(
+    higher_gamma_improves_return, df, leaves=config_columns(RUNS),
+)
 for warning in evaluation.warnings:
     print(f'\nwarning [{warning.gate_name}]: {warning.message}')
 result_obj = evaluation.analysis_results.get('paired_directional')

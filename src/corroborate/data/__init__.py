@@ -24,7 +24,7 @@ gates.
 See `corroborate/data/panel.py` for the load-bearing types."""
 from __future__ import annotations
 
-from corroborate.data.loader import load_runs
+from corroborate.data.loader import config_columns, load_runs
 from corroborate.data.panel import (
     CorpusSource,
     DerivedSpec,
@@ -39,5 +39,6 @@ __all__ = [
     'MeasurableAvailability',
     'Panel',
     'PanelDiagnostics',
+    'config_columns',
     'load_runs',
 ]

@@ -112,32 +112,42 @@ flattened to dotted-path columns, per-checkpoint outcome
 aggregates derived. It is a reader, not a gatekeeper.
 
 The claim is an ordinary, data-independent `@claim_bridge`
-module. A bridge whose contrast was executed outside the
-framework declares its two parameter values directly:
+module — the same shape as a native bridge, with no external
+special case. `tier=INTERVENTIONAL` on the assigned parameter
+says the contrast was executed (outside the framework); the
+scope pins which values it compares:
 
 ```python
 @claim_bridge(
     source='gamma',
-    contrast=(0.80, 0.99),          # baseline, treatment values
     target='return_mean',
+    tier=Tier.INTERVENTIONAL,
     pair_by=('seed',),
+    scope=pl.col('gamma').is_in([0.80, 0.99]),
     predicted_direction='a_gt_b',
     ...
 )
 def higher_gamma_improves_return(...) -> ...: ...
 
 df = load_runs('path/to/runs')
-result = evaluate(higher_gamma_improves_return, df)
+result = evaluate(
+    higher_gamma_improves_return, df,
+    leaves=config_columns('path/to/runs'),
+)
 ```
 
-Conditions are derived from the source column's values — no
-producer arm labels exist anywhere. Study-design quality is
-checked where the hypothesis layer owns it, by admission gates
-over exactly the cells the claim admits: `contrast_isolation`
-blocks (verdict `INADMISSIBLE`) if any other column moved
-together with the contrasted parameter, and `pair_completeness`
-warns on the verdict record when a pairing unit is missing one
-condition.
+`leaves` registers which columns were *configuration* — derived
+from the record's own config files, the external counterpart of
+walking a native claim composition; nobody types a list of
+names. Conditions then derive from the source column's scoped
+values — no producer arm labels exist anywhere — and
+study-design quality is checked where the hypothesis layer owns
+it, by admission gates over exactly the cells the claim admits:
+`contrast_present` blocks when the record doesn't vary the
+parameter in scope, `contrast_isolation` blocks (verdict
+`INADMISSIBLE`) when another configuration column moved together
+with it, and `pair_completeness` warns on the verdict record
+when a pairing unit is missing one condition.
 
 The record is live: run more seeds, re-load, and the same bridge
 recomputes — batches concatenate with plain `pl.concat`, and a
@@ -151,7 +161,10 @@ with stable-baselines3 DQN: training, loading, descriptive
 exploration in plain polars, and evaluation of an executable
 claim module through the same bridge path used by native studies.
 It runs on CPU in a few minutes, and files from a real run are
-committed so the analysis half can be run without training.
+committed so the analysis half can be run without training. For
+runs you already have — SB3 checkpoint zips plus `EvalCallback`
+`evaluations.npz`, no extra files — `corroborate_rl.sb3` reads
+those artifacts directly into the same shape.
 
 ## Repository layout
 

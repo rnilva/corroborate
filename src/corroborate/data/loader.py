@@ -284,4 +284,45 @@ def load_runs(
     return pl.from_dicts(rows, infer_schema_length=None)
 
 
-__all__ = ['load_runs']
+def config_columns(root: Path | str) -> frozenset[str]:
+    """The configuration leaves of a run directory: the union of
+    dotted-path column names its resolved-config files flatten to.
+
+    This is the external record's counterpart of the native
+    substrate's `walk_paths(claim, regime='leaf')` — in both cases
+    the leaf registry is read off an artifact that already exists
+    (the claim composition there, the resolved-config files here),
+    never authored separately. Pass the result to
+    `evaluate(..., leaves=...)` so the admission gates can tell an
+    assigned parameter from a measured column. The registry means
+    "what the producer's record says was configured" — a config
+    file that logs junk registers junk; a zero-authority reader
+    cannot do better than the record."""
+    root_path = Path(root)
+    runs_path = root_path / 'runs.jsonl'
+    if not runs_path.is_file():
+        raise ValueError(f'config_columns: {runs_path} does not exist')
+    names: set[str] = set()
+    for raw in read_jsonl(runs_path):
+        config_path = raw.get('config_path')
+        if config_path is None:
+            continue
+        if not isinstance(config_path, str):
+            run_id = raw.get('run_id')
+            raise ValueError(
+                f'config_columns: run {run_id!r} config_path must be '
+                f'a string, got {config_path!r}',
+            )
+        config = read_json(safe_run_path(root_path, config_path))
+        if not isinstance(config, Mapping):
+            raise ValueError(
+                f'config_columns: {config_path} must contain a JSON '
+                'object',
+            )
+        # Runtime invariant: json.loads mapping keys are str.
+        typed_config = {str(k): v for k, v in config.items()}
+        names.update(_flatten_config(typed_config))
+    return frozenset(names)
+
+
+__all__ = ['config_columns', 'load_runs']

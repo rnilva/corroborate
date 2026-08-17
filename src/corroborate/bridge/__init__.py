@@ -15,7 +15,7 @@ Sub-modules:
 - `bridge.admission` — admission-gate types (`AdmissionGate`,
   `GateLevel`, `GateResult`) and the framework's auto-gates
   (`distinct_arms`, `exogenous_source`, `exogenous_scope`,
-  `contrast_isolation`, `pair_completeness`,
+  `contrast_present`, `contrast_isolation`, `pair_completeness`,
   `no_predicted_direction`).
 - `bridge.analysis` — `@analysis` decorator, `Analysis`
   wrapper, analysis registry, `resolve_for_holds_when`
@@ -30,6 +30,7 @@ from corroborate.bridge.admission import (
     GateLevel,
     GateResult,
     contrast_isolation,
+    contrast_present,
     distinct_arms,
     exogenous_scope,
     exogenous_source,
@@ -75,6 +76,7 @@ __all__ = [
     'analysis',
     'claim_bridge',
     'contrast_isolation',
+    'contrast_present',
     'distinct_arms',
     'evaluate',
     'exogenous_scope',

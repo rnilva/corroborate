@@ -140,12 +140,17 @@ class GateResult:
 
 # Protocol for admission gates. `claim` is the substrate's
 # outermost @claim threaded through evaluate() — endogeneity
-# gates close over its leaf set; gates that don't need it
-# ignore the kwarg. We use Protocol (not Callable) so the
-# kw-only `claim` parameter is part of the typed contract.
+# gates close over its leaf set. `leaves` is the external
+# counterpart: the configuration leaves of a record produced
+# outside the framework (derived from its resolved-config files,
+# e.g. `corroborate.data.config_columns`), for cells that have no
+# claim composition to walk. Gates that need neither ignore the
+# kwargs. We use Protocol (not Callable) so the kw-only
+# parameters are part of the typed contract.
 class AdmissionGate(Protocol):
     """Typed callable: a gate runs against (bridge, cells) plus
-    the substrate's outermost claim, returns a `GateResult` (with
+    the substrate's outermost claim and/or the external record's
+    registered configuration leaves, returns a `GateResult` (with
     `passed=True/False` for a fired/silent verdict) or `None`
     when the gate doesn't apply to this bridge."""
     def __call__(
@@ -154,7 +159,36 @@ class AdmissionGate(Protocol):
         cells: Sequence[Mapping[str, object]],
         *,
         claim: Claim[..., object] | None = None,
+        leaves: frozenset[str] | None = None,
     ) -> GateResult | None: ...
+
+
+def value_contrast_active(
+    bridge: 'Bridge',
+    *,
+    claim: Claim[..., object] | None,
+    leaves: frozenset[str] | None,
+) -> bool:
+    """Whether `evaluate()` derives conditions for this bridge from
+    its source column's values — the value-contrast path for
+    contrasts executed outside the framework.
+
+    Active exactly when the bridge declares `Tier.INTERVENTIONAL`
+    on a plain string source that the DATA side registers as a
+    configuration leaf (`leaves`), and no native claim composition
+    is present. A native `claim=` wins over `leaves=`: with the
+    composition available, the endogenous-source doctrine applies
+    and `exogenous_source` adjudicates instead — external records
+    get value-contrast semantics precisely because they have no
+    composition to hold to that doctrine."""
+    from corroborate.graph.causal import Tier
+    return (
+        bridge.tier is Tier.INTERVENTIONAL
+        and isinstance(bridge.source, str)
+        and claim is None
+        and leaves is not None
+        and bridge.source in leaves
+    )
 
 
 # ============ Auto-gates ============
@@ -165,13 +199,14 @@ def distinct_arms(
     cells: Sequence[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
+    leaves: frozenset[str] | None = None,
 ) -> GateResult | None:
     """BLOCK: a `DoEffect`-sourced bridge whose arms produce
     duplicate canonical_str fingerprints is structurally
     self-vs-self (binary) or has collapsed levels (N-arm).
     Replaces today's `paired_g` runtime ValueError with a clean
     `Verdict.INADMISSIBLE`."""
-    del cells, claim  # not consulted
+    del cells, claim, leaves  # not consulted
     if not isinstance(bridge.source, DoEffect):
         return None
     arm_keys = bridge.source.arm_keys()
@@ -195,13 +230,14 @@ def resolved_source(
     cells: Sequence[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
+    leaves: frozenset[str] | None = None,
 ) -> GateResult | None:
     """BLOCK: Bridge.source string references a column not
     present in the filtered cells. Catches typo'd source names
     (e.g. `'mc_returns'` for `'mc_return'`) at gate time with a
     clear message; orthogonal to `EXOGENOUS_SOURCE`. DoEffect
     sources don't apply (no string column to validate)."""
-    del claim
+    del claim, leaves
     source = bridge.source
     if isinstance(source, DoEffect):
         return None
@@ -230,6 +266,7 @@ def distinct_units(
     cells: Sequence[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
+    leaves: frozenset[str] | None = None,
 ) -> GateResult | None:
     """WARN (BLOCK below 4): the bridge's source varies at a COARSER
     grain than the cell, so the row count overstates n.
@@ -251,13 +288,22 @@ def distinct_units(
     independent (e.g. the source is measured per cell, not inherited).
 
     DoEffect sources don't apply: an arm indicator is meant to repeat
-    across cells, and `pair_by` already carries the design there.
-    Bool sources don't apply either: a per-cell binary indicator has
+    across cells, and `pair_by` already carries the design there. A
+    value contrast doesn't apply for the same reason — its source is
+    the condition indicator of an externally-executed contrast, and
+    `pair_by` plus the contrast-quality gates carry the design. Bool
+    sources don't apply either: a per-cell binary indicator has
     2 distinct values by construction — value cardinality says
-    nothing about the grain it was measured at."""
-    del claim
+    nothing about the grain it was measured at.
+
+    An ASSOCIATIONAL bridge sourcing on a registered configuration
+    leaf still gets this guard: used as a regressor rather than a
+    condition label, a k-valued leaf really does bound effective n
+    at k."""
     source = bridge.source
     if isinstance(source, DoEffect) or not cells:
+        return None
+    if value_contrast_active(bridge, claim=claim, leaves=leaves):
         return None
     name = source if isinstance(source, str) else source.name
     if name not in cells[0]:
@@ -297,6 +343,7 @@ def exogenous_source(
     cells: Sequence[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
+    leaves: frozenset[str] | None = None,
 ) -> GateResult | None:
     """BLOCK: `Tier.INTERVENTIONAL` (Pearl rung-2) bridges
     require an *endogenous* source — a registered measurable
@@ -308,9 +355,15 @@ def exogenous_source(
     bridge through it.
 
     Endogeneity is keyed on `walk_paths(claim, regime='leaf')`;
-    when `claim` is None (framework-only tests, synthetic
-    contexts), the gate short-circuits — substrates that want
-    the rule enforced thread `claim=` through `evaluate()`.
+    when `claim` is None the gate falls back to the external
+    record's registered configuration leaves (`leaves`): an
+    interventional bridge there must source on a registered leaf
+    — the assigned parameter of the externally-executed contrast
+    — and sourcing on anything else (a measured or derived
+    column) is blocked, because a measurement cannot be the
+    assigned parameter of an intervention. With neither registry
+    the gate short-circuits — substrates that want the rule
+    enforced thread `claim=` (or `leaves=`) through `evaluate()`.
 
     Per ADMISSION_GATES_DESIGN.md § Principle (exogenous vs
     endogenous)."""
@@ -346,27 +399,48 @@ def exogenous_source(
                 ),
             )
         return None
-    # str / Measurable source: needs claim to test endogeneity.
-    if claim is None:
-        return None  # gate doesn't apply without substrate context
     name = source if isinstance(source, str) else source.name
-    if is_endogenous(name, claim):
-        return None
-    return GateResult(
-        gate_name='exogenous_source',
-        level=GateLevel.BLOCK,
-        passed=False,
-        message=(
-            f'Tier.INTERVENTIONAL bridge {bridge.name!r} sourced '
-            f'on {name!r}, which is a leaf of the outermost '
-            f'claim (author-controlled at design time, not '
-            f'produced by the cell). Causal claims require an '
-            f'endogenous source — find the delegate (e.g., '
-            f'`effective_horizon` for γ, `q_divergence_score` '
-            f'for sync_period). See ADMISSION_GATES_DESIGN.md § '
-            f'Principle.'
-        ),
-    )
+    if claim is not None:
+        # Native composition available: the endogenous-source
+        # doctrine applies.
+        if is_endogenous(name, claim):
+            return None
+        return GateResult(
+            gate_name='exogenous_source',
+            level=GateLevel.BLOCK,
+            passed=False,
+            message=(
+                f'Tier.INTERVENTIONAL bridge {bridge.name!r} sourced '
+                f'on {name!r}, which is a leaf of the outermost '
+                f'claim (author-controlled at design time, not '
+                f'produced by the cell). Causal claims require an '
+                f'endogenous source — find the delegate (e.g., '
+                f'`effective_horizon` for γ, `q_divergence_score` '
+                f'for sync_period). See ADMISSION_GATES_DESIGN.md § '
+                f'Principle.'
+            ),
+        )
+    if leaves is not None:
+        # External record: the assigned parameter of an
+        # externally-executed contrast must be a registered
+        # configuration leaf.
+        if name in leaves:
+            return None
+        return GateResult(
+            gate_name='exogenous_source',
+            level=GateLevel.BLOCK,
+            passed=False,
+            message=(
+                f'Tier.INTERVENTIONAL bridge {bridge.name!r} sourced '
+                f'on {name!r}, which is not a registered '
+                f'configuration leaf of this record — a measured or '
+                f'derived column cannot be the assigned parameter of '
+                f'an intervention. Source on a configuration column, '
+                f'or register {name!r} in `leaves=` if the producer '
+                f'really configured it.'
+            ),
+        )
+    return None  # gate doesn't apply without either registry
 
 
 def exogenous_scope(
@@ -374,6 +448,7 @@ def exogenous_scope(
     cells: Sequence[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
+    leaves: frozenset[str] | None = None,
 ) -> GateResult | None:
     """WARN: `Bridge.scope` references only exogenous columns
     (leaves of the substrate's outermost claim). The principled
@@ -382,8 +457,13 @@ def exogenous_scope(
     ships an endogenous predicate.
 
     Endogeneity is keyed on `walk_paths(claim, regime='leaf')`;
-    when `claim` is None, the gate short-circuits."""
-    del cells
+    when `claim` is None, the gate short-circuits. Deliberately
+    NOT keyed on external `leaves`: the endogenous-scope doctrine
+    is a substrate-authoring discipline — it presumes endogenous
+    measurables exist to scope on, which an external record may
+    simply not carry (its natural scope axes ARE configuration
+    columns like `env_id`)."""
+    del cells, leaves
     if bridge.scope is None:
         return None
     if claim is None:
@@ -422,13 +502,14 @@ def no_predicted_direction(
     cells: Sequence[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
+    leaves: frozenset[str] | None = None,
 ) -> GateResult | None:
     """INFO: bridge didn't declare `predicted_direction`. The
     verdict can't distinguish "wrong sign" from "small effect"
     via `verdict_from_paired_stats`; sign-flip refutations are
     silently absorbed as NO_EFFECT. Author-friendly diagnostic;
     not a bug."""
-    del cells, claim
+    del cells, claim, leaves
     if bridge.predicted_direction is not None:
         return None
     return GateResult(
@@ -455,36 +536,76 @@ def _normalised(value: object) -> object:
     return value
 
 
+def contrast_present(
+    bridge: 'Bridge',
+    cells: Sequence[Mapping[str, object]],
+    *,
+    claim: Claim[..., object] | None = None,
+    leaves: frozenset[str] | None = None,
+) -> GateResult | None:
+    """BLOCK: a value-contrast bridge whose scoped cells carry
+    fewer than two distinct values of the source — there is no
+    contrast in this record to test. The claim states which
+    parameter was contrasted; the record must actually vary it
+    within scope, or the comparison is undefined."""
+    if not value_contrast_active(bridge, claim=claim, leaves=leaves):
+        return None
+    values: set[object] = set()
+    for cell in cells:
+        value = _normalised(cell.get(bridge.source_name))
+        if value is not None:
+            values.add(value)
+    if len(values) >= 2:
+        return None
+    return GateResult(
+        gate_name='contrast_present',
+        level=GateLevel.BLOCK,
+        passed=False,
+        message=(
+            f'source {bridge.source_name!r} takes {len(values)} '
+            f'value(s) across the scoped cells — no contrast is '
+            f'present in this record. An interventional claim on a '
+            f'configuration leaf needs at least two of its values '
+            f'in scope (widen the scope, or grow the record).'
+        ),
+    )
+
+
 def contrast_isolation(
     bridge: 'Bridge',
     cells: Sequence[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
+    leaves: frozenset[str] | None = None,
 ) -> GateResult | None:
-    """BLOCK: a value-contrast whose scoped cells differ in some
-    OTHER column that is constant within each condition — the
-    signature of a confound riding the contrast (a knob that
-    changed together with the claimed parameter). Checked over
-    exactly the cells this claim admits, at every evaluation, so
-    a confound entering the growing record flips the verdict to
-    INADMISSIBLE instead of passing silently. Quality control
-    lives here — per claim, per extent, on the verdict record —
-    rather than at a data-loading door, because "the contrast is
-    isolated" is a property of the cells a claim admits, not of a
-    file format.
+    """A value-contrast whose scoped cells differ in some OTHER
+    column that is constant within each condition — the signature
+    of something that changed together with the claimed
+    parameter. Checked over exactly the cells this claim admits,
+    at every evaluation, so a confound entering the growing
+    record flips the verdict instead of passing silently. Quality
+    control lives here — per claim, per extent, on the verdict
+    record — rather than at a data-loading door, because "the
+    contrast is isolated" is a property of the cells a claim
+    admits, not of a file format.
 
-    Downgraded to WARN when either condition has fewer than two
-    cells — at n=1 per condition nothing distinguishes the
+    Severity is decided by the leaf registry: a rider that IS a
+    registered configuration leaf is a co-varied knob — a certain
+    confound — and BLOCKs; a rider outside the registry (a
+    producer label column, an unregistered field) WARNs, because
+    only the author can say whether it is a knob or a name.
+    Downgraded to WARN entirely when any condition has fewer than
+    two cells — at n=1 per condition nothing distinguishes the
     contrast from any co-varying column."""
     del claim
-    if bridge.contrast is None:
-        return None
     by_arm: dict[str, list[Mapping[str, object]]] = {}
     for cell in cells:
         label = cell.get(CONTRAST_ARM_FIELD)
         if isinstance(label, str):
             by_arm.setdefault(label, []).append(cell)
-    if len(by_arm) != 2 or any(len(rows) < 2 for rows in by_arm.values()):
+    if not by_arm:
+        return None  # no derived conditions: gate doesn't apply
+    if len(by_arm) < 2 or any(len(rows) < 2 for rows in by_arm.values()):
         return GateResult(
             gate_name='contrast_isolation',
             level=GateLevel.WARN,
@@ -498,32 +619,63 @@ def contrast_isolation(
     ignore = {
         CONTRAST_ARM_FIELD, bridge.source_name, 'id', *bridge.pair_by,
     }
-    rows_a, rows_b = by_arm.values()
+    arms = list(by_arm.values())
     columns: set[str] = set()
-    for cell in (*rows_a, *rows_b):
-        columns.update(cell.keys())
+    for rows in arms:
+        for cell in rows:
+            columns.update(cell.keys())
     riders: list[str] = []
     for column in sorted(columns.difference(ignore)):
         try:
-            values_a = {_normalised(row.get(column)) for row in rows_a}
-            values_b = {_normalised(row.get(column)) for row in rows_b}
+            per_arm = [
+                {_normalised(row.get(column)) for row in rows}
+                for rows in arms
+            ]
         except TypeError:
             # Unhashable cell values (list-typed trajectory /
             # trace columns) aren't configuration; skip.
             continue
-        if len(values_a) == 1 and len(values_b) == 1 and values_a != values_b:
+        constant_within = all(len(values) == 1 for values in per_arm)
+        if constant_within and len(set().union(*per_arm)) > 1:
             riders.append(column)
     if riders:
-        shown = ', '.join(riders[:5])
-        more = f' (+{len(riders) - 5} more)' if len(riders) > 5 else ''
+        registered = leaves if leaves is not None else frozenset()
+        knob_riders = [r for r in riders if r in registered]
+        # Registry unknown → conservative: every rider blocks.
+        blocking = knob_riders if leaves is not None else riders
+        warning_only = [r for r in riders if r not in set(blocking)]
+        if blocking:
+            shown = ', '.join(blocking[:5])
+            more = (
+                f' (+{len(blocking) - 5} more)'
+                if len(blocking) > 5 else ''
+            )
+            return GateResult(
+                gate_name='contrast_isolation',
+                level=GateLevel.BLOCK,
+                passed=False,
+                message=(
+                    f'configuration leaf/leaves constant within each '
+                    f'condition but different across them — a '
+                    f'confound rides the {bridge.source_name!r} '
+                    f'contrast: {shown}{more}'
+                ),
+            )
+        shown = ', '.join(warning_only[:5])
+        more = (
+            f' (+{len(warning_only) - 5} more)'
+            if len(warning_only) > 5 else ''
+        )
         return GateResult(
             gate_name='contrast_isolation',
-            level=GateLevel.BLOCK,
+            level=GateLevel.WARN,
             passed=False,
             message=(
-                f'column(s) constant within each condition but '
-                f'different across them — a confound rides the '
-                f'{bridge.source_name!r} contrast: {shown}{more}'
+                f'unregistered column(s) move with the '
+                f'{bridge.source_name!r} contrast: {shown}{more}. '
+                f'A label is harmless; an unregistered knob is a '
+                f'confound — drop the column or register it as a '
+                f'configuration leaf.'
             ),
         )
     return GateResult(
@@ -539,22 +691,27 @@ def pair_completeness(
     cells: Sequence[Mapping[str, object]],
     *,
     claim: Claim[..., object] | None = None,
+    leaves: frozenset[str] | None = None,
 ) -> GateResult | None:
-    """WARN: pairing units of a value contrast missing one
-    condition. Paired analyses drop incomplete pairs silently;
+    """WARN: pairing units of a value contrast missing one or more
+    conditions. Paired analyses drop incomplete units silently;
     the gate makes the drop visible on the verdict record."""
-    del claim
-    if bridge.contrast is None or not bridge.pair_by:
+    del claim, leaves
+    if not bridge.pair_by:
         return None
+    all_labels: set[str] = set()
     arms_by_unit: dict[tuple[object, ...], set[str]] = {}
     for cell in cells:
         label = cell.get(CONTRAST_ARM_FIELD)
         if not isinstance(label, str):
             continue
+        all_labels.add(label)
         unit = tuple(cell.get(key) for key in bridge.pair_by)
         arms_by_unit.setdefault(unit, set()).add(label)
+    if not arms_by_unit:
+        return None  # no derived conditions: gate doesn't apply
     incomplete = sum(
-        1 for arms in arms_by_unit.values() if len(arms) < 2
+        1 for arms in arms_by_unit.values() if arms != all_labels
     )
     if incomplete:
         return GateResult(
@@ -563,8 +720,8 @@ def pair_completeness(
             passed=False,
             message=(
                 f'{incomplete} of {len(arms_by_unit)} pairing '
-                f'unit(s) missing one condition; paired analyses '
-                f'drop them'
+                f'unit(s) missing one or more conditions; paired '
+                f'analyses drop them'
             ),
         )
     return None
@@ -578,11 +735,19 @@ def pair_completeness(
 # endogenous-by-elimination and silently pass. `distinct_units`
 # defers to it the same way (returns None on an absent source
 # column) so the typo diagnostic wins over the grain diagnostic.
+# `contrast_present` sits before `distinct_units` so a
+# value-contrast record with no contrast reports "no contrast in
+# scope" rather than an effective-n diagnostic; `exogenous_source`
+# sits before `distinct_units` for the same reason — a native
+# leaf-sourced interventional bridge should hear the structural
+# diagnosis ("find the endogenous delegate"), not the effective-n
+# symptom.
 AUTO_GATES: tuple[AdmissionGate, ...] = (
     distinct_arms,
     resolved_source,
-    distinct_units,
+    contrast_present,
     exogenous_source,
+    distinct_units,
     exogenous_scope,
     contrast_isolation,
     pair_completeness,
@@ -597,6 +762,7 @@ __all__ = [
     'GateLevel',
     'GateResult',
     'contrast_isolation',
+    'contrast_present',
     'distinct_arms',
     'distinct_units',
     'exogenous_scope',
@@ -605,4 +771,5 @@ __all__ = [
     'no_predicted_direction',
     'pair_completeness',
     'resolved_source',
+    'value_contrast_active',
 ]

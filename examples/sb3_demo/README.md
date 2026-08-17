@@ -97,12 +97,14 @@ The claim module contains the scientific test, not the data:
 ```python
 @claim_bridge(
     source='gamma',
-    contrast=(0.80, 0.99),
     target='return_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     pair_by=('seed',),
-    scope=pl.col('env_id') == 'CartPole-v1',
+    scope=(
+        (pl.col('env_id') == 'CartPole-v1')
+        & pl.col('gamma').is_in([0.80, 0.99])
+    ),
     predicted_direction='a_gt_b',
 )
 def higher_gamma_improves_return(
@@ -116,22 +118,32 @@ def higher_gamma_improves_return(
     return paired_directional_verdict(paired_directional)
 ```
 
-`contrast=(0.80, 0.99)` is the claim's own statement of which two
-parameter values it compares — conditions are derived from the
-`gamma` column, so there are no producer arm labels anywhere.
-Evaluation is one call:
+The bridge is exactly what a native one looks like — no external
+special case. `tier=INTERVENTIONAL` on the assigned parameter
+says the contrast was executed; the scope pins which two values
+it compares. Evaluation adds one fact from the data side: which
+columns were *configuration*, derived from the run directory's
+own config files — never hand-listed:
 
 ```python
-evaluation = evaluate(higher_gamma_improves_return, df)
+evaluation = evaluate(
+    higher_gamma_improves_return, df, leaves=config_columns(RUNS),
+)
 ```
 
-Before the statistics run, admission gates check the contrast
-over exactly the cells this claim admits: `contrast_isolation`
-blocks if any other column moved together with gamma (a confound
-riding the contrast), and `pair_completeness` warns when a seed
-is missing one condition. A blocked claim gets the verdict
-`INADMISSIBLE` — quality problems land on the verdict record,
-not in a separate report.
+Conditions then derive from the `gamma` column's scoped values
+(labelled `gamma=0.8` / `gamma=0.99`, ascending — the claim's
+sign lives in `predicted_direction`), and the admission gates
+check the contrast over exactly the cells this claim admits:
+`contrast_present` blocks if the record doesn't actually vary
+gamma in scope, `contrast_isolation` blocks if another
+*configuration* column moved together with gamma (a confound
+riding the contrast — an unregistered column that co-varies only
+warns, since a label is harmless and only you can say which it
+is), and `pair_completeness` warns when a seed is missing one
+condition. A blocked claim gets the verdict `INADMISSIBLE` —
+quality problems land on the verdict record, not in a separate
+report.
 
 ```text
 claim: gamma 0.99 > gamma 0.80 on return_mean
@@ -166,3 +178,11 @@ every evaluation, over whatever the record has become.
 Zero corroborate-specific files. `train.py` records run ids,
 resolved configs, evaluations, and provenance — records a
 careful experiment keeps regardless of what analyses them later.
+
+Already have a folder of ordinary SB3 outputs — checkpoint zips
+plus `EvalCallback`'s `evaluations.npz` — with no such files?
+`corroborate_rl.sb3.load_sb3_runs` reads those artifacts
+directly (configuration is recovered from the checkpoint's own
+`data` record, intersected with the algorithm constructor's
+signature), so the answer to "can I use this if I just train
+things in SB3?" is: point it at the log folder you already have.

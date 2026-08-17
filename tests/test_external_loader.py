@@ -29,7 +29,7 @@ from corroborate.analyses.paired.arm_mean_diff import (
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge, evaluate
 from corroborate.bridge.verdict import Verdict
-from corroborate.data import load_runs
+from corroborate.data import config_columns, load_runs
 
 _BASELINE_ENT = 0.0
 _TREATMENT_ENT = 0.01
@@ -379,7 +379,6 @@ def test_producer_column_shadowing_derived_column_raises(
 
 @claim_bridge(
     source='algorithm.ent_coef',
-    contrast=(_BASELINE_ENT, _TREATMENT_ENT),
     target='return_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
@@ -392,6 +391,17 @@ def _entropy_bonus_improves_return(
     if arm_mean_diff.mean_diff > 0:
         return Verdict.HELD
     return Verdict.NO_EFFECT
+
+
+def test_config_columns_derives_the_leaf_registry(tmp_path: Path) -> None:
+    """The leaf registry is read off the artifact that already
+    exists — the resolved-config files — never authored: every
+    dotted path the configs flatten to, and nothing else."""
+    _make_runs(tmp_path)
+    assert config_columns(tmp_path) == frozenset({
+        'algorithm.name', 'algorithm.ent_coef', 'algorithm.gamma',
+        'environment.id', 'training.seed', 'training.timesteps',
+    })
 
 
 def test_batches_of_the_same_study_pool(tmp_path: Path) -> None:
@@ -411,7 +421,11 @@ def test_batches_of_the_same_study_pool(tmp_path: Path) -> None:
         how='diagonal',
     )
 
-    evaluation = evaluate(_entropy_bonus_improves_return, pooled)
+    evaluation = evaluate(
+        _entropy_bonus_improves_return,
+        pooled,
+        leaves=config_columns(tmp_path / 'batch_a'),
+    )
     assert evaluation.verdict is Verdict.HELD
     assert evaluation.blocked_by is None
     result = evaluation.analysis_results['arm_mean_diff']
