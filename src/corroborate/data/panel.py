@@ -31,7 +31,7 @@ from corroborate.corpus.catalogue import (
 _FRAMEWORK_IDENTITY_COLS: frozenset[str] = frozenset({
     'id', 'parent_id', 'cycle_id', 'treatment_arm_id',
     'timestamp', 'verdict', 'arm_key', 'arm_is_baseline',
-    'corpus', 'bundle_digest',
+    'corpus',
 })
 
 

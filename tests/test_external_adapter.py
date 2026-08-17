@@ -23,7 +23,6 @@ from corroborate.data import (
     BundleValidationError,
     CheckStatus,
     adapt_study,
-    seal_bundle,
 )
 
 _BASELINE_ARM = 'entropy_0'
@@ -213,7 +212,6 @@ def _make_bundle(
             'command': 'python train.py --study fixture',
         },
     )
-    seal_bundle(root)
 
 
 def _check_status(receipt: AdapterReceipt, code: str) -> CheckStatus:
@@ -231,7 +229,7 @@ def test_valid_bundle_derives_rows_and_receipt(tmp_path: Path) -> None:
 
     assert len(study.rows) == 4
     assert study.receipt.admissible
-    assert study.receipt.adapter_version == '1.1.0'
+    assert study.receipt.adapter_version == '2.0.0'
     assert study.receipt.n_pairs == 2
     assert study.receipt.study_id == _STUDY_ID
     assert {row['arm_key'] for row in study.rows} == {
@@ -267,7 +265,6 @@ def test_valid_bundle_derives_rows_and_receipt(tmp_path: Path) -> None:
         assert row['env_name'] == 'MountainCar-v0'
         assert row['program'] == 'external:sbx-ppo'
         assert row['corpus'] == _STUDY_ID
-        assert row['bundle_digest'] == study.receipt.bundle_digest
     assert _check_status(study.receipt, 'assignment') is CheckStatus.ATTESTED
     assert (
         _check_status(study.receipt, 'run_measurements')
@@ -275,7 +272,7 @@ def test_valid_bundle_derives_rows_and_receipt(tmp_path: Path) -> None:
     )
 
 
-def test_recorded_contrast_is_receipt_bound(tmp_path: Path) -> None:
+def test_recorded_contrast_carries_verified_identity(tmp_path: Path) -> None:
     _make_bundle(tmp_path)
     study = adapt_study(tmp_path)
 
@@ -283,9 +280,37 @@ def test_recorded_contrast_is_receipt_bound(tmp_path: Path) -> None:
     assert study.contrast.arm_keys == ('baseline', 'entropy_bonus')
     assert study.contrast.baseline_value == 0.0
     assert study.contrast.treatment_value == 0.01
-    assert study.contrast.bundle_digest == study.receipt.bundle_digest
-    assert len(study.contrast.bundle_digest) == 64
     assert study.contrast.assignment_status is CheckStatus.ATTESTED
+
+
+def test_batches_of_the_same_study_pool(tmp_path: Path) -> None:
+    """Evidence is a live record: two batches of seeds adapted
+    separately carry the SAME recorded contrast (no per-batch
+    frozen identity), their panels concatenate, and analyses run
+    on the pooled run set — the run-more-seeds workflow the
+    hypothesis layer exists for."""
+    import polars as pl
+
+    _make_bundle(tmp_path / 'batch_a', training_seeds=(7, 9))
+    _make_bundle(tmp_path / 'batch_b', training_seeds=(11, 13))
+    study_a = adapt_study(tmp_path / 'batch_a')
+    study_b = adapt_study(tmp_path / 'batch_b')
+
+    assert study_a.contrast == study_b.contrast
+    pooled = pl.concat(
+        [study_a.to_panel().cells, study_b.to_panel().cells],
+        how='diagonal_relaxed',
+    )
+    result = arm_mean_diff(
+        pooled,
+        source='return_mean',
+        treatment_arm=study_a.contrast.treatment_key,
+        baseline_arm=study_a.contrast.baseline_key,
+        pair_by=('training_seed',),
+    )
+    assert result.n_treatment == 4
+    assert result.n_baseline == 4
+    assert result.mean_diff == _TREATMENT_BASE - _BASELINE_BASE
 
 
 def test_round_trip_panel_analysis_recovers_contrast(
@@ -372,7 +397,6 @@ def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
         if row['checkpoint'] == 20
     ]
     _write_jsonl(evaluations_path, kept)
-    seal_bundle(tmp_path)
 
     study = adapt_study(tmp_path)
     for row in study.rows:
@@ -383,37 +407,11 @@ def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
 # ============ fail-closed obligations ============
 
 
-def test_tampered_file_fails_before_ingestion(tmp_path: Path) -> None:
-    _make_bundle(tmp_path)
-    victim = next(tmp_path.glob('runs/*/resolved_config.json'))
-    with victim.open('ab') as stream:
-        stream.write(b'tamper')
-
-    with pytest.raises(BundleValidationError) as caught:
-        adapt_study(tmp_path)
-    assert 'mismatch' in str(caught.value)
-    assert caught.value.checks[-1].status is CheckStatus.FAILED
-    assert caught.value.checks[-1].code in {'manifest_sha256', 'manifest_size'}
-
-
-def test_missing_manifest_fails_closed_with_typed_receipt(
-    tmp_path: Path,
-) -> None:
-    _make_bundle(tmp_path)
-    (tmp_path / 'manifest.json').unlink()
-
-    with pytest.raises(BundleValidationError) as caught:
-        adapt_study(tmp_path)
-    assert caught.value.checks[-1].code == 'manifest_readable'
-    assert caught.value.checks[-1].status is CheckStatus.FAILED
-
-
 def test_malformed_contract_json_fails_closed(tmp_path: Path) -> None:
     """A broken bundle produces a typed receipt, never a raw
     JSONDecodeError from a permissive parse."""
     _make_bundle(tmp_path)
     (tmp_path / 'contract.json').write_text('{not json', encoding='utf-8')
-    seal_bundle(tmp_path)
 
     with pytest.raises(BundleValidationError) as caught:
         adapt_study(tmp_path)
@@ -424,13 +422,12 @@ def test_malformed_contract_json_fails_closed(tmp_path: Path) -> None:
 def test_bundle_local_prospective_protocol_is_rejected(
     tmp_path: Path,
 ) -> None:
-    """A co-sealed file cannot prove it pre-dated the observations."""
+    """A bundle-local file cannot prove it pre-dated the observations."""
     _make_bundle(tmp_path)
     contract_path = tmp_path / 'contract.json'
     contract = json.loads(contract_path.read_text(encoding='utf-8'))
     contract['prospective_protocol'] = {'path': 'protocol.json'}
     _write_json(contract_path, contract)
-    seal_bundle(tmp_path)
 
     with pytest.raises(BundleValidationError) as caught:
         adapt_study(tmp_path)
@@ -506,19 +503,23 @@ def test_contract_scope_mutation_fails(tmp_path: Path) -> None:
     contract = json.loads(contract_path.read_text(encoding='utf-8'))
     contract['scope']['env_name'] = 'Acrobot-v1'
     _write_json(contract_path, contract)
-    seal_bundle(tmp_path)
 
     with pytest.raises(BundleValidationError) as caught:
         adapt_study(tmp_path)
     assert 'differs from the contract scope' in str(caught.value)
 
 
-def test_manifest_rejects_path_traversal(tmp_path: Path) -> None:
+def test_run_config_path_rejects_traversal(tmp_path: Path) -> None:
+    """A hostile run record must not read outside the bundle."""
     _make_bundle(tmp_path)
-    manifest_path = tmp_path / 'manifest.json'
-    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-    manifest['files']['../escape'] = {'sha256': '0' * 64, 'size': 0}
-    _write_json(manifest_path, manifest)
+    runs_path = tmp_path / 'runs.jsonl'
+    rows = [
+        json.loads(line)
+        for line in runs_path.read_text(encoding='utf-8').splitlines()
+        if line.strip()
+    ]
+    rows[0]['config_path'] = '../escape'
+    _write_jsonl(runs_path, rows)
 
     with pytest.raises(BundleValidationError) as caught:
         adapt_study(tmp_path)
@@ -614,9 +615,3 @@ def test_omitted_arm_key_mapping_defaults_to_condition_names(
     assert study.contrast.arm_keys == (_BASELINE_ARM, _TREATMENT_ARM)
 
 
-def test_seal_bundle_is_deterministic(tmp_path: Path) -> None:
-    _make_bundle(tmp_path)
-    first = (tmp_path / 'manifest.json').read_text(encoding='utf-8')
-    seal_bundle(tmp_path)
-    second = (tmp_path / 'manifest.json').read_text(encoding='utf-8')
-    assert first == second

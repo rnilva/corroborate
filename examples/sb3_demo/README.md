@@ -12,6 +12,12 @@ an executable, data-independent `@claim_bridge`; `analyze.py`
 first explores the adapted run set, then evaluates that authored
 test against the verified record.
 
+(Runs logged your own way — monitor CSVs, a tensorboard scrape —
+need none of the bundle machinery: read them into a DataFrame,
+`Panel.from_dataframe(df)`, and skip straight to step 2. The
+bundle path below is for a producer handing over a structured
+record the adapter can verify.)
+
 ## 1. Train (`train.py`, pure SB3)
 
 ```bash
@@ -39,8 +45,6 @@ the committed bundle:
 
 ```text
 admissible: True
-  [VERIFIED    ] manifest_files: verified 10 sealed files
-  [VERIFIED    ] bundle_digest: bundle digest 46b2721f04d3…
   [VERIFIED    ] provenance_recorded: execution provenance recorded for producer 'stable-baselines3 DQN demo producer'
   [ATTESTED    ] provenance_attested: producer identity and invocation are attested by the record, not mechanically verified
   [VERIFIED    ] pairs_complete: verified 3 complete pairs
@@ -50,15 +54,16 @@ admissible: True
   [VERIFIED    ] rows_derived: derived 6 seeded-run rows
 ```
 
-Statements the files can prove are `VERIFIED` (the seal, pair
+Statements the files can prove are `VERIFIED` (pair
 completeness, that the configurations differ only in gamma).
 Statements only the producer can make remain `ATTESTED` or
 `UNVERIFIABLE`. A malformed bundle raises with the same
 vocabulary instead of parsing permissively.
 
 The receipt makes no claim about when the test module was
-authored. A bundle digest proves which files were sealed together;
-it cannot prove that they existed before the observations.
+authored, and the record carries no seal: evidence is a live,
+growing thing here, and its integrity over time belongs to the
+producer's version control.
 
 ## 3. Explore
 
@@ -67,7 +72,7 @@ DataFrame that registered analyses accept directly. Nothing in
 this step requires a declared design.
 
 ```text
-panel: 6 seeded runs × 18 columns
+panel: 6 seeded runs × 17 columns
 ┌─────────────┬──────────┬──────┬───────┬─────────────┐
 │ id          ┆ arm_key  ┆ seed ┆ gamma ┆ return_mean │
 ╞═════════════╪══════════╪══════╪═══════╪═════════════╡
@@ -151,8 +156,7 @@ The recorded contrast must match the bridge's `gamma` source.
 Its verified baseline/treatment keys are injected into the named
 `paired_directional` analysis, whose typed result is retained in
 `evaluation.analysis_results` before the bridge body maps it to a
-verdict. `evaluation.evidence_digest` records the exact sealed
-bundle used:
+verdict:
 
 ```text
 claim: gamma 0.99 > gamma 0.80 on return_mean
@@ -167,19 +171,26 @@ The verdict is therefore `POWER_INSUFFICIENT` rather than
 `NO_EFFECT`; with more seeds (`--seeds 8`) the same test module
 follows whatever the compatible data supports.
 
-## 5. Reuse the test
+## 5. Grow the record
 
-Run the same bridge against any newly adapted study with the same
-measurable schema and contrast path. Producer condition names may
-differ: `recorded_contrast` supplies them at runtime. The adapter
-continues to verify the record's seal, configuration isolation,
-pair completeness, and evaluation extent; the claim module
-continues to own the estimand and decision rule.
+The record is live. Run more seeds (`--seeds 8`), re-adapt, and
+the same claim module recomputes on the larger run set — batches
+of the same study carry the same recorded contrast, so their
+panels pool. A verdict that moves as evidence accretes is the
+system working; the hypothesis layer's drift discipline exists
+precisely to notice it.
+
+The same bridge also runs against any other adapted study with
+the same measurable schema and contrast path. Producer condition
+names may differ: `recorded_contrast` supplies them at runtime.
+The adapter continues to verify configuration isolation, pair
+completeness, and evaluation extent; the claim module continues
+to own the estimand and decision rule.
 
 ## Producer-side cost
 
 The corroborate-specific work in `train.py` is `contract.json`:
 study id, the contrast parameter (`gamma`) with its two condition
 names and values, the pairing field (`seed`), the scope
-(`env_id`), and the evaluation extent. Sealing, verification,
-Panel construction, and analysis happen on corroborate's side.
+(`env_id`), and the evaluation extent. Verification, Panel
+construction, and analysis happen on corroborate's side.

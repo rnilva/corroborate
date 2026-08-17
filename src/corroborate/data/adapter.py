@@ -10,7 +10,7 @@ can make stay `ATTESTED` / `UNVERIFIABLE` in the receipt; any
 broken obligation fails closed with a typed
 `BundleValidationError` carrying the partial receipt.
 
-One call takes a sealed bundle directory to a `Panel` plus an
+One call takes a bundle directory to a `Panel` plus an
 admissibility receipt::
 
     study = adapt_study('path/to/bundle')
@@ -18,11 +18,12 @@ admissibility receipt::
     study.receipt.admissible          # True — else adapt_study raised
     study.contrast.treatment_key      # condition labels for analyses
 
-Bundle format v1 — one directory, sealed by
-`corroborate.data.seal_bundle`:
+Bundle format v1 — one plain directory. Evidence is a live,
+growing record: run more seeds, re-adapt, and the same claim
+modules re-evaluate — a changed verdict is the system working,
+so there is no seal and no frozen identity (integrity over time
+belongs to the producer's version control):
 
-- ``manifest.json`` — content-addressed seal: per-file SHA-256 +
-  size and an aggregate bundle digest.
 - ``contract.json`` — the compact study description (the design
   note's StudySpec): ``contract_version`` (currently ``1``),
   ``study_id``, ``pair_by`` (the run-record
@@ -45,16 +46,15 @@ Bundle format v1 — one directory, sealed by
 - ``provenance.json`` — producer identity + invocation record.
 - the referenced resolved-config JSON files.
 
-Mechanically verified: seal integrity, pair completeness (one
-seeded run per condition per pairing unit), configuration
-isolation (every resolved config identical outside the declared
-intervention path and pairing path), exact evaluation extent, and
-scope consistency. Attested, never silently upgraded: assignment
+Mechanically verified: pair completeness (one seeded run per
+condition per pairing unit), configuration isolation (every
+resolved config identical outside the declared intervention path
+and pairing path), exact evaluation extent, and scope
+consistency. Attested, never silently upgraded: assignment
 procedure, producer invocation, producer-computed measurements.
 
 Rows are one scalar cell per seeded run: identity + condition
-columns (``arm_key``, ``arm_is_baseline``), the sealed
-``bundle_digest``, the scope fields, the
+columns (``arm_key``, ``arm_is_baseline``), the scope fields, the
 intervention value at its dotted ``parameter_path`` (the
 framework's leaf-column convention), and per declared outcome a
 final-checkpoint mean (``<outcome>_mean``), a
@@ -69,10 +69,10 @@ whole ``<outcome>_mean_at_`` namespace — are adapter-reserved: a
 producer-declared scope field or run measurement using one fails
 closed (``row_key_collision``) rather than being silently
 overwritten. The trajectory prefix is reserved independently of
-whether its suffix is a declared checkpoint. A bundle sealed
+whether its suffix is a declared checkpoint. A bundle written
 before the trajectory columns existed that used such a name for
 its own measurement is therefore rejected by this adapter
-version; rename the producer field and re-seal.
+version; rename the producer field.
 """
 from __future__ import annotations
 
@@ -87,15 +87,9 @@ from typing import NoReturn, override
 from corroborate._internals.narrow import is_mapping_str_object
 from corroborate.corpus.schema import MeasurementLeaf
 from corroborate.data._bundle_io import (
-    MANIFEST_NAME,
-    MANIFEST_VERSION,
-    ManifestEntry,
-    bundle_digest,
     read_json,
     read_jsonl,
     safe_bundle_path,
-    seal_bundle,
-    sha256_file,
 )
 from corroborate.data.kernel import cells_to_dataframe
 from corroborate.data.panel import CorpusSource, Panel
@@ -108,10 +102,9 @@ __all__ = [
     'CheckStatus',
     'RecordedContrast',
     'adapt_study',
-    'seal_bundle',
 ]
 
-ADAPTER_VERSION = '1.1.0'
+ADAPTER_VERSION = '2.0.0'
 
 _CONTRACT_VERSION = 1
 
@@ -153,15 +146,14 @@ class AdapterCheck:
 class AdapterReceipt:
     """Audit record emitted only from the files actually consumed
     — stored beside the validated rows on ``AdaptedStudy`` so a
-    reader can see what was proven versus merely attested. A bare
-    ``Panel`` does not carry this full receipt (adapted cells retain
-    the bundle digest); keep the adapted study when the complete
-    assurance record matters."""
+    reader can see what was proven versus merely attested. It
+    describes the record AS ADAPTED; re-adapting a grown record
+    produces a fresh receipt, matching the framework's live-verdict
+    discipline."""
 
     adapter_version: str
     study_id: str
     bundle_root: Path
-    bundle_digest: str
     n_runs: int
     n_pairs: int
     checks: tuple[AdapterCheck, ...]
@@ -180,7 +172,6 @@ class AdapterReceipt:
             'adapter_version': self.adapter_version,
             'study_id': self.study_id,
             'bundle_root': str(self.bundle_root),
-            'bundle_digest': self.bundle_digest,
             'n_runs': self.n_runs,
             'n_pairs': self.n_pairs,
             'admissible': self.admissible,
@@ -210,15 +201,16 @@ class RecordedContrast:
     executed elsewhere is *evidence*, not an executable operation
     Corroborate can re-apply — analyses take the condition labels
     and intervention values from the verified record instead of
-    guessing strings, and `bundle_digest` binds the contrast to
-    the exact sealed record it came from."""
+    guessing strings. It carries no evidence identity: the same
+    contrast binds any batch of the study's runs, so panels from
+    separate batches pool and the verdict recomputes as the record
+    grows."""
 
     parameter_path: str
     baseline_key: str
     treatment_key: str
     baseline_value: float
     treatment_value: float
-    bundle_digest: str
     assignment_status: CheckStatus
 
     @property
@@ -247,7 +239,7 @@ class AdaptedStudy:
         """Hand the validated rows to the framework's canonical
         exploration/analysis surface. Built on
         `Panel.from_dataframe` — the adapted study is an ordinary
-        panel whose provenance entry names the sealed bundle."""
+        panel whose provenance entry names the bundle."""
         return Panel.from_dataframe(
             cells_to_dataframe(self.rows),
             stratify_by=stratify_by,
@@ -394,7 +386,7 @@ class _Contract:
 def _parse_contract(raw: Mapping[str, object]) -> _Contract:
     if 'prospective_protocol' in raw:
         raise ValueError(
-            'prospective_protocol is not supported: a bundle-local seal '
+            'prospective_protocol is not supported: a bundle-local record '
             'cannot establish when a claim was authored',
         )
     study_id = _as_str(raw.get('study_id'), 'study_id')
@@ -517,18 +509,11 @@ class _Run:
     measurements: Mapping[str, float]
 
 
-_REQUIRED_FILES = (
-    'contract.json',
-    'runs.jsonl',
-    'evaluations.jsonl',
-    'provenance.json',
-)
-
 _SCHEMA_ERRORS = (TypeError, ValueError, KeyError)
 
 
 class _Adaptation:
-    """One fail-closed pass over a sealed bundle. Transient check
+    """One fail-closed pass over a bundle. Transient check
     state only — the public entry point is `adapt_study`."""
 
     def __init__(self, root: Path) -> None:
@@ -561,71 +546,6 @@ class _Adaptation:
             self._fail(f'{label}_readable', f'{label}: {exc}')
 
     # ---- phases ----
-
-    def _verify_seal(self) -> tuple[dict[str, ManifestEntry], str]:
-        manifest = self._load_object(MANIFEST_NAME, 'manifest')
-        self._require(
-            manifest.get('manifest_version') == MANIFEST_VERSION,
-            'manifest_version',
-            'unsupported manifest version',
-        )
-        try:
-            entries = {
-                relative: ManifestEntry(
-                    sha256=_as_str(
-                        _as_mapping(
-                            entry, f'manifest.files[{relative!r}]',
-                        ).get('sha256'),
-                        f'{relative}.sha256',
-                    ),
-                    size=_as_int(
-                        _as_mapping(
-                            entry, f'manifest.files[{relative!r}]',
-                        ).get('size'),
-                        f'{relative}.size',
-                    ),
-                )
-                for relative, entry in _as_mapping(
-                    manifest.get('files'), 'manifest.files',
-                ).items()
-            }
-        except _SCHEMA_ERRORS as exc:
-            self._fail('manifest_schema', str(exc))
-        for relative, entry in entries.items():
-            try:
-                path = safe_bundle_path(self._root, relative)
-            except ValueError as exc:
-                self._fail('manifest_path_safe', str(exc))
-            self._require(
-                path.is_file(),
-                'manifest_file_exists',
-                f'missing file: {relative}',
-            )
-            self._require(
-                path.stat().st_size == entry.size,
-                'manifest_size',
-                f'size mismatch: {relative}',
-            )
-            self._require(
-                sha256_file(path) == entry.sha256,
-                'manifest_sha256',
-                f'SHA-256 mismatch: {relative}',
-            )
-        self._pass('manifest_files', f'verified {len(entries)} sealed files')
-        computed = bundle_digest(entries)
-        self._require(
-            manifest.get('bundle_digest') == computed,
-            'bundle_digest',
-            'bundle digest does not match manifest entries',
-        )
-        self._pass('bundle_digest', f'bundle digest {computed[:12]}…')
-        for required in _REQUIRED_FILES:
-            self._require(
-                required in entries,
-                'required_file',
-                f'manifest does not include {required}',
-            )
-        return entries, computed
 
     def _read_contract(self) -> _Contract:
         contract_raw = self._load_object('contract.json', 'contract')
@@ -709,11 +629,7 @@ class _Adaptation:
         )
         return producer
 
-    def _read_runs(
-        self,
-        contract: _Contract,
-        entries: Mapping[str, ManifestEntry],
-    ) -> dict[str, _Run]:
+    def _read_runs(self, contract: _Contract) -> dict[str, _Run]:
         try:
             raw_runs = read_jsonl(
                 safe_bundle_path(self._root, 'runs.jsonl'),
@@ -769,10 +685,14 @@ class _Adaptation:
                     f'{run_id}: {field_name} differs from the contract '
                     'scope',
                 )
+            try:
+                config_file = safe_bundle_path(self._root, config_path)
+            except ValueError as exc:
+                self._fail('referenced_file_safe', str(exc))
             self._require(
-                config_path in entries,
-                'referenced_file_manifested',
-                f'{run_id} references unmanifested {config_path}',
+                config_file.is_file(),
+                'referenced_file_exists',
+                f'{run_id} references missing {config_path}',
             )
             runs[run_id] = _Run(
                 run_id=run_id,
@@ -963,7 +883,6 @@ class _Adaptation:
         intervention_by_run: Mapping[str, float],
         evaluations: Mapping[tuple[str, int, int], Mapping[str, float]],
         producer: str,
-        sealed_bundle_digest: str,
     ) -> tuple[Mapping[str, MeasurementLeaf], ...]:
         c = contract.contrast
         rows: list[Mapping[str, MeasurementLeaf]] = []
@@ -971,7 +890,6 @@ class _Adaptation:
             row: dict[str, MeasurementLeaf] = {}
             self._put(row, 'id', run_id)
             self._put(row, 'corpus', contract.study_id)
-            self._put(row, 'bundle_digest', sealed_bundle_digest)
             self._put(row, 'program', f'external:{producer}')
             self._put(row, 'pair_id', str(run.pair_value))
             self._put(row, contract.pair_by, run.pair_value)
@@ -1035,10 +953,9 @@ class _Adaptation:
             self._root.is_dir(), 'bundle_root',
             'bundle root is not a directory',
         )
-        entries, computed_digest = self._verify_seal()
         contract = self._read_contract()
         producer = self._read_provenance()
-        runs = self._read_runs(contract, entries)
+        runs = self._read_runs(contract)
         pairs = self._verify_pairs(contract, runs)
         intervention_by_run = self._verify_config_isolation(contract, runs)
         evaluations = self._read_evaluations(contract, runs)
@@ -1062,7 +979,6 @@ class _Adaptation:
             intervention_by_run,
             evaluations,
             producer,
-            computed_digest,
         )
         c = contract.contrast
         contrast = RecordedContrast(
@@ -1071,14 +987,12 @@ class _Adaptation:
             treatment_key=c.arm_keys[c.treatment_arm],
             baseline_value=c.baseline_value,
             treatment_value=c.treatment_value,
-            bundle_digest=computed_digest,
             assignment_status=assignment_status,
         )
         receipt = AdapterReceipt(
             adapter_version=ADAPTER_VERSION,
             study_id=contract.study_id,
             bundle_root=self._root.resolve(),
-            bundle_digest=computed_digest,
             n_runs=len(rows),
             n_pairs=len(pairs),
             checks=tuple(self._checks),
@@ -1087,10 +1001,10 @@ class _Adaptation:
 
 
 def adapt_study(bundle_root: Path | str) -> AdaptedStudy:
-    """Verify and normalise a sealed external study bundle.
+    """Verify and normalise an external study bundle.
 
     The one-call entry point: trusts neither filenames nor run
-    declarations until the seal, pair completeness, held-fixed
+    declarations until pair completeness, held-fixed
     configuration, and evaluation extent have been checked; then
     returns the validated rows, the recorded contrast, and the
     receipt bound together as an `AdaptedStudy`. Raises

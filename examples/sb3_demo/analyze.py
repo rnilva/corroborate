@@ -5,9 +5,15 @@ Run from the repo root, **after** `train.py` has produced
 
     uv run python examples/sb3_demo/analyze.py
 
-Four steps: seal, adapt (verify + normalise, receipt printed),
+Three steps: adapt (verify + normalise, receipt printed),
 explore the run set as a Panel (trajectory + descriptive probe),
 then evaluate the executable claim test in ``sb3_claim.py``.
+
+The record is live: run more seeds, re-adapt, and the same claim
+test recomputes — a verdict that moves with the evidence is the
+system working. (Already have your own logs? Any DataFrame is a
+panel: ``Panel.from_dataframe(pl.read_csv(...))`` and skip
+straight to exploring.)
 """
 from __future__ import annotations
 
@@ -20,23 +26,18 @@ from corroborate.analyses.paired.paired_directional import (
 )
 from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.bridge.bridge import evaluate
-from corroborate.data import adapt_study, seal_bundle
+from corroborate.data import adapt_study
 from sb3_claim import higher_gamma_improves_return
 
 BUNDLE = Path(__file__).parent / 'bundle'
 
-# ── 1. seal: content-address the record ─────────────────────────
-if not (BUNDLE / 'manifest.json').exists():
-    seal_bundle(BUNDLE)
-    print(f'sealed: {BUNDLE / "manifest.json"}')
-
-# ── 2. adapt: verify + normalise, fail-closed ───────────────────
+# ── 1. adapt: verify + normalise, fail-closed ───────────────────
 study = adapt_study(BUNDLE)
 print(f'\nadmissible: {study.receipt.admissible}')
 for check in study.receipt.checks:
     print(f'  [{check.status.name:12s}] {check.code}: {check.message}')
 
-# ── 3. explore the run set as a Panel ───────────────────────────
+# ── 2. explore the run set as a Panel ───────────────────────────
 # `panel.cells` is a polars DataFrame; registered analyses accept
 # it directly. This is descriptive exploration, not the authored
 # claim test.
@@ -77,7 +78,7 @@ print(f'\nprobe: Δ(return_mean) = {probe.mean_diff:+.1f} '
       f'± {probe.mean_diff_se:.1f}  g={probe.g:+.2f}  '
       f'pairs helped: {probe.helped_fraction:.0%} of {probe.n_pairs}')
 
-# ── 4. evaluate the authored claim test ─────────────────────────
+# ── 3. evaluate the authored claim test ─────────────────────────
 # The claim module owns the edge, scope, predicted direction,
 # statistical configuration, and verdict rule. The verified record
 # supplies only its producer-specific arm labels at evaluation time.

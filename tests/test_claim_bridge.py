@@ -167,7 +167,6 @@ class _RecordedContrast:
     treatment_key: str = 'producer-high-gamma'
     baseline_value: float = 0.8
     treatment_value: float = 0.99
-    bundle_digest: str = 'bundle-a'
 
 
 def _recorded_contrast(**overrides: object) -> RecordedContrastBinding:
@@ -177,7 +176,6 @@ def _recorded_contrast(**overrides: object) -> RecordedContrastBinding:
         'treatment_key': 'producer-high-gamma',
         'baseline_value': 0.8,
         'treatment_value': 0.99,
-        'bundle_digest': 'bundle-a',
         **overrides,
     }
     return _RecordedContrast(
@@ -186,13 +184,14 @@ def _recorded_contrast(**overrides: object) -> RecordedContrastBinding:
         treatment_key=cast(str, values['treatment_key']),
         baseline_value=cast(float, values['baseline_value']),
         treatment_value=cast(float, values['treatment_value']),
-        bundle_digest=cast(str, values['bundle_digest']),
     )
 
 
-def _recorded_cells() -> list[dict[str, object]]:
+def _recorded_cells(
+    seeds: range = range(12),
+) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for seed in range(12):
+    for seed in seeds:
         rows.extend((
             {
                 'id': f'control-{seed}',
@@ -200,7 +199,6 @@ def _recorded_cells() -> list[dict[str, object]]:
                 'seed': seed,
                 'gamma': 0.8,
                 'return_mean': float(seed) / 100.0,
-                'bundle_digest': 'bundle-a',
             },
             {
                 'id': f'high-{seed}',
@@ -208,7 +206,6 @@ def _recorded_cells() -> list[dict[str, object]]:
                 'seed': seed,
                 'gamma': 0.99,
                 'return_mean': 1.0 + float(seed) / 100.0,
-                'bundle_digest': 'bundle-a',
             },
         ))
     return rows
@@ -241,7 +238,6 @@ def test_recorded_contrast_binds_external_arms_at_evaluation() -> None:
     assert result.baseline_arm == 'producer-control'
     assert result.treatment_arm == 'producer-high-gamma'
     assert result.n_pairs == 12
-    assert out.evidence_digest == 'bundle-a'
 
 
 def test_recorded_contrast_keeps_intervention_semantics_with_claim() -> None:
@@ -287,15 +283,20 @@ def test_recorded_contrast_rejects_arm_value_mismatch() -> None:
         )
 
 
-def test_recorded_contrast_rejects_different_bundle_cells() -> None:
-    with pytest.raises(ValueError, match='does not match cell bundle digest'):
-        _ = evaluate(
-            higher_recorded_gamma_helps,
-            _recorded_cells(),
-            recorded_contrast=_recorded_contrast(
-                bundle_digest='bundle-b',
-            ),
-        )
+def test_recorded_contrast_pools_batches_of_the_same_study() -> None:
+    """Evidence is a live record: a later batch of seeds joins the
+    earlier one, the SAME contrast binds the pooled cells, and the
+    verdict recomputes over all of it — running more seeds and
+    watching the verdict move is the system's point, not a hazard."""
+    pooled = _recorded_cells(range(12)) + _recorded_cells(range(12, 20))
+    out = evaluate(
+        higher_recorded_gamma_helps,
+        pooled,
+        recorded_contrast=_recorded_contrast(),
+    )
+    assert out.verdict is Verdict.HELD
+    result = cast(PairedGResult, out.analysis_results['paired_g'])
+    assert result.n_pairs == 20
 
 
 def test_recorded_contrast_cannot_override_executable_doeffect() -> None:

@@ -14,7 +14,7 @@ their production bridge converge through the SAME @analysis
 primitives, not through a shared Panel type.
 
 External studies enter this surface through the adapter
-(`corroborate.data.adapter`): a sealed bundle produced by any
+(`corroborate.data.adapter`): a bundle produced by any
 implementation is verified + normalised by `adapt_study`, and the
 resulting `AdaptedStudy` hands its rows to `Panel` via
 `to_panel()` — external record in, panel + admissibility receipt
@@ -31,7 +31,6 @@ from corroborate.data.adapter import (
     CheckStatus,
     RecordedContrast,
     adapt_study,
-    seal_bundle,
 )
 from corroborate.data.panel import (
     CorpusSource,
@@ -54,5 +53,4 @@ __all__ = [
     'PanelDiagnostics',
     'RecordedContrast',
     'adapt_study',
-    'seal_bundle',
 ]

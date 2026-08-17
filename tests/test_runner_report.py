@@ -567,7 +567,6 @@ def test_end_to_end_serializes_full_bridge_evaluation() -> None:
         warnings=(),
         blocked_by=None,
         n_cells_in_scope=42,
-        evidence_digest='bundle-a',
     )
     entry = _build_bridge_entry(my_bridge, ev, n_cells_total=100)
     coerced = _coerce_value(entry)
@@ -579,7 +578,6 @@ def test_end_to_end_serializes_full_bridge_evaluation() -> None:
     assert coerced['pair_by'] == ['seed']
     assert coerced['n_cells_in_scope'] == 42
     assert coerced['n_cells_pre_scope'] == 100
-    assert coerced['evidence_digest'] == 'bundle-a'
     pg = coerced['analysis_results']['paired_g']
     assert pg['g'] == 1.5
     assert 'p_value' in pg  # property included

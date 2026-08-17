@@ -29,7 +29,6 @@ def test_verified_bundle_evaluates_data_independent_claim_module() -> None:
     assert study.receipt.admissible
     assert evaluation.n_cells_in_scope == 6
     assert evaluation.extent_hash != 0
-    assert evaluation.evidence_digest == study.receipt.bundle_digest
     assert evaluation.verdict is Verdict.POWER_INSUFFICIENT
     assert evaluation.refutation_class is RefutationClass.UNDERPOWERED
 

@@ -134,8 +134,12 @@ result = evaluate(
 The bridge declares the measurable edge, scope, predicted
 direction, analysis configuration, and verdict rule. It does not
 import the bundle or hard-code producer-specific condition names.
-The resulting `BridgeEvaluation.evidence_digest` binds its verdict
-to the sealed bundle represented by those cells.
+The record is live: run more seeds, re-adapt, and the same bridge
+recomputes — batches of the same study pool, and a verdict that
+moves with the evidence is the system working. (Runs logged your
+own way need no bundle at all: any DataFrame is a panel via
+`Panel.from_dataframe`, and bridges evaluate against it
+directly.)
 
 [`examples/sb3_demo/`](examples/sb3_demo/) walks through this
 with stable-baselines3 DQN: training, bundle production,

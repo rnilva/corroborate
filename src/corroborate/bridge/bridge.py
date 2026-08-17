@@ -114,9 +114,6 @@ class RecordedContrastBinding(Protocol):
     @property
     def treatment_value(self) -> float: ...
 
-    @property
-    def bundle_digest(self) -> str: ...
-
 
 def endpoint_name(e: BridgeEndpoint) -> str:
     """Normalise a `BridgeEndpoint` to a column name (str). For
@@ -403,11 +400,6 @@ class BridgeEvaluation:
     downstream consumers (extent-cluster grouping, walks) can key
     by edge endpoints without re-loading the Bridge.
 
-    `evidence_digest`: content identity of an externally adapted
-    bundle when evaluation used a recorded contrast. ``None`` for
-    native/ordinary cell sets. This makes cached evaluation records
-    distinguish evidence from different sealed bundles.
-
     `extent_hash`: stable BLAKE2b identity of the set of cell IDs admitted by
     the bridge's effective scope (`bridge.scope ∧ module_scope`).
     Two bridges with the same `(source_name, target_name,
@@ -428,7 +420,6 @@ class BridgeEvaluation:
     refutation_class: 'RefutationClass | None' = None
     source_name: str = ''
     target_name: str = ''
-    evidence_digest: str | None = None
     extent_hash: int = 0
     """**Sub-classification of NO_EFFECT** (or, more rarely, of
     POWER_INSUFFICIENT). Bridge bodies that distinguish "predicted
@@ -726,8 +717,7 @@ def evaluate(
     two-arm contrast at evaluation time.  The bridge still declares
     the data-independent edge (for example ``gamma -> return_mean``);
     the binding supplies the producer-specific arm keys and verifies
-    its intervention path, arm values, and sealed bundle digest against
-    the cells.
+    its intervention path and arm values against the cells.
     Analyses then consume ``bridge.target`` as their measured source,
     exactly as they do for an executable ``DoEffect``.  Supplying both
     forms is an error: a recorded contrast is evidence about an action
@@ -784,13 +774,6 @@ def evaluate(
         }
         seen_arms: set[str] = set()
         for cell in recorded_rows:
-            cell_digest = cell.get('bundle_digest')
-            if cell_digest != recorded_contrast.bundle_digest:
-                raise ValueError(
-                    f'evaluate({bridge.name!r}): recorded contrast digest '
-                    f'{recorded_contrast.bundle_digest!r} does not match '
-                    f'cell bundle digest {cell_digest!r}',
-                )
             arm = cell.get('arm_key')
             if not isinstance(arm, str) or arm not in expected_values:
                 continue
@@ -914,10 +897,6 @@ def evaluate(
                 source_name=bridge.source_name,
                 target_name=bridge.target_name,
                 extent_hash=extent_hash,
-                evidence_digest=(
-                    recorded_contrast.bundle_digest
-                    if recorded_contrast is not None else None
-                ),
             )
         warnings.append(result)
     # Contrast resolution:
@@ -1022,10 +1001,6 @@ def evaluate(
         source_name=bridge.source_name,
         target_name=bridge.target_name,
         extent_hash=extent_hash,
-        evidence_digest=(
-            recorded_contrast.bundle_digest
-            if recorded_contrast is not None else None
-        ),
     )
 
 
