@@ -254,6 +254,68 @@ def _is_excluded_col(
     return col in measurable_names
 
 
+def _derive_native_leaves(
+    cells: pl.DataFrame,
+    *,
+    artifact_measurables: frozenset[str] | None,
+) -> frozenset[str] | None:
+    """The corpus-native configuration registry, derived by the
+    catalogue's canonical column partition (the same machinery
+    behind `corroborate catalogue --leaves`) — the native mirror
+    of what run readers recover from external artifacts.
+
+    Registered-measurable columns must be excludable for the
+    partition to be meaningful. Grounding comes from the corpus's
+    own sidecar artifact (`measurements.parquet` schema / cache
+    `.hashes.json` keys) and/or the live `@measurable` registry.
+    With neither — no sidecar and an empty registry — a measurable
+    column is indistinguishable from a configuration leaf, and the
+    honest answer is None (registry unknown) rather than an
+    over-inclusive guess that would flip outcome columns into
+    phantom confounds at the admission gates."""
+    from corroborate.corpus.catalogue import partition_columns
+    from corroborate.measurables import registered_names
+    if cells.height == 0:
+        return None
+    registry = frozenset(registered_names())
+    if artifact_measurables is None and not registry:
+        return None
+    leaf_cols, _exogenous = partition_columns(
+        cells.columns,
+        dict(cells.schema),
+        exogenous_keys=_DEFAULT_EXOGENOUS_KEYS,
+        exogenous_prefixes=_DEFAULT_EXOGENOUS_PREFIXES,
+        extra_excluded=(
+            _FRAMEWORK_IDENTITY_COLS
+            | (artifact_measurables or frozenset())
+        ),
+    )
+    return frozenset(leaf_cols)
+
+
+def _read_manifest_measurables(cache_path: Path) -> frozenset[str] | None:
+    """Measurable-column names from the cache's `.hashes.json`
+    manifest — the artifact-side grounding for the cache leaf
+    partition. None when the manifest is absent or unreadable
+    (pre-manifest caches keep working; grounding falls back to
+    the live registry)."""
+    from json import JSONDecodeError
+
+    from corroborate._internals.json import loads as _json_loads
+    from corroborate._internals.narrow import is_mapping_str_object
+    from corroborate.runner.runner import manifest_path
+    mpath = manifest_path(cache_path)
+    if not mpath.exists():
+        return None
+    try:
+        parsed = _json_loads(mpath.read_text())
+    except (OSError, JSONDecodeError):
+        return None
+    if not is_mapping_str_object(parsed):
+        return None
+    return frozenset(parsed)
+
+
 def _resolve_cache_path(hypothesis_module: str) -> Path | None:
     """Resolve `<hyp_module>` → its default cache parquet path
     via the runner. Returns None when the module can't import."""
@@ -443,8 +505,9 @@ class Panel:
     # The record's configuration registry: which columns were
     # CONFIGURED (the external counterpart of a native claim
     # composition's leaf walk). Run readers populate it from the
-    # record's own artifacts; `evaluate()` consumes it for the
-    # knob-aware admission gates. None means "no registry known" —
+    # record's own artifacts, the corpus constructors derive it
+    # from the corpus's own sidecars (`_derive_native_leaves`);
+    # `evaluate()` consumes it for the knob-aware admission gates. None means "no registry known" —
     # the gates then report their checks unverified rather than
     # silently passing. A fact the frame cannot carry itself; the
     # Panel is the typed carrier that travels with the cells.
@@ -513,8 +576,14 @@ class Panel:
             )
         cells = pl.read_parquet(runs_path)
         meas_path = corpus_path / 'measurements.parquet'
+        # The sidecar's schema is the artifact-side grounding for
+        # the leaf partition below: it names this corpus's
+        # measurable columns as of its build, independent of what
+        # the current process has imported.
+        meas_artifact_cols: frozenset[str] | None = None
         if meas_path.exists() and 'id' in cells.columns:
             meas = pl.read_parquet(meas_path)
+            meas_artifact_cols = frozenset(meas.columns) - {'id'}
             # Collision resolution delegated to
             # `corpus.measurements.resolve_runs_meas_collision`
             # — single source of truth shared with
@@ -582,6 +651,9 @@ class Panel:
             cells=cells,
             stratify_by=stratify_by,
             sources=(source,),
+            leaves=_derive_native_leaves(
+                cells, artifact_measurables=meas_artifact_cols,
+            ),
         )
 
     @classmethod
@@ -617,6 +689,12 @@ class Panel:
             cells=cells,
             stratify_by=stratify_by,
             sources=sources,
+            leaves=_derive_native_leaves(
+                cells,
+                artifact_measurables=_read_manifest_measurables(
+                    cache_path,
+                ),
+            ),
         )
 
     def to_cache(
@@ -784,10 +862,26 @@ class Panel:
         sources_combined: tuple[CorpusSource, ...] = tuple(
             s for p in panels for s in p.sources
         )
+        # Registry union over the corpora that contributed cells —
+        # same None-poisoning rule as `concat_panels`: one
+        # contributing corpus with an unknown registry makes the
+        # union unknown. Empty corpora contribute nothing and
+        # don't poison.
+        contributing = [p for p in panels if p.cells.height > 0]
+        leaves: frozenset[str] | None
+        if contributing and all(
+            p.leaves is not None for p in contributing
+        ):
+            leaves = frozenset().union(
+                *(p.leaves for p in contributing if p.leaves is not None),
+            )
+        else:
+            leaves = None
         return cls(
             cells=cells,
             stratify_by=stratify_by,
             sources=sources_combined,
+            leaves=leaves,
         )
 
     def narrow(self, expr: pl.Expr) -> 'Panel':
@@ -995,15 +1089,26 @@ class Panel:
         # forced when the data subpackage is loaded standalone.
         from corroborate.measurables import registered_names
         measurable_names = frozenset(registered_names())
-        config_cols = [
-            c for c in self.cells.columns
-            if not _is_excluded_col(
-                c,
-                exogenous_keys=exogenous_keys,
-                exogenous_prefixes=exogenous_prefixes,
-                measurable_names=measurable_names,
-            )
-        ]
+        if self.leaves is not None:
+            # The carried registry is authoritative: the record
+            # itself said which columns were configured. The
+            # exclusion heuristic below is the fallback for
+            # panels that don't carry one — it cannot know that
+            # an unregistered moving column is a measurement, so
+            # it would count outcomes as config heterogeneity.
+            config_cols = [
+                c for c in self.cells.columns if c in self.leaves
+            ]
+        else:
+            config_cols = [
+                c for c in self.cells.columns
+                if not _is_excluded_col(
+                    c,
+                    exogenous_keys=exogenous_keys,
+                    exogenous_prefixes=exogenous_prefixes,
+                    measurable_names=measurable_names,
+                )
+            ]
         # Which measurable cols to compute finiteness for.
         if self.required_measurables:
             meas_cols = [

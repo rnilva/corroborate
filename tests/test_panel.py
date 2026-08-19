@@ -304,6 +304,31 @@ def test_diagnostics_finite_fraction_required_measurables_narrows_report() -> No
     assert set(per_meas.keys()) == {'_panel_test_jens'}
 
 
+def test_diagnostics_config_fingerprint_trusts_carried_registry() -> None:
+    """When the Panel carries `leaves`, the nonunique-configs
+    diagnostic fingerprints exactly the registered columns — a
+    measured outcome that varies per cell is not configuration and
+    must not inflate the count. Without a registry the exclusion
+    heuristic cannot know `return_mean` is measured, so it counts
+    it: 1 config with the registry vs 3 without."""
+    df = pl.DataFrame({
+        'id': ['a', 'b', 'c'],
+        'env_id': ['E', 'E', 'E'],
+        'gamma': [0.99, 0.99, 0.99],
+        'return_mean': [1.0, 2.0, 3.0],
+    })
+    with_registry = Panel.from_dataframe(
+        df, stratify_by=('env_id',), leaves=frozenset({'gamma'}),
+    )
+    assert with_registry.diagnostics.nonunique_configs_per_stratum[
+        ('E',)
+    ] == 1
+    without_registry = Panel.from_dataframe(df, stratify_by=('env_id',))
+    assert without_registry.diagnostics.nonunique_configs_per_stratum[
+        ('E',)
+    ] == 3
+
+
 def test_narrow_extends_scope_chain_and_filters_cells() -> None:
     """`panel.narrow(expr)` returns a new Panel with `expr`
     appended to `scope_chain`; cells are filtered; diagnostics
@@ -489,6 +514,10 @@ def test_from_corpus_loads_runs_and_measurements(tmp_path: Path) -> None:
     assert len(panel.sources) == 1
     assert panel.sources[0].corpus == 'syn_corpus'
     assert panel.sources[0].data_root == corpus.parent.resolve()
+    # Registry derived from the corpus itself: `x` is the one
+    # config column (id/arm_key are RunRow fields, env_name/seed
+    # exogenous, `_panel_test_jens` a registered measurable).
+    assert panel.leaves == frozenset({'x'})
 
 
 def test_from_corpus_missing_runs_returns_empty(tmp_path: Path) -> None:
@@ -537,6 +566,87 @@ def test_from_corpora_unions_cells_with_diagonal_relaxed(
     cells_b = panel.cells.filter(pl.col('corpus') == 'corpB')
     assert cells_a['y_extra'].null_count() == 2
     assert cells_b['y_extra'].to_list() == [10.0, 20.0]
+    # Registry unions across the contributing corpora.
+    assert panel.leaves == frozenset({'x', 'y_extra'})
+
+
+def test_from_corpus_registry_grounds_on_measurements_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The corpus's own `measurements.parquet` schema names its
+    measurable columns as of its build — artifact-side grounding
+    that works even when the implementation's registry isn't
+    imported in this process (simulated by emptying the live
+    registry)."""
+    corpus = tmp_path / 'corp'
+    corpus.mkdir()
+    pl.DataFrame({
+        'id': ['c0', 'c1'],
+        'env_name': ['env1', 'env1'],
+        'arm_key': ['baseline', 'ddqn'],
+        'seed': [0, 0],
+        'optimizer.inner.lr': [1e-4, 1e-4],
+        'gamma': [0.99, 0.99],
+    }).write_parquet(corpus / 'runs.parquet')
+    pl.DataFrame({
+        'id': ['c0', 'c1'],
+        '_panel_gap3_meas': [0.1, 0.2],
+    }).write_parquet(corpus / 'measurements.parquet')
+
+    monkeypatch.setattr(
+        'corroborate.measurables.registered_names', lambda: (),
+    )
+    panel = Panel.from_corpus(corpus)
+    assert panel.leaves == frozenset({'optimizer.inner.lr', 'gamma'})
+
+
+def test_from_corpus_without_grounding_keeps_registry_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No measurements sidecar AND no live registry: a measurable
+    column is indistinguishable from a configuration leaf, so the
+    registry stays None — honest "unverified" at the gates beats
+    flipping outcome columns into phantom confounds."""
+    corpus = tmp_path / 'corp'
+    corpus.mkdir()
+    pl.DataFrame({
+        'id': ['c0'],
+        'env_name': ['env1'],
+        'arm_key': ['baseline'],
+        'gamma': [0.99],
+    }).write_parquet(corpus / 'runs.parquet')
+    monkeypatch.setattr(
+        'corroborate.measurables.registered_names', lambda: (),
+    )
+    assert Panel.from_corpus(corpus).leaves is None
+
+
+def test_from_cache_registry_grounds_on_hashes_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cache side of the same derivation: `.hashes.json` names the
+    cache's measurable columns; the partition grounds on it with
+    no live registry."""
+    cache = tmp_path / 'hyp.parquet'
+    pl.DataFrame({
+        'id': ['c0'],
+        'env_name': ['e'],
+        'arm_key': ['baseline'],
+        'gamma': [0.9],
+        'gap3_cached_measurable': [0.5],
+    }).write_parquet(cache)
+    (tmp_path / 'hyp.hashes.json').write_text(
+        '{"gap3_cached_measurable": "sig"}',
+    )
+    monkeypatch.setattr(
+        'corroborate.data.panel._resolve_cache_path',
+        lambda module: cache,
+    )
+    monkeypatch.setattr(
+        'corroborate.measurables.registered_names', lambda: (),
+    )
+    panel = Panel.from_cache('fake.module.for.resolver')
+    assert panel.leaves == frozenset({'gamma'})
 
 
 def test_with_traces_joins_on_demand(tmp_path: Path) -> None:
