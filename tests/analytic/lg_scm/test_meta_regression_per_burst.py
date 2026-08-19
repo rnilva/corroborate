@@ -167,3 +167,22 @@ def test_per_burst_meta_regression_resolves_covariates_from_cells() -> None:
         f'covariates= cell-level resolution path produced a '
         f'different fit than the explicit covariates_per_env one'
     )
+
+
+def test_per_burst_meta_regression_honours_custom_arm_field() -> None:
+    cells: list[Mapping[str, object]] = []
+    for cell in _build_phased_panel():
+        row = dict(cell)
+        row['contrast_arm'] = row.pop('arm_key')
+        cells.append(row)
+    result = meta_regression_per_burst.fn(
+        cells,
+        treatment_arm='treatment',
+        baseline_arm='baseline',
+        arm_field='contrast_arm',
+        pair_by=('seed',),
+        source=_PER_BURST_Y_MEAN,
+        covariates=('mu_x',),
+    )
+    assert result.n_strata == len(_MU_X_GRID) * _N_BURSTS
+    assert [coef.name for coef in result.coefficients] == ['mu_x']

@@ -106,16 +106,19 @@ degradation from noisy or slower learning.
 The claim module contains the scientific test, not the data:
 
 ```python
-@claim_bridge(
+GAMMA_EFFECT = DoEffect.from_values(
     source='gamma',
+    reference=0.80,
+    treatment=0.99,
+)
+
+@claim_bridge(
+    source=GAMMA_EFFECT,
     target='return_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     pair_by=('seed',),
-    scope=(
-        (pl.col('env_id') == 'CartPole-v1')
-        & pl.col('gamma').is_in([0.80, 0.99])
-    ),
+    scope=pl.col('env_id') == 'CartPole-v1',
     predicted_direction='a_gt_b',
 )
 def higher_gamma_improves_return(
@@ -130,11 +133,12 @@ def higher_gamma_improves_return(
 ```
 
 The bridge is exactly what a native one looks like — no external
-special case. `tier=INTERVENTIONAL` on the assigned parameter
-says the contrast was executed; the scope pins which two values
-it compares. Evaluation adds one fact from the data side: which
-columns were *configuration* — recovered from the checkpoints
-themselves, never hand-listed:
+special case: a `DoEffect` in source position, here declaring the
+exact reference and treatment values of an externally-executed
+contrast rather than slot-swap arms. The population scope only
+selects CartPole-v1. Evaluation adds one fact from the data side:
+which columns were *configuration*, recovered from the
+checkpoints themselves — never hand-listed:
 
 ```python
 evaluation = evaluate(
@@ -143,19 +147,31 @@ evaluation = evaluate(
 )
 ```
 
-Conditions then derive from the `gamma` column's scoped values
-(labelled `gamma=0.8` / `gamma=0.99`, ascending — the claim's
-sign lives in `predicted_direction`), and the admission gates
-check the contrast over exactly the cells this claim admits:
-`contrast_present` blocks if the record doesn't actually vary
-gamma in scope, `contrast_isolation` blocks if another
-*configuration* column moved together with gamma (a confound
-riding the contrast — an unregistered column that co-varies only
-warns, since a label is harmless and only you can say which it
-is), and `pair_completeness` warns when a seed is missing one
-condition. A blocked claim gets the verdict `INADMISSIBLE` —
-quality problems land on the verdict record, not in a separate
-report.
+Exact matches to 0.80 and 0.99 receive the stable symbolic arm
+identities `baseline` and `treatment`; neither membership nor
+orientation is inferred from observed support or display labels.
+Any additional gamma levels remain in the accumulated DataFrame
+but sit outside this declared contrast, available to other
+claims over the same panel.
+
+The admission gates then check the contrast over exactly the
+cells this claim admits. `leaves` is authoritative about what was
+configured: the declared source must be a registered
+configuration column (a measurement cannot be the assigned
+parameter of an intervention — BLOCK), a registered leaf that
+moves with gamma inside a seed pair is a co-varied knob (a
+confound — BLOCK, unless it was assigned jointly, in which case
+the declaration widens to
+`from_values(reference={...}, treatment={...})`), and an
+unregistered column moving with the contrast warns — a label is
+harmless, an unlogged knob is not, and only the author can say
+which. `contrast_present` blocks when a declared arm is absent
+from the record, and `pair_completeness` warns when a seed is
+missing one condition. A blocked claim gets the verdict
+`INADMISSIBLE` — quality problems land on the verdict record,
+not in a separate report. What no registry can attest —
+assignment, randomisation, hidden confounding — stays outside
+the framework's claims for external runs.
 
 ```text
 claim: gamma 0.99 > gamma 0.80 on return_mean
@@ -176,10 +192,9 @@ The record is live. Run more seeds, re-load, and the same claim
 recomputes on the larger run set — batches concatenate with plain
 `pl.concat`, because a growing study is one run set that happens
 to arrive in parts. A verdict that moves as evidence accretes is
-the system working; the hypothesis layer's drift discipline
-exists precisely to notice it. The gates re-check contrast
-presence, isolation, and pairing on every evaluation, over
-whatever the record has become.
+the system working. The declared estimand stays fixed while the
+gates re-check arm presence, configuration isolation, and pairing
+over whatever the record has become.
 
 ## Producer-side cost
 

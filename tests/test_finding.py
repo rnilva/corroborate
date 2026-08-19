@@ -132,12 +132,18 @@ def test_object_missing_name_is_not_finding() -> None:
 def _evaluated_with(
     bridges: tuple[Bridge, ...],
     verdicts: dict[str, tuple[Verdict, int]],
+    *,
+    n_cells_in_scope: int = 1,
 ) -> Graph[str, BridgeEdge]:
     """Build a post-eval graph by stamping each bridge with the
     given (Verdict, extent_hash) pair via `evaluated_graph`."""
     from corroborate.graph.causal import PostEvalEntry
     post = {
-        name: PostEvalEntry(verdict=v, extent_hash=h)
+        name: PostEvalEntry(
+            verdict=v,
+            extent_hash=h,
+            n_cells_in_scope=n_cells_in_scope,
+        )
         for name, (v, h) in verdicts.items()
     }
     return evaluated_graph(bridges, post)
@@ -184,8 +190,7 @@ def test_composed_verdict_mix_admit_unevaluated_underpowered() -> None:
 
 
 def test_composed_verdict_all_empty_extent_empty_extent() -> None:
-    """All members admit zero cells (extent_hash == stable_extent_hash(()))
-    → EMPTY_EXTENT. The corpus can't distinguish them."""
+    """All members explicitly report zero admitted rows → EMPTY."""
     empty = stable_extent_hash(())
     g = _evaluated_with(
         (_bridge_a, _bridge_b),
@@ -193,6 +198,7 @@ def test_composed_verdict_all_empty_extent_empty_extent() -> None:
             '_bridge_a': (Verdict.POWER_INSUFFICIENT, empty),
             '_bridge_b': (Verdict.POWER_INSUFFICIENT, empty),
         },
+        n_cells_in_scope=0,
     )
     assert composed_verdict(g, bridges=(_bridge_a, _bridge_b)) is (
         ClusterVerdict.EMPTY_EXTENT

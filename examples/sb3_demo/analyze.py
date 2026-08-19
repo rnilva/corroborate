@@ -68,12 +68,14 @@ print('\nΔ(return_mean) per seed (gamma 0.99 − 0.80):')
 print(paired)
 
 # ── 3. evaluate the authored claim test ─────────────────────────
-# The claim module owns the estimand and verdict rule; the data
-# side registers which columns were configuration (recovered from
-# the checkpoints themselves). Conditions derive from the gamma
-# column's scoped values, and the admission gates check contrast
-# presence, isolation, and pair completeness over exactly the
-# cells the claim admits.
+# The claim module owns the estimand and verdict rule: the declared
+# DoEffect maps gamma=0.80 and 0.99 to symbolic baseline/treatment
+# identities — never inferred from observed support. The data side
+# registers which columns were configuration (recovered from the
+# checkpoints themselves); the gates use that registry to verify
+# the declared source is a knob and that no other knob moves with
+# the contrast inside a seed pair. Assignment itself is the one
+# thing no external record can prove.
 evaluation = evaluate(
     higher_gamma_improves_return,
     df,

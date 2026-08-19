@@ -3,10 +3,11 @@
 Private support module for `corroborate.data.loader`: JSON /
 JSONL decoding plus escape-proof path resolution. A run
 directory is plain files — evidence is a live, growing record,
-not a frozen artifact, so there is no seal here: integrity over
-time is the producer's version control's job, and the framework's
-verdicts recompute whenever the record grows (that is the point
-of the system, not a hazard to guard against).
+not a frozen artifact, so there is no seal here. Corroborate
+neither infers provenance or chronology from those files nor
+attests their integrity; snapshot and version management remain
+external. Verdicts recompute from whichever rows the caller
+supplies whenever the record grows.
 """
 from __future__ import annotations
 

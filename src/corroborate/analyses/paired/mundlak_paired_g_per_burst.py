@@ -46,6 +46,7 @@ def _per_env_burst_predictor_mean(
     per_cell_array: dict[str, npt.NDArray[np.float64]],
     env_name: str,
     arm_filter: str | None,
+    arm_field: str = 'arm_key',
 ) -> float:
     """Average a precomputed per-burst array across the cells of
     `env_name` at `burst_index`. `per_cell_array` is keyed by
@@ -55,7 +56,7 @@ def _per_env_burst_predictor_mean(
     for c in cells:
         if c.get('env_name') != env_name:
             continue
-        if arm_filter is not None and c.get('arm_key') != arm_filter:
+        if arm_filter is not None and c.get(arm_field) != arm_filter:
             continue
         cell_id = c.get('id')
         if not isinstance(cell_id, str):
@@ -75,6 +76,7 @@ def mundlak_paired_g_per_burst(
     *,
     treatment_arm: str,
     baseline_arm: str,
+    arm_field: str = 'arm_key',
     pair_by: tuple[str, ...] = ('seed',),
     source: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
@@ -122,6 +124,7 @@ def mundlak_paired_g_per_burst(
         cells_list, treatment_arm=treatment_arm,
         baseline_arm=baseline_arm, pair_by=pair_by,
         source=source,
+        arm_field=arm_field,
         dedupe_strategy=dedupe_strategy,
     )
 
@@ -180,7 +183,7 @@ def mundlak_paired_g_per_burst(
             continue
         x = _per_env_burst_predictor_mean(
             cells_list, s.burst_index, per_cell_array,
-            s.env_name, baseline_arm,
+            s.env_name, baseline_arm, arm_field,
         )
         if math.isnan(x):
             continue

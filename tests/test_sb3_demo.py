@@ -76,6 +76,9 @@ def test_committed_sb3_artifacts_evaluate_the_claim_module() -> None:
     assert evaluation.n_cells_in_scope == 6
     assert evaluation.extent_hash != 0
     assert evaluation.blocked_by is None
+    # gamma is registered configuration, every registered leaf is
+    # balanced within each seed pair, and nothing unregistered
+    # rides the contrast — a clean record.
     assert evaluation.warnings == ()
     assert evaluation.verdict is Verdict.POWER_INSUFFICIENT
     assert evaluation.refutation_class is RefutationClass.UNDERPOWERED
@@ -83,8 +86,8 @@ def test_committed_sb3_artifacts_evaluate_the_claim_module() -> None:
     result = evaluation.analysis_results['paired_directional']
     assert isinstance(result, PairedDirectionalResult)
     assert result.measurable == 'return_mean'
-    assert result.baseline_arm == 'gamma=0.8'
-    assert result.treatment_arm == 'gamma=0.99'
+    assert result.baseline_arm == 'baseline'
+    assert result.treatment_arm == 'treatment'
     assert result.n_pairs == 3
     assert result.mean_diff == pytest.approx(-37.8, abs=0.05)
     assert result.dz == pytest.approx(-0.61, abs=0.005)

@@ -28,6 +28,7 @@ from corroborate.analyses.paired.arm_mean_diff import (
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge, evaluate
 from corroborate.bridge.verdict import Verdict
+from corroborate.core.intervention import DoEffect
 from corroborate_rl.sb3 import (
     checkpoint_config,
     load_sb3_runs,
@@ -157,8 +158,15 @@ def test_sb3_config_columns_registry(tmp_path: Path) -> None:
     })
 
 
-@claim_bridge(
+_GAMMA_EFFECT = DoEffect.from_values(
     source='gamma',
+    reference=_BASELINE_GAMMA,
+    treatment=_TREATMENT_GAMMA,
+)
+
+
+@claim_bridge(
+    source=_GAMMA_EFFECT,
     target='return_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
@@ -190,8 +198,37 @@ def test_end_to_end_value_contrast_on_sb3_artifacts(tmp_path: Path) -> None:
     assert evaluation.blocked_by is None
     result = evaluation.analysis_results['arm_mean_diff']
     assert isinstance(result, ArmMeanDiffResult)
-    assert result.treatment_arm == 'gamma=0.99'
-    assert result.baseline_arm == 'gamma=0.8'
+    assert result.treatment_arm == 'treatment'
+    assert result.baseline_arm == 'baseline'
+    assert result.mean_diff == _TREATMENT_BASE - _BASELINE_BASE
+
+
+def test_unmatched_sb3_level_is_outside_declared_effect(
+    tmp_path: Path,
+) -> None:
+    """Additional levels may accumulate in the same record without
+    changing the fixed binary estimand."""
+    declared = tmp_path / 'declared'
+    _make_sb3_runs(declared)
+    other = tmp_path / 'other' / 'gamma090-s0'
+    _write_checkpoint(other / 'model.zip', gamma=0.90, seed=0)
+    _write_evaluations(other / 'evaluations.npz', base=10_000.0)
+    pooled = pl.concat(
+        [
+            load_sb3_runs(declared, _FakeDQN),
+            load_sb3_runs(tmp_path / 'other', _FakeDQN),
+        ],
+        how='diagonal',
+    )
+
+    evaluation = evaluate(_higher_gamma_improves_sb3_return, pooled)
+
+    assert evaluation.verdict is Verdict.HELD
+    assert evaluation.n_cells_in_scope == 4
+    result = evaluation.analysis_results['arm_mean_diff']
+    assert isinstance(result, ArmMeanDiffResult)
+    assert result.n_treatment == 2
+    assert result.n_baseline == 2
     assert result.mean_diff == _TREATMENT_BASE - _BASELINE_BASE
 
 

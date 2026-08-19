@@ -290,6 +290,13 @@ def run_intervention[R: Mapping[str, object]](
 
     `trace_reductions` / `trace_drops` forwarded to
     `apply_trace_reductions` per cell."""
+    if intervention.is_value_based:
+        raise ValueError(
+            'run_intervention() requires a structural DoEffect; '
+            'DoEffect.from_values(...) classifies an externally '
+            'produced record and cannot be dispatched as structural '
+            'interventions.',
+        )
     out_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = out_dir / 'tmp'
     tmp_dir.mkdir(parents=True, exist_ok=True)

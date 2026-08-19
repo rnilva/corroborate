@@ -1,19 +1,16 @@
 """Contract tests for `BridgeEvaluation.extent_hash`.
 
-The extent_hash is the framework's load-bearing cluster-identity
-primitive: `stable_extent_hash(admitted_cell_ids)` computed at
-evaluation time. Two bridges with the same `(source_name,
-target_name, extent_hash)` admitted identical cell-sets on the
-current cache — automatic cluster on the post-evaluated graph.
+The extent_hash is a compact graph-grouping key:
+`stable_extent_hash(admitted_cell_ids)` computed at evaluation
+time. Matching keys mean only the same de-duplicated string-ID set
+under a shared namespace; row values and multiplicity are absent.
 
 These tests lock the five invariants the design relies on:
 
 1. extent_hash equals `stable_extent_hash(admitted_ids)` literally.
-2. Empty admission → `stable_extent_hash(())` (the honest-empty-extent
-   invariant; AWAITING-DATA bridges all share this hash).
+2. Empty admission → `stable_extent_hash(())`.
 3. Stable under row permutation (frozenset semantics).
-4. Bridges sharing a NAMED module-level scope predicate hash
-   identically — the cluster-identity invariant.
+4. Bridges admitting the same IDs hash identically.
 5. Disjoint scopes admit disjoint cells → distinct hashes."""
 from __future__ import annotations
 
@@ -58,7 +55,7 @@ def _cells(*ids: str, x: tuple[float, ...] | None = None) -> list[dict[str, obje
 
 
 # Named scope predicate — shared across bridges to exercise the
-# cluster-identity invariant (test #4).
+# same-admitted-ID-set behaviour (test #4).
 _SHARED_POSITIVE_X_SCOPE = pl.col('x') > 0
 
 
@@ -99,9 +96,11 @@ def _bridge_empty_scope(_noop_analysis: _NoopResult) -> Verdict:
 
 
 def test_extent_hash_equals_frozenset_admitted_ids() -> None:
-    """The load-bearing identity invariant: extent_hash IS
-    `stable_extent_hash(admitted_cell_ids)` — not a digest, not
-    a sorted-tuple hash. Frozenset semantics are the contract."""
+    """extent_hash is the grouping key over admitted string IDs.
+
+    Frozenset semantics are the compatibility contract; this test
+    does not claim row-content or evidence identity.
+    """
     cells = _cells('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
     out = evaluate(_bridge_positive_x_a, cells)
     expected = stable_extent_hash({'c0', 'c1'})
@@ -109,10 +108,7 @@ def test_extent_hash_equals_frozenset_admitted_ids() -> None:
 
 
 def test_extent_hash_empty_when_scope_admits_zero() -> None:
-    """Honest-empty-extent invariant: scope admits zero cells →
-    extent_hash is `stable_extent_hash(())`. AWAITING-DATA bridges
-    cluster naturally under this single hash, reflecting that the
-    framework cannot distinguish them on the current cache."""
+    """A scope admitting zero rows has the empty-ID-set key."""
     cells = _cells('c0', 'c1', 'c2', x=(1.0, 2.0, 3.0))
     out = evaluate(_bridge_empty_scope, cells)
     assert out.extent_hash == stable_extent_hash(())
@@ -160,11 +156,11 @@ def test_extent_hash_stable_across_python_hash_seeds() -> None:
 
 
 def test_extent_hash_shared_when_same_named_scope() -> None:
-    """Cluster-identity invariant — the load-bearing claim of
-    the whole design. Two bridges importing the same named
-    module-level scope constant produce identical `extent_hash`
-    values on the same cache. Authors who want a refutation /
-    sibling cluster MUST share the named expression."""
+    """Two bridges admitting the same IDs produce the same key.
+
+    The named expression communicates author intent, but expression
+    object identity is not part of the key.
+    """
     cells = _cells('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
     out_a = evaluate(_bridge_positive_x_a, cells)
     out_b = evaluate(_bridge_positive_x_b, cells)
@@ -177,10 +173,7 @@ def test_extent_hash_shared_when_same_named_scope() -> None:
 
 
 def test_extent_hash_distinct_when_disjoint_scopes() -> None:
-    """Disjoint admitted-cell-sets produce distinct cluster
-    keys. Validates the framework derives cluster identity
-    structurally from the data the scope admits, not from
-    scope-expression syntax."""
+    """These disjoint admitted string-ID sets produce distinct keys."""
     cells = _cells('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
     out_pos = evaluate(_bridge_positive_x_a, cells)
     out_neg = evaluate(_bridge_negative_x, cells)

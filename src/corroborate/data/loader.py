@@ -288,16 +288,15 @@ def config_columns(root: Path | str) -> frozenset[str]:
     """The configuration leaves of a run directory: the union of
     dotted-path column names its resolved-config files flatten to.
 
-    This is the external record's counterpart of the native
-    substrate's `walk_paths(claim, regime='leaf')` — in both cases
-    the leaf registry is read off an artifact that already exists
-    (the claim composition there, the resolved-config files here),
-    never authored separately. Pass the result to
-    `evaluate(..., leaves=...)` so the admission gates can tell an
-    assigned parameter from a measured column. The registry means
-    "what the producer's record says was configured" — a config
-    file that logs junk registers junk; a zero-authority reader
-    cannot do better than the record."""
+    The names are read from resolved-config files that already exist,
+    never authored as a second manual list. Pass the result to
+    `evaluate(..., leaves=...)` to compare observable configuration
+    values between declared arms within pairing units. The registry
+    means only "what the producer's record says was configured": it
+    cannot witness assignment, randomisation, completeness, producer
+    authenticity, or the absence of hidden confounding. A config file
+    that logs junk registers junk; a zero-authority reader cannot do
+    better than the supplied record."""
     root_path = Path(root)
     runs_path = root_path / 'runs.jsonl'
     if not runs_path.is_file():

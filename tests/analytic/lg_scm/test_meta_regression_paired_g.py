@@ -246,3 +246,27 @@ def test_meta_regression_returns_near_zero_slope_on_irrelevant_covariate() -> No
         f'above 2.5 indicates either a spurious slope or under-'
         f'reported SE.'
     )
+
+
+def test_meta_regression_paired_g_honours_custom_arm_field() -> None:
+    cells: list[Mapping[str, object]] = []
+    for cell in _as_dicts(run_multi_env_paired_arms(
+        envs=_envs_by_mu_x(), seeds=range(_N_PAIRS),
+    )):
+        row = dict(cell)
+        row['contrast_arm'] = row.pop('arm_key')
+        cells.append(row)
+    covariates_per_env: Mapping[str, Mapping[str, float]] = {
+        f'env_mu_{mu:g}': {'mu_x': mu} for mu in _MU_X_GRID
+    }
+    result = meta_regression_paired_g.fn(
+        cells,
+        treatment_arm='treatment',
+        baseline_arm='baseline',
+        arm_field='contrast_arm',
+        pair_by=('seed',),
+        source='y_mean',
+        covariates_per_env=covariates_per_env,
+    )
+    assert result.n_strata == len(_MU_X_GRID)
+    assert [coef.name for coef in result.coefficients] == ['mu_x']

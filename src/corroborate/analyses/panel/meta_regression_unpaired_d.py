@@ -51,6 +51,7 @@ def meta_regression_unpaired_d(
     *,
     treatment_arm: str,
     baseline_arm: str,
+    arm_field: str = 'arm_key',
     source: str,
     covariates_per_key: Mapping[object, Mapping[str, float]] | None = None,
     covariate_key_field: str = 'env_name',
@@ -134,6 +135,7 @@ def meta_regression_unpaired_d(
         source=source,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
+        arm_field=arm_field,
         stratify_by=stratify_by,
         scope_predictor=scope_predictor,
         min_baseline_predictor=min_baseline_predictor,
@@ -146,7 +148,7 @@ def meta_regression_unpaired_d(
     if continuous_covariate is not None:
         bucket: dict[tuple[object, ...], list[float]] = {}
         for c in cells_list:
-            if c.get('arm_key') != continuous_covariate_arm:
+            if c.get(arm_field) != continuous_covariate_arm:
                 continue
             sid = tuple(c.get(k) for k in stratify_by)
             v = c.get(continuous_covariate)

@@ -27,6 +27,7 @@ Sub-modules:
 Consumers `from corroborate.bridge import X`."""
 from corroborate.bridge.admission import (
     AdmissionGate,
+    GateContext,
     GateLevel,
     GateResult,
     contrast_isolation,
@@ -69,6 +70,7 @@ __all__ = [
     'Analysis',
     'Bridge',
     'BridgeEvaluation',
+    'GateContext',
     'GateLevel',
     'GateResult',
     'RefutationClass',

@@ -29,6 +29,7 @@ from corroborate.analyses.paired.arm_mean_diff import (
 )
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge, evaluate
 from corroborate.bridge.verdict import Verdict
+from corroborate.core.intervention import DoEffect
 from corroborate.data import config_columns, load_runs
 
 _BASELINE_ENT = 0.0
@@ -377,8 +378,15 @@ def test_producer_column_shadowing_derived_column_raises(
 # ============ the live-evidence loop, end to end ============
 
 
-@claim_bridge(
+_ENTROPY_COEFFICIENT_EFFECT = DoEffect.from_values(
     source='algorithm.ent_coef',
+    reference=_BASELINE_ENT,
+    treatment=_TREATMENT_ENT,
+)
+
+
+@claim_bridge(
+    source=_ENTROPY_COEFFICIENT_EFFECT,
     target='return_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,

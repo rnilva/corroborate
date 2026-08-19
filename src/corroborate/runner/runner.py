@@ -555,10 +555,11 @@ def run(
     serializes a JSON report at `report_path` (or
     `experiments/findings/<short>.run.json` if None) capturing
     per-bridge verdict + every typed analysis result + admission
-    gates + provenance (timestamp, git commit, measurable
-    signatures). The report is the load-bearing audit artifact —
-    small, diffable, deterministic, committed alongside the
-    bridges that produced it. See `corroborate.runner.report`.
+    gates + execution metadata (timestamp, git commit, measurable
+    signatures). The report is a small, diffable decision record that
+    may be committed alongside the bridges that produced it. It carries
+    no external-evidence identity, provenance attestation, or chronology
+    proof. See `corroborate.runner.report`.
 
     `data` may be:
     - `None`: run on whatever's already in the cache.

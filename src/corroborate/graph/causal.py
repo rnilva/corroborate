@@ -15,13 +15,11 @@ Nodes are measurable / record-key names (strings). Edges are
 - `evidentiary_level: str` — the verdict-derived label
   ('refuted' / 'correlational' / 'causal_one_sided'). Lifecycle
   the bridge is in.
-- `extent_hash` — stable set-identity digest of admitted cell IDs carried
-  from `BridgeEvaluation.extent_hash`. Two edges with the same
-  `(source, target, extent_hash)` were evaluated against identical
-  cell-sets — the cluster-identity primitive. Authors group their
-  refutation clusters by sharing scope predicates (extracted as
-  module-level constants); the framework derives cluster identity
-  empirically rather than from author labels.
+- `extent_hash` — a compact grouping key over the admitted rows'
+  de-duplicated string IDs, carried from
+  `BridgeEvaluation.extent_hash`. It helps find edges that report
+  the same ID set within one dataset namespace; it does not identify
+  row contents, multiplicity, provenance, or chronology.
 
 `compose_direction` and `chain_tier` walk an edge sequence to
 produce path-level direction + tier — chain composition for
@@ -30,13 +28,14 @@ admissibility checks along paths.
 `evaluated_graph(bridges, post_eval)` realizes the principle's
 `evidence(E)` component: take an authored topology and stamp
 each edge with its verdict-derived `evidentiary_level` and the
-per-bridge `extent_hash`. The result IS the principle's
+per-bridge extent grouping key. The result IS the principle's
 "hypothesis = (V, E, evidence(E))". `clusters_by_extent` +
-`cluster_verdict` + `ClusterVerdict` are the cluster-identity
+`cluster_verdict` + `ClusterVerdict` are dataset-relative grouping
 query primitives that operate on the stamped graph.
 
-**No auto-promotion.** Refutation-cluster identity is queryable
-post-evaluation via `(source, target, extent_hash)` grouping.
+**No auto-promotion.** Candidate refutation clusters are queryable
+post-evaluation via `(source, target, extent_hash)` grouping; the
+key is diagnostic metadata, not a scientific identity check.
 Per-bridge `evidentiary_level` carries the Pearl-rung admit
 fact; cluster-level "this edge has multiple INTERVENTIONAL HELD
 bridges sharing an extent" is a structural query authors
@@ -189,19 +188,23 @@ class BridgeEdge:
     cycles. Graph walks use this to break cycle traversal.
 
     `extent_hash` — `stable_extent_hash(admitted_cell_ids)` carried
-    from `BridgeEvaluation.extent_hash`. Two edges with the same
-    `(source, target, extent_hash)` admit identical cell-sets on
-    the cache that produced them — the cluster identity primitive.
-    Empty extent → all empties share `stable_extent_hash(())`, honestly
-    reflecting "framework cannot distinguish these on this cache."
-    Cluster identity is corpus-dependent by design (bridge verdicts
-    already are; cluster identity inherits the dependency)."""
+    from `BridgeEvaluation.extent_hash`. Matching values mean only
+    that the edges reported the same de-duplicated string-ID set in
+    the caller's current ID namespace. Row values and multiplicity
+    are absent, so this is a dataset-relative grouping hint rather
+    than evidence identity, provenance, or an attestation.
+
+    `n_cells_in_scope` — the admitted row count carried independently
+    from `BridgeEvaluation`. Counts, not the ID grouping key, determine
+    whether an evaluated extent is empty. ``-1`` means unevaluated or
+    unavailable."""
     bridge_name: str
     direction: Direction
     tier: Tier
     evidentiary_level: EvidentiaryLevel
     feedback: bool = False
     extent_hash: int = 0
+    n_cells_in_scope: int = -1
 
     @override
     def __str__(self) -> str:
@@ -406,19 +409,23 @@ def authored_graph(
 
 @dataclass(frozen=True, slots=True)
 class PostEvalEntry:
-    """Per-bridge post-evaluation pair: the verdict the bridge's
-    `holds_when` body returned and the `extent_hash` of the
-    admitted cell-set on the cache that produced it.
+    """Per-bridge post-evaluation record: the verdict the bridge's
+    `holds_when` body returned and the compact grouping key over
+    admitted string cell IDs on the dataset that produced it.
 
     Callers construct this from either a `BridgeEvaluation`
-    (`PostEvalEntry(ev.verdict, ev.extent_hash)`) or from a
-    persisted `*.run.json` snapshot. Tightening the
+    (`PostEvalEntry(ev.verdict, ev.extent_hash,
+    ev.n_cells_in_scope)`) or from a
+    persisted `*.run.json` snapshot. `n_cells_in_scope` is carried
+    separately because an empty set of usable string IDs does not prove
+    that the evaluated frame had zero rows. Tightening the
     `evaluated_graph` signature with a typed record keeps the
     shape explicit and survives the addition of a third field
     (e.g. `refutation_class`, `assumption_violations`) without
     breaking callers."""
     verdict: Verdict
     extent_hash: int
+    n_cells_in_scope: int = -1
 
 
 def _stamp_level(tier: Tier, verdict: Verdict) -> EvidentiaryLevel:
@@ -472,16 +479,19 @@ def evaluated_graph(
 
     Build the authored graph topology then stamp each edge's
     `evidentiary_level` (from verdict via `_stamp_level`) and
-    `extent_hash` from the `post_eval` mapping
-    `{bridge_name: PostEvalEntry(verdict, extent_hash)}`.
+    dataset-relative extent grouping key from the `post_eval` mapping
+    `{bridge_name: PostEvalEntry(verdict, extent_hash,
+    n_cells_in_scope)}`.
 
     Bridges absent from `post_eval` keep authored defaults
-    (`evidentiary_level='unevaluated'`, `extent_hash=0`).
+    (`evidentiary_level='unevaluated'`, `extent_hash=0`,
+    `n_cells_in_scope=-1`).
 
     Per docs/HYPOTHESIS_AS_GRAPH.md: the resulting graph IS the
     hypothesis under the principle's definition
-    `Hypothesis = (V, E, evidence(E))`. Cluster-shaped queries
-    on this graph use `clusters_by_extent` + `cluster_verdict`."""
+    `Hypothesis = (V, E, evidence(E))`. Candidate cluster queries
+    on this graph use `clusters_by_extent` + `cluster_verdict`; the
+    grouping key is not evidence identity or an admission check."""
     g = authored_graph(bridges)
     new_edges: list[Edge[str, BridgeEdge]] = []
     for e in g.edges:
@@ -493,12 +503,13 @@ def evaluated_graph(
             e.metadata,
             evidentiary_level=_stamp_level(e.metadata.tier, pe.verdict),
             extent_hash=pe.extent_hash,
+            n_cells_in_scope=pe.n_cells_in_scope,
         )
         new_edges.append(replace(e, metadata=new_meta))
     return replace(g, edges=tuple(new_edges))
 
 
-# ============ Cluster-identity queries ============
+# ============ Dataset-relative extent grouping queries ============
 
 
 class ClusterVerdict(Enum):
@@ -524,6 +535,8 @@ class ClusterVerdict(Enum):
     EMPTY_EXTENT = 'empty_extent'
 
 
+# Compatibility constant for the grouping key produced by an empty
+# string-ID set. It must not be used to infer that a frame has zero rows.
 EMPTY_EXTENT_HASH = stable_extent_hash(())
 
 _ADMIT_LEVELS: frozenset[EvidentiaryLevel] = frozenset(
@@ -536,10 +549,12 @@ def clusters_by_extent(
 ) -> dict[tuple[str, str, int], tuple[BridgeEdge, ...]]:
     """Group every edge in `g` by `(source, target, extent_hash)`.
 
-    Multi-edge groups are refutation clusters (≥2 bridges
-    corroborating the same edge identity); singletons are
-    standalone bridges. Empty-extent edges all share
-    `stable_extent_hash(())` per the cluster-identity invariant."""
+    Multi-edge groups are candidate refutation clusters: their
+    bridges reported the same de-duplicated string-ID set under a
+    shared ID namespace. This does not establish equal row contents,
+    multiplicity, provenance, or chronology. Singletons are standalone
+    bridges. Any rows contributing no usable string IDs share
+    `stable_extent_hash(())`, whether or not the frame itself is empty."""
     buckets: dict[tuple[str, str, int], list[BridgeEdge]] = {}
     for e in g.edges:
         key = (e.source, e.target, e.metadata.extent_hash)
@@ -553,18 +568,23 @@ def cluster_verdict(
     """Compose member edges' evidentiary_level into a cluster
     verdict.
 
-    Empty-extent (all members admit zero cells) is its own
-    bucket — the corpus can't test the cluster. REFUTED if any
-    member refutes. SUPPORTED if every member admits with a
+    Empty-extent (all members explicitly report zero admitted rows) is
+    its own bucket — the corpus can't test the cluster. The row count is
+    authoritative here; the string-ID grouping key is not. REFUTED if
+    any member refutes. SUPPORTED if every member admits with a
     non-empty extent. Otherwise UNDERPOWERED (mix of admits and
     unevaluateds)."""
     if not members:
         return ClusterVerdict.UNDERPOWERED
-    if all(m.extent_hash == EMPTY_EXTENT_HASH for m in members):
+    if all(m.n_cells_in_scope == 0 for m in members):
         return ClusterVerdict.EMPTY_EXTENT
     levels = {m.evidentiary_level for m in members}
     if 'refuted' in levels:
         return ClusterVerdict.REFUTED
+    if any(m.n_cells_in_scope <= 0 for m in members):
+        # A zero-row or unknown-count member cannot corroborate a
+        # composite claim. The all-zero case was classified above.
+        return ClusterVerdict.UNDERPOWERED
     if levels <= _ADMIT_LEVELS:
         return ClusterVerdict.SUPPORTED
     return ClusterVerdict.UNDERPOWERED
@@ -584,9 +604,9 @@ def composed_verdict(
     their evidentiary_levels into a single cluster verdict.
 
     Single helper for cluster- and envelope-shaped Findings —
-    cluster integrity (extent uniformity) is a separate concern
-    surfaced by the `run_hypothesis.py` cluster rollup, not
-    re-checked here.
+    extent-key agreement is a separate diagnostic surfaced by the
+    `run_hypothesis.py` cluster rollup, not re-checked here and not
+    treated as evidence identity.
 
     Len-mismatch (a declared bridge isn't in the graph) raises
     `AssertionError` — the impossible state. In production the

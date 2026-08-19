@@ -108,6 +108,7 @@ def _derive_per_stratum_covariate(
     spec: 'DerivedCovariateSpec | DerivedSpecKernel',
     treatment_arm: str,
     baseline_arm: str,
+    arm_field: str,
     stratify_by: tuple[str, ...],
     key_position: int,
 ) -> Mapping[object, float]:
@@ -164,7 +165,7 @@ def _derive_per_stratum_covariate(
     # per-cell loop. Same semantics as before the kernel landed.
     grouped: dict[object, list[float]] = {}
     for cell in cells:
-        arm = cell.get('arm_key')
+        arm = cell.get(arm_field)
         if not isinstance(arm, str):
             continue
         if spec.arm_filter == 'baseline' and arm != baseline_arm:
@@ -205,6 +206,7 @@ def cross_stratum_property_slope(
     *,
     treatment_arm: str,
     baseline_arm: str,
+    arm_field: str = 'arm_key',
     source: str,
     covariate_name: str,
     covariates_per_key: Mapping[object, Mapping[str, float]] | None = None,
@@ -283,6 +285,7 @@ def cross_stratum_property_slope(
             spec=derived_covariate,
             treatment_arm=treatment_arm,
             baseline_arm=baseline_arm,
+            arm_field=arm_field,
             stratify_by=stratify_by,
             key_position=key_position,
         )
@@ -297,6 +300,7 @@ def cross_stratum_property_slope(
         source=source,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
+        arm_field=arm_field,
         stratify_by=stratify_by,
         scope_predictor=scope_predictor,
         min_baseline_predictor=min_baseline_predictor,

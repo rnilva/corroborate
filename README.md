@@ -117,17 +117,23 @@ gatekeepers.
 
 The claim is an ordinary, data-independent `@claim_bridge`
 module — the same shape as a native bridge, with no external
-special case. `tier=INTERVENTIONAL` on the assigned parameter
-says the contrast was executed (outside the framework); the
-scope pins which values it compares:
+special case. An external contrast uses `DoEffect.from_values`
+to fix its estimand independently of whichever values happen to
+occur in a particular DataFrame:
 
 ```python
-@claim_bridge(
+GAMMA_EFFECT = DoEffect.from_values(
     source='gamma',
+    reference=0.80,
+    treatment=0.99,
+)
+
+@claim_bridge(
+    source=GAMMA_EFFECT,
     target='return_mean',
     tier=Tier.INTERVENTIONAL,
     pair_by=('seed',),
-    scope=pl.col('gamma').is_in([0.80, 0.99]),
+    scope=pl.col('env_id') == 'CartPole-v1',
     predicted_direction='a_gt_b',
     ...
 )
@@ -140,18 +146,32 @@ result = evaluate(
 )
 ```
 
-`leaves` registers which columns were *configuration* — derived
-from the record's own config files, the external counterpart of
-walking a native claim composition; nobody types a list of
-names. Conditions then derive from the source column's scoped
-values — no producer arm labels exist anywhere — and
-study-design quality is checked where the hypothesis layer owns
-it, by admission gates over exactly the cells the claim admits:
-`contrast_present` blocks when the record doesn't vary the
-parameter in scope, `contrast_isolation` blocks (verdict
-`INADMISSIBLE`) when another configuration column moved together
-with it, and `pair_completeness` warns on the verdict record
-when a pairing unit is missing one condition.
+The declared reference and treatment values map to the symbolic
+arm identities `baseline` and `treatment`; their order is never
+inferred from observed support or formatted value labels. Other
+values of `gamma` remain valid rows in the growing record but are
+outside this particular contrast, so the same DataFrame can
+accumulate additional conditions — and other claims — over one
+panel. A joint intervention (values assigned together, or one
+logical setting surfacing as several config fields) declares
+every co-assigned column:
+`DoEffect.from_values(reference={'gamma': 0.80, 'n_step': 1},
+treatment={'gamma': 0.99, 'n_step': 3})`.
+
+`leaves` is the record's configuration registry — which columns
+were *configured* — derived from the record's own config files,
+never hand-listed. It is authoritative about knob-ness, and the
+gates use it both ways: a declared source that is NOT registered
+configuration blocks (a measured column cannot be the assigned
+parameter of an intervention), and a registered leaf that moves
+with the contrast inside a pairing unit blocks as a confound. An
+*unregistered* column moving with the contrast warns on the
+record — a label is harmless, an unlogged knob is not, and only
+the author can say which. What no registry can attest —
+assignment, randomisation, hidden confounding — stays outside
+the framework's claims either way; omit `leaves` and the
+checkable parts are reported unverified rather than silently
+passed.
 
 The record is live: run more seeds, re-load, and the same bridge
 recomputes — batches concatenate with plain `pl.concat`, and a
