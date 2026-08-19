@@ -33,6 +33,9 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
     backdoor_ate as _backdoor_ate_fn,
@@ -151,7 +154,7 @@ def _nan_refutation(
 
 @analysis
 def paired_continuous_do_dowhy(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -184,6 +187,7 @@ def paired_continuous_do_dowhy(
     `backdoor.identified`, `backdoor.ate` against a sign-thresh,
     and `placebo.refuted_ate ≈ 0` / `random_common_cause.drift`
     small for the refutation gates."""
+    cells = as_rows(cells)
     cells_list = list(cells)
     rows = _pair_and_extract(
         cells_list,

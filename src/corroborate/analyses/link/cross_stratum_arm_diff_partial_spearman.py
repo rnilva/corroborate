@@ -49,6 +49,9 @@ from dataclasses import dataclass
 import numpy as np
 import scipy.stats as stats
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.bridge.analysis import analysis
 from corroborate.graph.discovery import partial_spearman_rho
 
@@ -78,7 +81,7 @@ class CrossStratumArmDiffPartialSpearmanResult:
 
 @analysis
 def cross_stratum_arm_diff_partial_spearman(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -103,6 +106,7 @@ def cross_stratum_arm_diff_partial_spearman(
     `graph.discovery.partial_spearman_rho` — rank-transform each
     Δ vector, pairwise Spearman, partial-correlation combination.
     """
+    cells = as_rows(cells)
     per_stratum_arm: dict[
         tuple[object, ...], dict[str, list[Mapping[str, object]]],
     ] = defaultdict(lambda: defaultdict(list))

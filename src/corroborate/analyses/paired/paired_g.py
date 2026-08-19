@@ -30,6 +30,9 @@ import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses._cell_value import key_tuple, resolve_value
 from corroborate.analyses.panel import per_stratum_panel
 from corroborate.bridge.analysis import analysis
@@ -107,7 +110,7 @@ class PairedGResult:
 
 @analysis
 def paired_g(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     source: str,
     treatment_arm: str,
@@ -178,6 +181,7 @@ def paired_g(
     `cliff_delta_paired` (when available) on small-n skewed-Δ
     corpora. `result.assumption_violations` flags inputs that
     cross the empirically-derived skew/kurtosis thresholds."""
+    cells = as_rows(cells)
     from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):

@@ -74,7 +74,7 @@ Reference: see `TAUTOLOGY_AUDIT_DISCIPLINE.md`."""
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 
@@ -216,7 +216,7 @@ def _mcnemar_z_normal(n_01: int, n_10: int) -> float:
 
 @analysis
 def mediator_leak_adjudication(
-    cells: pl.DataFrame,
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     mediator_per_burst: str,
     sibling_per_burst: str | tuple[str, ...],
@@ -250,6 +250,9 @@ def mediator_leak_adjudication(
     where k is the conditioning-set size. Multi-input sibling tests
     consume df fast; ensure `min_n_per_burst` is large enough relative
     to the sibling set size (rule-of-thumb: min_n_per_burst ≥ 8 + k)."""
+    if not isinstance(cells, pl.DataFrame):
+        from corroborate.data.kernel import cells_to_dataframe
+        cells = cells_to_dataframe(cells)
     # Resolve the effective z_genuine.
     if n_strata_for_multiplicity is not None and n_strata_for_multiplicity > 1:
         alpha_corrected = (1 - stats.norm.cdf(z_genuine)) / n_strata_for_multiplicity

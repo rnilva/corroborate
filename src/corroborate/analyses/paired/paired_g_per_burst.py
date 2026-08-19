@@ -30,6 +30,9 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses._cell_value import (
     evaluate_per_burst_source, key_tuple,
 )
@@ -75,7 +78,7 @@ class PerBurstResult:
 
 @analysis
 def paired_g_per_burst(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -118,6 +121,7 @@ def paired_g_per_burst(
     - `'raise'` errors loudly on duplicates AND reports which
       columns differ between them so the bridge author tightens
       scope (extend `pair_by`) or explicitly opts into `'mean'`."""
+    cells = as_rows(cells)
     from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):

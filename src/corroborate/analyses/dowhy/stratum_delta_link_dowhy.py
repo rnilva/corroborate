@@ -34,6 +34,9 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses._dowhy_internal import backdoor_with_refutations
 from corroborate.analyses.dowhy import (
     BackdoorResult,
@@ -211,7 +214,7 @@ def _nan_refutation(
 
 @analysis
 def stratum_delta_link_dowhy(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -238,6 +241,7 @@ def stratum_delta_link_dowhy(
 
     Empty panel (no env survives filter, no paired strata, or all
     strata fail mech filter) yields a NaN-everywhere result."""
+    cells = as_rows(cells)
     cells_list = list(cells)
     rows, dag, treatment_col, outcome_col = _build_stratum_panel(
         cells_list,

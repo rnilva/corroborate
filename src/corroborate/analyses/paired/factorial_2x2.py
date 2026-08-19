@@ -25,6 +25,9 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+import polars as pl
+
+from corroborate._internals.polars import as_rows
 from corroborate.analyses._cell_value import resolve_value
 from corroborate.bridge.analysis import analysis
 from corroborate.stats import hedges_g_paired
@@ -84,7 +87,7 @@ def _g_paired_from_two_arms(
 
 @analysis
 def factorial_2x2_interaction(
-    cells: Iterable[Mapping[str, object]],
+    cells: pl.DataFrame | Iterable[Mapping[str, object]],
     *,
     arm_a: str,
     arm_b: str,
@@ -117,6 +120,7 @@ def factorial_2x2_interaction(
     primitive silently overwrote duplicates via dict assignment;
     `'raise'` is the safer choice when the corpus is supposed to
     have one cell per `(env, arm, seed)`."""
+    cells = as_rows(cells)
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
             f'factorial_2x2_interaction: unknown dedupe_strategy '
