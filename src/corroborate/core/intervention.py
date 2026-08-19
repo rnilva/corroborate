@@ -259,7 +259,13 @@ def _require_value_source(value: object) -> str:
 def _require_arm_value(value: object, role: str) -> AssignedValue:
     """Validate one declared arm value: supported scalar, not
     NaN-like (a non-reflexive value could never be matched by
-    equality)."""
+    equality).
+
+    The value is normalised to the exact built-in scalar type
+    (`StrEnum` → `str`, `IntEnum` → `int`, ...): declaration
+    equality, row classification, `repr`, and `node_key()` must
+    all use one identity relation, and a subclass with overridden
+    representations would otherwise split them."""
     if not _is_assigned_value(value):
         raise TypeError(
             f'DoEffect {role} must be a string, integer, float, '
@@ -269,7 +275,13 @@ def _require_arm_value(value: object, role: str) -> AssignedValue:
         raise ValueError(
             f'DoEffect {role} value must not be NaN-like.',
         )
-    return value
+    if isinstance(value, bool):
+        return value  # bool is final; no subclass can reach here
+    if isinstance(value, str):
+        return str(value)
+    if isinstance(value, int):
+        return int(value)
+    return float(value)
 
 
 @dataclass(frozen=True, slots=True)

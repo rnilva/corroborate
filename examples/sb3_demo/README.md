@@ -47,16 +47,21 @@ uv run --with 'stable-baselines3>=2.3' examples/sb3_demo/analyze.py
 per run. Configuration comes from each checkpoint's own `data`
 record — `model.save()` dumps the algorithm's resolved state, and
 intersecting it with the DQN constructor's signature separates
-what was *configured* (`gamma`, `buffer_size`, `seed`, …) from
-runtime state (`num_timesteps`, the decayed `exploration_rate`).
-Evaluations come from `evaluations.npz`, aggregated per
-checkpoint into `return_mean`, `return_auc`, and one
-`return_mean_at_<step>` column each. The checkpoint doesn't
+what was *configured* (`gamma`, `buffer_size`, `seed`, …; entries
+SB3 could not JSON-encode, like `train_freq`, are kept as opaque
+but equality-comparable strings) from runtime state
+(`num_timesteps`, the decayed `exploration_rate`). Evaluations
+come from `evaluations.npz`, aggregated into `return_mean` at the
+record-wide terminal evaluation point (null for a run not
+evaluated there — never silently rebased to an earlier horizon,
+with `return_terminal_n`/`_attempted` recording what it stands
+on), `return_auc` for runs covering the full grid, and one
+`return_mean_at_<step>` column per point. The checkpoint doesn't
 record which environment it trained on, so the analyst states
 that known context in plain polars (`with_columns`).
 
 ```text
-loaded: 6 runs × 26 columns
+loaded: 6 runs × 30 columns
 ┌─────────────┬──────┬───────┬─────────────┐
 │ id          ┆ seed ┆ gamma ┆ return_mean │
 ╞═════════════╪══════╪═══════╪═════════════╡

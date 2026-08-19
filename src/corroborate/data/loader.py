@@ -24,12 +24,16 @@ Directory layout (only ``runs.jsonl`` is required)::
       provenance.json      optional; ``producer`` becomes the
                            ``program`` column
 
-From the evaluation records the loader derives, per run and per
-outcome field, the final-checkpoint mean (``<outcome>_mean``), a
-checkpoint-normalised area under the curve (``<outcome>_auc``),
-and the trajectory as one scalar column per checkpoint
-(``<outcome>_mean_at_<checkpoint>``) — means taken over whatever
-evaluation seeds were logged at that checkpoint.
+From the evaluation records the loader derives, per outcome
+field: the mean at the RECORD-WIDE terminal checkpoint
+(``<outcome>_mean`` — null for a run not evaluated there, never
+silently rebased to an earlier horizon), the finite/attempted
+sample counts behind it (``<outcome>_terminal_n`` /
+``<outcome>_terminal_attempted``), a checkpoint-normalised area
+under the curve (``<outcome>_auc``, derived only for runs
+covering the record-wide grid), and the trajectory as one scalar
+column per checkpoint (``<outcome>_mean_at_<checkpoint>``) —
+means taken over the finite samples logged at that checkpoint.
 
 Malformed structure raises a plain ``ValueError`` (duplicate run
 ids, duplicate evaluation records, evaluations for unknown runs,
@@ -39,6 +43,7 @@ merely reads.
 """
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Mapping
 from pathlib import Path
@@ -81,21 +86,42 @@ def _flatten_config(
     config: Mapping[str, object],
     *,
     prefix: str = '',
+    _flat: dict[str, MeasurementLeaf] | None = None,
 ) -> dict[str, MeasurementLeaf]:
-    """Nested configuration mapping → dotted-path scalar leaves.
+    """Nested configuration mapping → dotted-path leaves.
 
-    Non-scalar leaves (arrays, nulls) have no scalar-column shape
-    and are skipped; the resolved config file remains the complete
-    record."""
-    flat: dict[str, MeasurementLeaf] = {}
+    Scalars pass through; array-valued leaves (`net_arch: [64, 64]`)
+    are encoded as canonical JSON strings so a structured
+    configuration difference between arms stays visible to the
+    isolation gate rather than silently vanishing — the registry
+    must not be a lossy projection of what was configured. Null
+    leaves are skipped: an absent column and a stored null read
+    identically (`row.get -> None`), so nothing observable is lost.
+
+    Dotted paths are not injective (`{'a': {'b': 1}, 'a.b': 2}`
+    collide), so a duplicate flattened path is rejected rather
+    than silently overwritten."""
+    flat: dict[str, MeasurementLeaf] = {} if _flat is None else _flat
     for key, value in config.items():
         path = f'{prefix}{key}'
         if isinstance(value, Mapping):
             # Runtime invariant: json.loads mapping keys are str.
             nested = {str(k): v for k, v in value.items()}
-            flat.update(_flatten_config(nested, prefix=f'{path}.'))
-        elif _is_scalar(value):
+            _flatten_config(nested, prefix=f'{path}.', _flat=flat)
+            continue
+        if value is None:
+            continue
+        if path in flat:
+            raise ValueError(
+                f'configuration flattens two entries to the same '
+                f'path {path!r} — dotted keys collide with nesting',
+            )
+        if _is_scalar(value):
             flat[path] = value
+        else:
+            # Array-valued configuration: canonical JSON keeps the
+            # difference observable and equality-comparable.
+            flat[path] = json.dumps(value, sort_keys=True)
     return flat
 
 
@@ -163,30 +189,90 @@ def _read_evaluations(
     return by_run
 
 
+def _outcome_globals(
+    evaluations: Mapping[str, Mapping[int, Mapping[str, list[float]]]],
+) -> tuple[dict[str, int], dict[str, frozenset[int]]]:
+    """Per outcome, the record-wide terminal checkpoint (the
+    largest at which ANY run evaluated it) and the record-wide
+    checkpoint grid. The terminal defines what `<outcome>_mean`
+    MEANS for every row — one horizon, not "whatever this run
+    reached"."""
+    grids: dict[str, set[int]] = {}
+    for per_checkpoint in evaluations.values():
+        for checkpoint, outcomes in per_checkpoint.items():
+            for name in outcomes:
+                grids.setdefault(name, set()).add(checkpoint)
+    return (
+        {name: max(grid) for name, grid in grids.items()},
+        {name: frozenset(grid) for name, grid in grids.items()},
+    )
+
+
 def _derive_outcomes(
     row: dict[str, MeasurementLeaf],
     per_checkpoint: Mapping[int, Mapping[str, list[float]]],
     *,
     run_id: str,
+    terminal_by_outcome: Mapping[str, int],
+    grid_by_outcome: Mapping[str, frozenset[int]],
 ) -> None:
+    """Derived outcome columns, comparable by construction.
+
+    `<outcome>_mean` is the finite-sample mean AT THE RECORD-WIDE
+    TERMINAL CHECKPOINT — a run not evaluated there (or with no
+    finite sample there) gets null, never a silent rebase to an
+    earlier horizon: two arms evaluated to different training
+    budgets must not manufacture an effect through the terminal
+    summary. `<outcome>_terminal_n` / `<outcome>_terminal_attempted`
+    retain how many finite samples the terminal mean stands on and
+    how many evaluations were attempted there. `<outcome>_auc` is
+    derived only when the run covers the record-wide grid with
+    finite means (partial-horizon areas are not comparable).
+    `<outcome>_mean_at_<checkpoint>` stays per-run and null-pads —
+    the explicit-horizon surface for claims at a chosen budget."""
     checkpoints = tuple(sorted(per_checkpoint))
     outcome_names = sorted(
         {name for samples in per_checkpoint.values() for name in samples},
     )
     for outcome in outcome_names:
-        grid = tuple(
-            cp for cp in checkpoints if outcome in per_checkpoint[cp]
-        )
-        means = tuple(
-            math.fsum(per_checkpoint[cp][outcome])
-            / len(per_checkpoint[cp][outcome])
-            for cp in grid
-        )
-        _put(row, f'{outcome}_mean', means[-1], run_id=run_id)
+        grid: list[int] = []
+        means: list[float] = []
+        for checkpoint in checkpoints:
+            if outcome not in per_checkpoint[checkpoint]:
+                continue
+            finite = [
+                s for s in per_checkpoint[checkpoint][outcome]
+                if math.isfinite(s)
+            ]
+            if not finite:
+                continue
+            grid.append(checkpoint)
+            means.append(math.fsum(finite) / len(finite))
+        terminal = terminal_by_outcome[outcome]
+        terminal_samples = per_checkpoint.get(terminal, {}).get(outcome, [])
+        terminal_finite = [
+            s for s in terminal_samples if math.isfinite(s)
+        ]
         _put(
-            row, f'{outcome}_auc', _normalised_auc(grid, means),
+            row, f'{outcome}_terminal_attempted', len(terminal_samples),
             run_id=run_id,
         )
+        _put(
+            row, f'{outcome}_terminal_n', len(terminal_finite),
+            run_id=run_id,
+        )
+        if terminal_finite:
+            _put(
+                row, f'{outcome}_mean',
+                math.fsum(terminal_finite) / len(terminal_finite),
+                run_id=run_id,
+            )
+        if grid and frozenset(grid) == grid_by_outcome[outcome]:
+            _put(
+                row, f'{outcome}_auc',
+                _normalised_auc(tuple(grid), tuple(means)),
+                run_id=run_id,
+            )
         # The trajectory as flat checkpoint-keyed scalar columns —
         # null-padded on diagonal concat across run sets with
         # different checkpoint grids.
@@ -228,6 +314,7 @@ def load_runs(
                 program = producer
 
     evaluations = _read_evaluations(root_path)
+    terminal_by_outcome, grid_by_outcome = _outcome_globals(evaluations)
 
     rows: list[dict[str, MeasurementLeaf]] = []
     seen_run_ids: set[str] = set()
@@ -272,7 +359,11 @@ def load_runs(
                 _put(row, key, value, run_id=run_id)
         per_checkpoint = evaluations.pop(run_id, None)
         if per_checkpoint is not None:
-            _derive_outcomes(row, per_checkpoint, run_id=run_id)
+            _derive_outcomes(
+                row, per_checkpoint, run_id=run_id,
+                terminal_by_outcome=terminal_by_outcome,
+                grid_by_outcome=grid_by_outcome,
+            )
         rows.append(row)
 
     if evaluations:

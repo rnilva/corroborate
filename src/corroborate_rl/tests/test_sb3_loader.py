@@ -57,9 +57,10 @@ class _FakeDQN:
         gamma: float = 0.99,
         seed: int | None = None,
         policy_kwargs: dict[str, object] | None = None,
+        train_freq: object = None,
     ) -> None:
         del policy, env, learning_rate, buffer_size, gamma, seed
-        del policy_kwargs
+        del policy_kwargs, train_freq
 
 
 def _write_checkpoint(path: Path, *, gamma: float, seed: int) -> None:
@@ -72,6 +73,9 @@ def _write_checkpoint(path: Path, *, gamma: float, seed: int) -> None:
         'buffer_size': 5_000,
         'seed': seed,
         'policy_kwargs': {'activation': 'tanh'},
+        # A constructor param SB3 could not JSON-encode — kept as
+        # its opaque serialised payload so differences stay visible:
+        'train_freq': {':serialized:': 'freq-blob'},
         # Runtime state — real state resumption needs, never leaves:
         'num_timesteps': 25_000,
         'exploration_rate': 0.05,
@@ -124,6 +128,7 @@ def test_checkpoint_config_intersects_constructor_signature(
         'buffer_size': 5_000,
         'seed': 7,
         'policy_kwargs': {'activation': 'tanh'},
+        'train_freq': 'freq-blob',
     }
 
 
@@ -154,7 +159,7 @@ def test_sb3_config_columns_registry(tmp_path: Path) -> None:
     _make_sb3_runs(tmp_path)
     assert sb3_config_columns(tmp_path, _FakeDQN) == frozenset({
         'gamma', 'learning_rate', 'buffer_size', 'seed',
-        'policy_kwargs.activation',
+        'policy_kwargs.activation', 'train_freq',
     })
 
 
@@ -301,3 +306,68 @@ def test_pooling_sb3_batches_is_plain_concat(tmp_path: Path) -> None:
     assert isinstance(result, ArmMeanDiffResult)
     assert result.n_treatment == 4
     assert result.n_baseline == 4
+
+
+def test_ambiguous_checkpoint_series_requires_explicit_selection(
+    tmp_path: Path,
+) -> None:
+    """A `CheckpointCallback` series without model.zip/best_model.zip
+    is ambiguous — lexicographic order would bind the claim to an
+    arbitrary training budget (10000 sorts before 5000). Selection
+    must be deliberate."""
+    run_dir = tmp_path / 'run-a'
+    for steps in (5_000, 10_000, 20_000):
+        _write_checkpoint(
+            run_dir / f'rl_model_{steps}_steps.zip', gamma=0.9, seed=0,
+        )
+    with pytest.raises(ValueError, match='checkpoint='):
+        load_sb3_runs(tmp_path, _FakeDQN)
+
+    df = load_sb3_runs(
+        tmp_path, _FakeDQN, checkpoint='rl_model_20000_steps.zip',
+    )
+    assert df.height == 1
+    assert 'gamma' in df.columns
+
+
+def test_non_finite_terminal_episodes_stay_visible(tmp_path: Path) -> None:
+    """A NaN terminal episode shrinks the finite count rather than
+    silently averaging survivors; an all-NaN terminal leaves the
+    terminal mean null instead of rebasing to an earlier
+    checkpoint — with the attempted count retaining that the
+    evaluation was tried."""
+    partial = tmp_path / 'partial' / 'run-a'
+    _write_checkpoint(partial / 'model.zip', gamma=0.9, seed=0)
+    np.savez(
+        partial / 'evaluations.npz',
+        timesteps=np.array(_CHECKPOINTS, dtype=np.int64),
+        results=np.array(
+            [[1.0, 2.0], [3.0, float('nan')]], dtype=np.float64,
+        ),
+    )
+    row = load_sb3_runs(tmp_path / 'partial', _FakeDQN).to_dicts()[0]
+    assert row['return_mean'] == 3.0
+    assert row['return_terminal_n'] == 1
+    assert row['return_terminal_attempted'] == 2
+    # Partial-finite grids no longer qualify for a comparable AUC
+    # only when a checkpoint drops out entirely; here both
+    # checkpoints retain finite means.
+    assert row['return_auc'] is not None
+
+    failed = tmp_path / 'failed' / 'run-a'
+    _write_checkpoint(failed / 'model.zip', gamma=0.9, seed=0)
+    np.savez(
+        failed / 'evaluations.npz',
+        timesteps=np.array(_CHECKPOINTS, dtype=np.int64),
+        results=np.array(
+            [[1.0, 2.0], [float('nan'), float('nan')]], dtype=np.float64,
+        ),
+    )
+    row = load_sb3_runs(tmp_path / 'failed', _FakeDQN).to_dicts()[0]
+    # Sole run in the frame: the never-derived terminal column is
+    # absent outright (a multi-run frame null-pads it instead).
+    assert row.get('return_mean') is None
+    assert row['return_terminal_n'] == 0
+    assert row['return_terminal_attempted'] == 2
+    assert row.get('return_auc') is None
+    assert row['return_mean_at_10'] == 1.5

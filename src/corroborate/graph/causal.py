@@ -197,7 +197,16 @@ class BridgeEdge:
     `n_cells_in_scope` — the admitted row count carried independently
     from `BridgeEvaluation`. Counts, not the ID grouping key, determine
     whether an evaluated extent is empty. ``-1`` means unevaluated or
-    unavailable."""
+    unavailable.
+
+    `external_effect` — True when the edge's do-node is a
+    value-based `DoEffect` classifying externally-produced rows,
+    False for a structural intervention the framework executed
+    itself. Both may carry `Tier.INTERVENTIONAL` (the tier is the
+    author's declared interpretation), but an external effect's
+    assignment is author-asserted rather than executed — the flag
+    keeps the two machine-distinguishable in every graph and
+    report consumer."""
     bridge_name: str
     direction: Direction
     tier: Tier
@@ -205,6 +214,7 @@ class BridgeEdge:
     feedback: bool = False
     extent_hash: int = 0
     n_cells_in_scope: int = -1
+    external_effect: bool = False
 
     @override
     def __str__(self) -> str:
@@ -388,9 +398,11 @@ def authored_graph(
     from corroborate.core.intervention import DoEffect
     g: CausalGraph = Graph()
     for b in bridges:
+        external_effect = False
         if isinstance(b.source, DoEffect):
             source_key = b.source.node_key()
             tier = Tier.INTERVENTIONAL
+            external_effect = b.source.is_value_based
         else:
             source_key = b.source_name
             tier = b.tier
@@ -399,6 +411,7 @@ def authored_graph(
             direction=b.direction,
             tier=tier,
             evidentiary_level='unevaluated',
+            external_effect=external_effect,
         )
         g = g.with_edge(source_key, b.target_name, edge)
     return g

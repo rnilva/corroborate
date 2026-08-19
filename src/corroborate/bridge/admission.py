@@ -686,8 +686,13 @@ def contrast_isolation(
     if not isinstance(effect, DoEffect):
         return None
     declared = frozenset(effect.value_source_names or ())
+    # The bridge's target is the outcome under test — a treatment
+    # effect on it is the hypothesis, not a confound; it must
+    # never be reported as a rider (deterministic effects would
+    # trip the constancy scan).
     ignore = {
         CONTRAST_ARM_FIELD, *declared, 'id', *bridge.pair_by,
+        bridge.target_name,
     }
     expected = frozenset(effect.arm_keys())
     by_arm: dict[str, list[Mapping[str, object]]] = {}

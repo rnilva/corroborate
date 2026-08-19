@@ -440,3 +440,41 @@ def test_walk_scope_rejects_deferred_scope() -> None:
     import pytest
     with pytest.raises(TypeError, match='deferred-scope'):
         walk_scope((stub,))
+
+
+def test_external_value_effects_stay_distinguishable_in_the_graph() -> None:
+    """Both effects carry Tier.INTERVENTIONAL — the tier is the
+    author's declared interpretation — but a value-based effect's
+    assignment is author-asserted, not framework-executed, and the
+    edge keeps that fact machine-readable."""
+    from corroborate.analyses.paired.paired_g import PairedGResult
+    from corroborate.core.claim import claim as claim_decorator
+    from corroborate.core.intervention import (
+        DoEffect, Intervention,
+    )
+    from corroborate.graph.causal import authored_graph
+
+    @claim_decorator
+    def _swap_op(x: int) -> int:
+        return x
+
+    structural = DoEffect(
+        arms=((), (Intervention(slot_path='op', replacement=_swap_op),)),
+    )
+    declared = DoEffect.from_values(
+        source='gamma', reference=0.8, treatment=0.99,
+    )
+
+    @claim_bridge(source=structural, target='outcome')
+    def _executed(paired_g: PairedGResult) -> Verdict:
+        return Verdict.HELD
+
+    @claim_bridge(source=declared, target='outcome')
+    def _asserted(paired_g: PairedGResult) -> Verdict:
+        return Verdict.HELD
+
+    g = authored_graph((_executed, _asserted))
+    by_name = {e.metadata.bridge_name: e.metadata for e in g.edges}
+    assert by_name['_executed'].external_effect is False
+    assert by_name['_asserted'].external_effect is True
+    assert by_name['_executed'].tier is by_name['_asserted'].tier

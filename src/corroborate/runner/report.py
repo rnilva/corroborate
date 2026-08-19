@@ -50,6 +50,7 @@ import numpy as np
 import polars as pl
 
 from corroborate.bridge.bridge import Bridge, BridgeEvaluation
+from corroborate.core.intervention import DoEffect
 from corroborate.measurables.measurable import Measurable
 
 
@@ -90,6 +91,10 @@ class BridgeReportEntry:
     refutation_class: str | None = None
     assumption_violations: tuple[str, ...] = ()
     extent_hash: int = 0
+    # True for a value-based DoEffect over externally-produced rows:
+    # the tier is author-asserted, not framework-executed. Keeps
+    # external effects machine-distinguishable in persisted reports.
+    external_effect: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,6 +416,10 @@ def _build_bridge_entry(
         ),
         assumption_violations=evaluation.assumption_violations,
         extent_hash=evaluation.extent_hash,
+        external_effect=(
+            isinstance(bridge.source, DoEffect)
+            and bridge.source.is_value_based
+        ),
     )
 
 

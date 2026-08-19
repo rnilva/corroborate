@@ -217,11 +217,16 @@ def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
         assert row['return_mean_at_20'] == row['return_mean']
 
 
-def test_ragged_checkpoint_grids_null_pad(tmp_path: Path) -> None:
-    """Runs evaluated on different checkpoint grids load without a
-    declared uniform extent: each run's aggregates are computed
-    over its own grid, and absent trajectory cells are null — the
-    loader holds no authority over what the extent should be."""
+def test_ragged_grids_never_rebase_the_terminal_summary(
+    tmp_path: Path,
+) -> None:
+    """`<outcome>_mean` means ONE horizon — the record-wide
+    terminal checkpoint. A run not evaluated there gets null (its
+    trajectory columns remain), never a silent rebase to its own
+    last checkpoint: two arms evaluated to different training
+    budgets must not manufacture an effect through the terminal
+    summary. Partial-horizon AUC is likewise not comparable and
+    stays null."""
     _make_runs(
         tmp_path,
         checkpoints_by_arm={
@@ -236,14 +241,122 @@ def test_ragged_checkpoint_grids_null_pad(tmp_path: Path) -> None:
             assert row['return_mean'] == _expected_return_mean(
                 base=_BASELINE_BASE, pair_key=pair_key,
             )
+            assert row['return_terminal_n'] == len(_EVAL_SEEDS)
+            assert row['return_auc'] is not None
             assert row['return_mean_at_20'] is not None
         else:
-            # Final checkpoint of the shorter grid IS checkpoint 10.
-            assert row['return_mean'] == _expected_return_mean_at(
+            # Not evaluated at the record-wide terminal (20):
+            # missing stays missing.
+            assert row['return_mean'] is None
+            assert row['return_terminal_n'] == 0
+            assert row['return_terminal_attempted'] == 0
+            assert row['return_auc'] is None
+            assert row['return_mean_at_20'] is None
+            assert row['return_mean_at_10'] == _expected_return_mean_at(
                 base=_TREATMENT_BASE, checkpoint=10, pair_key=pair_key,
             )
-            assert row['return_auc'] == row['return_mean']
-            assert row['return_mean_at_20'] is None
+
+
+def test_identical_curves_at_different_horizons_yield_no_effect(
+    tmp_path: Path,
+) -> None:
+    """The review's counterexample: one learning curve, reference
+    arm evaluated only at step 10, treatment arm only at step 20.
+    Under per-run terminal summaries this produced a clean HELD
+    from pure horizon difference; under the record-wide terminal
+    the reference rows are null at the terminal and the claim
+    cannot manufacture an effect."""
+    root = tmp_path
+    (root / 'configs').mkdir()
+    runs: list[dict[str, object]] = []
+    evaluations: list[dict[str, object]] = []
+    for seed in (0, 1):
+        for ent, checkpoint in (
+            (_BASELINE_ENT, 10), (_TREATMENT_ENT, 20),
+        ):
+            run_id = f'ent-{ent:g}-s{seed}'
+            _write_json(
+                root / f'configs/{run_id}.json',
+                {'algorithm': {'ent_coef': ent}, 'training': {'seed': seed}},
+            )
+            runs.append({
+                'run_id': run_id, 'config_path': f'configs/{run_id}.json',
+            })
+            # One shared curve: return = checkpoint + seed. No
+            # treatment effect exists at any common horizon.
+            evaluations.append({
+                'run_id': run_id, 'checkpoint': checkpoint,
+                'eval_seed': 0, 'return': float(checkpoint + seed),
+            })
+    _write_jsonl(root / 'runs.jsonl', runs)
+    _write_jsonl(root / 'evaluations.jsonl', evaluations)
+
+    df = load_runs(root)
+    baseline_terminal = df.filter(
+        pl.col('algorithm.ent_coef') == _BASELINE_ENT,
+    )['return_mean'].to_list()
+    assert baseline_terminal == [None, None]
+
+    evaluation = evaluate(
+        _entropy_bonus_improves_return,
+        df,
+        leaves=config_columns(root),
+    )
+    assert evaluation.verdict is not Verdict.HELD
+
+
+def test_non_finite_terminal_stays_missing(tmp_path: Path) -> None:
+    """A NaN terminal evaluation is a failed measurement, not an
+    invitation to rebase: the finite count drops, and when no
+    finite terminal sample exists the mean is null while the
+    attempted count records that evaluation was tried."""
+    _make_runs(tmp_path, training_seeds=(7,))
+    evaluations_path = tmp_path / 'evaluations.jsonl'
+    rows = [
+        json.loads(line)
+        for line in evaluations_path.read_text(encoding='utf-8').splitlines()
+        if line.strip()
+    ]
+    baseline_id = f'seed-0007__ent-{_BASELINE_ENT:g}'
+    for row in rows:
+        if row['run_id'] == baseline_id and row['checkpoint'] == 20:
+            row['return'] = float('nan')
+    _write_jsonl(evaluations_path, rows)
+
+    df = load_runs(tmp_path)
+    baseline = df.filter(pl.col('id') == baseline_id).to_dicts()[0]
+    assert baseline['return_mean'] is None
+    assert baseline['return_terminal_n'] == 0
+    assert baseline['return_terminal_attempted'] == len(_EVAL_SEEDS)
+    assert baseline['return_auc'] is None
+    treatment = df.filter(pl.col('id') != baseline_id).to_dicts()[0]
+    assert treatment['return_terminal_n'] == len(_EVAL_SEEDS)
+    assert treatment['return_mean'] is not None
+
+
+def test_config_flattening_is_injective_and_keeps_arrays(
+    tmp_path: Path,
+) -> None:
+    """Structured configuration must stay visible: array leaves
+    encode as canonical JSON (an architecture difference between
+    arms cannot vanish from the frame or the registry), and
+    colliding dotted paths are rejected rather than silently
+    overwritten."""
+    _make_runs(
+        tmp_path,
+        extra_config_fields={'policy_kwargs': {'net_arch': [64, 64]}},
+    )
+    df = load_runs(tmp_path)
+    assert df['policy_kwargs.net_arch'].unique().to_list() == ['[64, 64]']
+    assert 'policy_kwargs.net_arch' in config_columns(tmp_path)
+
+    colliding = tmp_path / 'colliding'
+    _make_runs(
+        colliding,
+        extra_config_fields={'algorithm.name': 'shadow'},
+    )
+    with pytest.raises(ValueError, match='same path'):
+        load_runs(colliding)
 
 
 def test_non_numeric_evaluation_fields_are_not_outcomes(

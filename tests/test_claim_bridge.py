@@ -1238,3 +1238,62 @@ def test_every_registered_analysis_accepts_the_cells_union() -> None:
         'analyses whose cells parameter does not declare the '
         f'canonical union: {offenders}'
     )
+
+
+def test_deterministic_outcome_is_never_reported_as_a_rider() -> None:
+    """A zero-variance treatment effect makes the target constant
+    within each arm — the constancy scan's signature. The outcome
+    under test is the hypothesis, not a confound; it is excluded
+    from isolation diagnostics."""
+    cells: list[dict[str, object]] = []
+    for seed in range(4):
+        cells.append({'id': f'a{seed}', 'seed': seed, 'gamma': 0.8,
+                      'return_mean': 5.0})
+        cells.append({'id': f'b{seed}', 'seed': seed, 'gamma': 0.99,
+                      'return_mean': 9.0})
+    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    assert out.verdict is Verdict.HELD
+    assert all(
+        'return_mean' not in w.message
+        for w in out.warnings
+        if w.gate_name == 'contrast_isolation'
+    )
+    assert out.warnings == ()
+
+
+def test_unpaired_value_effect_evaluates_independent_arms() -> None:
+    """`pair_by=()` declares an independent-samples design, not a
+    malformed paired one: pair completeness doesn't apply, and the
+    balance check compares whole arms as the single unit."""
+    from corroborate.analyses.paired.arm_mean_diff import (
+        ArmMeanDiffResult,
+    )
+
+    @claim_bridge(
+        source=GAMMA_EFFECT,
+        target='return_mean',
+        direction=Direction.DIRECT,
+        tier=Tier.INTERVENTIONAL,
+        pair_by=(),
+        predicted_direction='a_gt_b',
+    )
+    def _unpaired(arm_mean_diff: ArmMeanDiffResult) -> Verdict:
+        return Verdict.HELD if arm_mean_diff.mean_diff > 0 else (
+            Verdict.NO_EFFECT
+        )
+
+    cells: list[dict[str, object]] = []
+    for i in range(6):
+        cells.append({'id': f'r{i}', 'gamma': 0.8,
+                      'return_mean': float(i)})
+        cells.append({'id': f't{i}', 'gamma': 0.99,
+                      'return_mean': 10.0 + i})
+    out = evaluate(_unpaired, cells, leaves=_LEAVES)
+    assert out.verdict is Verdict.HELD
+    assert out.blocked_by is None
+    assert all(
+        w.gate_name != 'pair_completeness' for w in out.warnings
+    )
+    result = cast(ArmMeanDiffResult, out.analysis_results['arm_mean_diff'])
+    assert result.n_treatment == 6
+    assert result.n_baseline == 6
