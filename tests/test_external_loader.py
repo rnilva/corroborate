@@ -571,6 +571,50 @@ def test_batches_of_the_same_study_pool(tmp_path: Path) -> None:
     assert result.mean_diff == _TREATMENT_BASE - _BASELINE_BASE
 
 
+def test_pooling_batches_with_different_horizons_refuses(
+    tmp_path: Path,
+) -> None:
+    """Each load derives `<o>_mean` at ITS OWN record's terminal
+    checkpoint; pooling batches whose terminals differ would put
+    means at different training budgets in one column — the
+    horizon artifact the record-wide-terminal rule blocks within
+    one load, reintroduced through pooling. `concat_panels`
+    refuses, pointing at the fix (one loader call over the
+    combined record)."""
+    from corroborate.data import concat_panels
+
+    _make_runs(tmp_path / 'batch_a', training_seeds=(7,))
+    _make_runs(
+        tmp_path / 'batch_b', training_seeds=(9,),
+        checkpoints_by_arm={
+            _BASELINE_ENT: (10, 20, 40),
+            _TREATMENT_ENT: (10, 20, 40),
+        },
+    )
+    with pytest.raises(ValueError, match='record-wide terminal'):
+        concat_panels([
+            load_runs(tmp_path / 'batch_a'),
+            load_runs(tmp_path / 'batch_b'),
+        ])
+
+
+def test_put_column_tolerates_agreeing_nan_stamps() -> None:
+    """A producer stamping the same unset float (NaN) on both the
+    run record and the configuration is exactly the duplicate-
+    stamp case the collision tolerance exists for; `NaN != NaN`
+    must not turn agreement into a phantom conflict — while a
+    real disagreement still raises."""
+    from corroborate.data.derive import put_column
+
+    row: dict[str, str | int | float | bool] = {}
+    put_column(row, 'lr', float('nan'), run_id='r0')
+    put_column(row, 'lr', float('nan'), run_id='r0')
+    value = row['lr']
+    assert isinstance(value, float) and math.isnan(value)
+    with pytest.raises(ValueError, match='conflicting values'):
+        put_column(row, 'lr', 1.0, run_id='r0')
+
+
 def test_loaded_frame_agrees_with_dict_rows_through_an_analysis(
     tmp_path: Path,
 ) -> None:

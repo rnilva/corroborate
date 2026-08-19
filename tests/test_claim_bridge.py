@@ -1261,6 +1261,31 @@ def test_deterministic_outcome_is_never_reported_as_a_rider() -> None:
     assert out.warnings == ()
 
 
+def test_derived_outcome_family_is_never_reported_as_riders() -> None:
+    """The target's derived siblings (`return_auc`,
+    `return_mean_at_<cp>`, terminal counts) re-express the one
+    outcome under test. A deterministic effect makes them all
+    per-arm constant — the rider signature — but they are exempt
+    with the target: surfacing them would advise 'register it as
+    a configuration leaf', and following that advice would flip a
+    valid verdict to INADMISSIBLE via the balance check."""
+    cells: list[dict[str, object]] = []
+    for seed in range(4):
+        for arm, gamma, base in (('a', 0.8, 5.0), ('b', 0.99, 9.0)):
+            cells.append({
+                'id': f'{arm}{seed}', 'seed': seed, 'gamma': gamma,
+                'return_mean': base,
+                'return_auc': base - 1.0,
+                'return_mean_at_10': base - 2.0,
+                'return_mean_at_20': base,
+                'return_terminal_n': 5 if arm == 'a' else 4,
+                'return_terminal_attempted': 5,
+            })
+    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    assert out.verdict is Verdict.HELD
+    assert out.warnings == ()
+
+
 def test_unpaired_value_effect_evaluates_independent_arms() -> None:
     """`pair_by=()` declares an independent-samples design, not a
     malformed paired one: pair completeness doesn't apply, and the

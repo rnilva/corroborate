@@ -316,6 +316,22 @@ def _read_manifest_measurables(cache_path: Path) -> frozenset[str] | None:
     return frozenset(parsed)
 
 
+def cache_leaves(
+    cells: pl.DataFrame, cache_path: Path,
+) -> frozenset[str] | None:
+    """The configuration registry for a cache frame — the
+    canonical column partition grounded on the cache's own
+    `.hashes.json` manifest plus the live `@measurable` registry.
+    Shared by `Panel.from_cache` and the runner's evaluate loop so
+    the CLI/runner entry point and `evaluate(bridge, panel)` gate
+    a value-based DoEffect claim identically. None when the
+    partition cannot be grounded (see `_derive_native_leaves`)."""
+    return _derive_native_leaves(
+        cells,
+        artifact_measurables=_read_manifest_measurables(cache_path),
+    )
+
+
 def _resolve_cache_path(hypothesis_module: str) -> Path | None:
     """Resolve `<hyp_module>` → its default cache parquet path
     via the runner. Returns None when the module can't import."""
@@ -689,12 +705,7 @@ class Panel:
             cells=cells,
             stratify_by=stratify_by,
             sources=sources,
-            leaves=_derive_native_leaves(
-                cells,
-                artifact_measurables=_read_manifest_measurables(
-                    cache_path,
-                ),
-            ),
+            leaves=cache_leaves(cells, cache_path),
         )
 
     def to_cache(
@@ -1192,34 +1203,76 @@ def concat_panels(panels: Sequence[Panel]) -> Panel:
 
     Cells concatenate diagonally (heterogeneous columns null-pad),
     sources concatenate, and the configuration registries union —
-    unless ANY batch has no registry, in which case the pool has
-    none either (an unknown part makes the whole unknown; the
-    gates then report their checks unverified). Scope lineage does
-    not survive pooling: the result is a fresh root, like
-    `from_corpora`. `stratify_by` must agree across batches —
+    unless any CONTRIBUTING batch has no registry, in which case
+    the pool has none either (an unknown part makes the whole
+    unknown; the gates then report their checks unverified). A
+    zero-row batch contributes nothing — neither cells nor
+    registry poisoning. Scope lineage does not survive pooling:
+    the result is a fresh root, like `from_corpora`.
+    `stratify_by` must agree across contributing batches —
     silently keeping one of two disagreeing groupings would make
-    `diagnostics` lie about half the pool."""
+    `diagnostics` lie about half the pool.
+
+    Terminal-derived outcome columns must agree on their horizon:
+    each reader derives `<o>_mean` at ITS OWN record's terminal
+    checkpoint (`corroborate.data.derive`), so pooling batches
+    whose terminals differ would put means at different training
+    budgets in one column — the exact manufactured effect the
+    record-wide-terminal rule exists to prevent, reintroduced
+    through pooling. Batches disagreeing on an outcome's terminal
+    (read off their `<o>_mean_at_<cp>` columns) raise; the fix is
+    to re-load the union as ONE record (one loader call over the
+    combined directories re-derives terminals record-wide), or to
+    author the claim against an explicit `<o>_mean_at_<cp>`
+    column both batches carry."""
     if not panels:
         raise ValueError('concat_panels: no panels to pool')
-    stratify = {p.stratify_by for p in panels}
+    contributing = [p for p in panels if p.cells.height > 0]
+    if not contributing:
+        return Panel(
+            cells=pl.DataFrame(),
+            scope_chain=(),
+            stratify_by=panels[0].stratify_by,
+            sources=tuple(s for p in panels for s in p.sources),
+        )
+    stratify = {p.stratify_by for p in contributing}
     if len(stratify) != 1:
         raise ValueError(
             f'concat_panels: panels disagree on stratify_by: '
             f'{sorted(stratify)!r}',
         )
+    from corroborate.data.derive import terminal_checkpoints_by_outcome
+    terminals: dict[str, int] = {}
+    for p in contributing:
+        for root, checkpoint in terminal_checkpoints_by_outcome(
+            p.cells.columns,
+        ).items():
+            known = terminals.setdefault(root, checkpoint)
+            if known != checkpoint:
+                raise ValueError(
+                    f'concat_panels: batches disagree on the '
+                    f'record-wide terminal for outcome {root!r} '
+                    f'({known} vs {checkpoint}) — pooled '
+                    f'{root}_mean would compare different training '
+                    f'budgets. Re-load the union as one record '
+                    f'(one loader call over the combined '
+                    f'directories), or author the claim against an '
+                    f'explicit {root}_mean_at_<checkpoint> column '
+                    f'both batches carry.',
+                )
     leaves: frozenset[str] | None
-    if any(p.leaves is None for p in panels):
+    if any(p.leaves is None for p in contributing):
         leaves = None
     else:
         leaves = frozenset().union(
-            *(p.leaves for p in panels if p.leaves is not None),
+            *(p.leaves for p in contributing if p.leaves is not None),
         )
     return Panel(
         cells=pl.concat(
-            [p.cells for p in panels], how='diagonal_relaxed',
+            [p.cells for p in contributing], how='diagonal_relaxed',
         ),
         scope_chain=(),
-        stratify_by=panels[0].stratify_by,
+        stratify_by=contributing[0].stratify_by,
         sources=tuple(s for p in panels for s in p.sources),
         required_measurables=frozenset().union(
             *(p.required_measurables for p in panels),
@@ -1234,5 +1287,6 @@ __all__ = [
     'MeasurableAvailability',
     'Panel',
     'PanelDiagnostics',
+    'cache_leaves',
     'concat_panels',
 ]

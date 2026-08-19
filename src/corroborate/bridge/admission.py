@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING, Protocol
 from corroborate.core.claim import Claim
 from corroborate.core.intervention import DoEffect
 from corroborate.core.signature import walk, walk_paths
+from corroborate.data.derive import outcome_family
 from corroborate.measurables import registered_names, transitive_reads
 
 
@@ -255,7 +256,13 @@ def resolved_source(
         return None  # empty corpus — let downstream surface the issue
     # Iterable[Mapping] inputs may be heterogeneous while a live record
     # grows. Presence in any scoped row is enough; value selection later
-    # ignores rows that do not belong to the declared contrast.
+    # ignores rows that do not belong to the declared contrast. The
+    # dominant input is DataFrame-derived rows with identical keys, so
+    # the first row answers almost always — the full O(rows) key union
+    # runs only when a name is absent there (heterogeneous live
+    # records, and the failure path that reports available columns).
+    if all(n in cells[0] for n in names):
+        return None
     available = frozenset(
         key for cell in cells for key in cell.keys()
     )
@@ -689,10 +696,16 @@ def contrast_isolation(
     # The bridge's target is the outcome under test — a treatment
     # effect on it is the hypothesis, not a confound; it must
     # never be reported as a rider (deterministic effects would
-    # trip the constancy scan).
+    # trip the constancy scan). The whole derived family of the
+    # target (`<o>_auc`, `<o>_mean_at_<cp>`, terminal counts —
+    # `corroborate.data.derive.outcome_family`) re-expresses that
+    # same measured quantity, so it is exempt with it.
     ignore = {
         CONTRAST_ARM_FIELD, *declared, 'id', *bridge.pair_by,
-        bridge.target_name,
+        *outcome_family(
+            bridge.target_name,
+            (key for cell in cells for key in cell.keys()),
+        ),
     }
     expected = frozenset(effect.arm_keys())
     by_arm: dict[str, list[Mapping[str, object]]] = {}

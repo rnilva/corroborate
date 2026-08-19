@@ -649,6 +649,28 @@ def test_from_cache_registry_grounds_on_hashes_manifest(
     assert panel.leaves == frozenset({'gamma'})
 
 
+def test_concat_panels_empty_batch_does_not_poison_registry(
+    tmp_path: Path,
+) -> None:
+    """A zero-row batch (e.g. `from_corpus` of a not-yet-swept
+    directory, whose registry is necessarily unknown) contributes
+    no cells and must not erase the pool's registry — the same
+    contributing-only rule `from_corpora` applies."""
+    from corroborate.data import concat_panels
+
+    populated = Panel.from_dataframe(
+        pl.DataFrame({'id': ['a'], 'gamma': [0.9]}),
+        leaves=frozenset({'gamma'}),
+    )
+    empty_dir = tmp_path / 'not_yet_swept'
+    empty_dir.mkdir()
+    empty = Panel.from_corpus(empty_dir)
+    assert empty.cells.height == 0 and empty.leaves is None
+    pooled = concat_panels([populated, empty])
+    assert pooled.leaves == frozenset({'gamma'})
+    assert pooled.cells.height == 1
+
+
 def test_with_traces_joins_on_demand(tmp_path: Path) -> None:
     """`panel.with_traces(['col'])` loads only the named trace
     columns from this Panel's source corpora and joins them onto

@@ -29,7 +29,8 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping
+import re
+from collections.abc import Iterable, Mapping
 from typing import TypeIs
 
 from corroborate.corpus.schema import MeasurementLeaf
@@ -37,6 +38,17 @@ from corroborate.corpus.schema import MeasurementLeaf
 
 def is_scalar_leaf(value: object) -> TypeIs[MeasurementLeaf]:
     return isinstance(value, (str, int, float, bool))
+
+
+def _leaves_agree(a: MeasurementLeaf, b: MeasurementLeaf) -> bool:
+    """Value agreement for the duplicate-stamp tolerance. Two NaN
+    stamps agree — `NaN != NaN` would reject the exact repeated-key
+    case this tolerance exists for (a producer stamping the same
+    unset float on both the run record and the configuration)."""
+    if isinstance(a, float) and isinstance(b, float):
+        if math.isnan(a) and math.isnan(b):
+            return True
+    return a == b
 
 
 def put_column(
@@ -50,7 +62,7 @@ def put_column(
     only when the values agree (producers often stamp e.g. ``seed``
     on both the run record and the configuration), because that is
     the one case where accepting it loses nothing."""
-    if key in row and row[key] != value:
+    if key in row and not _leaves_agree(row[key], value):
         raise ValueError(
             f'run {run_id!r} has conflicting values for '
             f'column {key!r}: {row[key]!r} != {value!r}',
@@ -99,6 +111,55 @@ def flatten_config(
             # difference observable and equality-comparable.
             flat[path] = json.dumps(value, sort_keys=True)
     return flat
+
+
+_DERIVED_TARGET_RE = re.compile(
+    r'^(?P<root>.+?)_(?:mean(?:_at_\d+)?|auc)$',
+)
+
+
+def outcome_family(target: str, columns: Iterable[str]) -> frozenset[str]:
+    """The columns that are derived projections of the same
+    outcome as `target` under this module's naming —
+    ``<o>_mean``, ``<o>_auc``, ``<o>_mean_at_<cp>``,
+    ``<o>_terminal_n``, ``<o>_terminal_attempted``. They all
+    re-express the one measured quantity, so a gate scanning for
+    columns that move with a declared contrast must treat the
+    whole family as the outcome under test, not as candidate
+    confounds. A target outside the naming convention has no
+    siblings: the family is just itself."""
+    match = _DERIVED_TARGET_RE.match(target)
+    if match is None:
+        return frozenset({target})
+    sibling_re = re.compile(
+        rf'^{re.escape(match.group("root"))}'
+        r'_(?:mean(?:_at_\d+)?|auc|terminal_n|terminal_attempted)$',
+    )
+    return frozenset(
+        {target} | {c for c in columns if sibling_re.match(c)},
+    )
+
+
+_MEAN_AT_RE = re.compile(r'^(?P<root>.+)_mean_at_(?P<cp>\d+)$')
+
+
+def terminal_checkpoints_by_outcome(
+    columns: Iterable[str],
+) -> dict[str, int]:
+    """Per outcome, the largest checkpoint among a frame's
+    ``<o>_mean_at_<cp>`` columns — the record-wide terminal its
+    ``<o>_mean`` was derived at. The column set is the frame's own
+    record of the horizon its terminal summaries mean; two frames
+    disagreeing here have incomparable ``<o>_mean`` columns."""
+    out: dict[str, int] = {}
+    for column in columns:
+        match = _MEAN_AT_RE.match(column)
+        if match is None:
+            continue
+        root = match.group('root')
+        checkpoint = int(match.group('cp'))
+        out[root] = max(out.get(root, checkpoint), checkpoint)
+    return out
 
 
 def normalised_auc(
@@ -216,6 +277,8 @@ __all__ = [
     'flatten_config',
     'is_scalar_leaf',
     'normalised_auc',
+    'outcome_family',
     'outcome_globals',
     'put_column',
+    'terminal_checkpoints_by_outcome',
 ]

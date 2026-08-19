@@ -900,10 +900,10 @@ def evaluate(
     arm_keys: tuple[str, ...] | None
     source_for_analysis: str
     if isinstance(bridge.source, DoEffect):
+        # Covers value contrasts too: a non-None `contrast_labels`
+        # implies a DoEffect source, so this branch is the single
+        # arm-shaped path.
         arm_keys = bridge.source.arm_keys()
-        source_for_analysis = bridge.target_name
-    elif contrast_labels is not None:
-        arm_keys = contrast_labels
         source_for_analysis = bridge.target_name
     else:
         arm_keys = None

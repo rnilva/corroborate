@@ -151,7 +151,21 @@ def _first_zip(run_dir: Path, checkpoint: str | None) -> Path | None:
     budget."""
     if checkpoint is not None:
         candidate = run_dir / checkpoint
-        return candidate if candidate.is_file() else None
+        if candidate.is_file():
+            return candidate
+        if any(run_dir.glob('*.zip')):
+            # A genuine run directory (it carries checkpoints)
+            # that lacks the REQUESTED one. Walking past it would
+            # silently drop the run — a survivor-biased sample —
+            # so the absence must be loud.
+            raise ValueError(
+                f'corroborate_rl.sb3: {run_dir} carries checkpoint '
+                f'zips but not the requested {checkpoint!r} — the '
+                f'run would be silently excluded. Evaluate at a '
+                f'checkpoint every run reached, or remove the '
+                f'incomplete run directory deliberately.',
+            )
+        return None
     preferred = [run_dir / 'model.zip', run_dir / 'best_model.zip']
     for candidate in preferred:
         if candidate.is_file():
@@ -270,8 +284,8 @@ def load_sb3_runs(
             corpus if corpus is not None else root_path.name,
             run_id=run_id,
         )
-        config = checkpoint_config(zip_path, algo)
-        for key, value in flatten_config(config).items():
+        flat_config = flatten_config(checkpoint_config(zip_path, algo))
+        for key, value in flat_config.items():
             put_column(row, key, value, run_id=run_id)
         per_checkpoint = evaluations.get(run_id)
         if per_checkpoint is not None:
@@ -281,7 +295,7 @@ def load_sb3_runs(
                 grid_by_outcome=grid_by_outcome,
             )
         rows.append(row)
-        leaves.update(flatten_config(config))
+        leaves.update(flat_config)
     return Panel.from_dataframe(
         pl.from_dicts(rows, infer_schema_length=None),
         sources=(

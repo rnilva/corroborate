@@ -321,6 +321,27 @@ def test_ambiguous_checkpoint_series_requires_explicit_selection(
     assert 'gamma' in df.columns
 
 
+def test_explicit_checkpoint_missing_in_a_run_dir_raises(
+    tmp_path: Path,
+) -> None:
+    """A run directory carrying checkpoint zips but not the
+    requested one must fail loudly: walking past it would silently
+    drop the run (typically the crashed one) and hand the analysis
+    a survivor-biased sample."""
+    complete = tmp_path / 'a-s0'
+    _write_checkpoint(
+        complete / 'rl_model_20000_steps.zip', gamma=0.9, seed=0,
+    )
+    crashed = tmp_path / 'b-s1'
+    _write_checkpoint(
+        crashed / 'rl_model_10000_steps.zip', gamma=0.99, seed=1,
+    )
+    with pytest.raises(ValueError, match='silently excluded'):
+        load_sb3_runs(
+            tmp_path, _FakeDQN, checkpoint='rl_model_20000_steps.zip',
+        )
+
+
 def test_non_finite_terminal_episodes_stay_visible(tmp_path: Path) -> None:
     """A NaN terminal episode shrinks the finite count rather than
     silently averaging survivors; an all-NaN terminal leaves the
