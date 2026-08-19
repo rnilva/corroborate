@@ -17,8 +17,9 @@ The smoke proves:
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import cast
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, cast
 
 import polars as pl
 import pytest
@@ -28,11 +29,23 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.paired.paired_g import PairedGResult
 from corroborate.bridge.bridge import (
-    Bridge, Direction, Tier, claim_bridge, evaluate,
+    Bridge, Direction, RecordedContrastBinding, Tier, claim_bridge, evaluate,
 )
 from corroborate.core.claim import claim
 from corroborate.core.intervention import DoEffect, Intervention
 from corroborate.bridge.verdict import Verdict
+
+
+if TYPE_CHECKING:
+    from pathlib import Path as _StaticOnlyAnnotation
+
+
+type _FrameCells = pl.DataFrame
+type _FrameOrRows = pl.DataFrame | Iterable[Mapping[str, object]]
+# The name deliberately contains "DataFrame" while the top-level
+# container does not. Runtime dispatch must inspect the resolved
+# type shape, not annotation spelling or nested element names.
+type _DataFrameRows = Iterable[Mapping[str, object]]
 
 
 # Synthetic intervention arms for the top-level bridges in this file.
@@ -44,6 +57,11 @@ def _treatment_op(x: int) -> int:
 @claim
 def _baseline_op(x: int) -> int:
     return x
+
+
+@claim
+def _external_program(gamma: float) -> float:
+    return gamma
 
 
 _TREATMENT_ARMS: tuple[Intervention, ...] = (
@@ -154,6 +172,153 @@ def test_bridge_no_effect_when_signal_absent() -> None:
     assert out.verdict == Verdict.NO_EFFECT
 
 
+@dataclass(frozen=True, slots=True)
+class _RecordedContrast:
+    parameter_path: str = 'gamma'
+    baseline_key: str = 'producer-control'
+    treatment_key: str = 'producer-high-gamma'
+    baseline_value: float = 0.8
+    treatment_value: float = 0.99
+    bundle_digest: str = 'bundle-a'
+
+
+def _recorded_contrast(**overrides: object) -> RecordedContrastBinding:
+    values: dict[str, object] = {
+        'parameter_path': 'gamma',
+        'baseline_key': 'producer-control',
+        'treatment_key': 'producer-high-gamma',
+        'baseline_value': 0.8,
+        'treatment_value': 0.99,
+        'bundle_digest': 'bundle-a',
+        **overrides,
+    }
+    return _RecordedContrast(
+        parameter_path=cast(str, values['parameter_path']),
+        baseline_key=cast(str, values['baseline_key']),
+        treatment_key=cast(str, values['treatment_key']),
+        baseline_value=cast(float, values['baseline_value']),
+        treatment_value=cast(float, values['treatment_value']),
+        bundle_digest=cast(str, values['bundle_digest']),
+    )
+
+
+def _recorded_cells() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for seed in range(12):
+        rows.extend((
+            {
+                'id': f'control-{seed}',
+                'arm_key': 'producer-control',
+                'seed': seed,
+                'gamma': 0.8,
+                'return_mean': float(seed) / 100.0,
+                'bundle_digest': 'bundle-a',
+            },
+            {
+                'id': f'high-{seed}',
+                'arm_key': 'producer-high-gamma',
+                'seed': seed,
+                'gamma': 0.99,
+                'return_mean': 1.0 + float(seed) / 100.0,
+                'bundle_digest': 'bundle-a',
+            },
+        ))
+    return rows
+
+
+@claim_bridge(
+    source='gamma',
+    target='return_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    pair_by=('seed',),
+    predicted_direction='a_gt_b',
+)
+def higher_recorded_gamma_helps(
+    paired_g: PairedGResult,
+) -> Verdict:
+    return Verdict.HELD if paired_g.mean_diff > 0.0 else Verdict.NO_EFFECT
+
+
+def test_recorded_contrast_binds_external_arms_at_evaluation() -> None:
+    """The claim declares an estimand, not producer arm labels."""
+    out = evaluate(
+        higher_recorded_gamma_helps,
+        _recorded_cells(),
+        recorded_contrast=_recorded_contrast(),
+    )
+    assert out.verdict is Verdict.HELD
+    result = cast(PairedGResult, out.analysis_results['paired_g'])
+    assert result.measurable == 'return_mean'
+    assert result.baseline_arm == 'producer-control'
+    assert result.treatment_arm == 'producer-high-gamma'
+    assert result.n_pairs == 12
+    assert out.evidence_digest == 'bundle-a'
+
+
+def test_recorded_contrast_keeps_intervention_semantics_with_claim() -> None:
+    out = evaluate(
+        higher_recorded_gamma_helps,
+        _recorded_cells(),
+        recorded_contrast=_recorded_contrast(),
+        claim=_external_program,
+    )
+    assert out.verdict is Verdict.HELD
+
+
+def test_recorded_contrast_rejects_incompatible_claim_source() -> None:
+    with pytest.raises(ValueError, match='does not match.*parameter path'):
+        _ = evaluate(
+            higher_recorded_gamma_helps,
+            _recorded_cells(),
+            recorded_contrast=_recorded_contrast(
+                parameter_path='learning_rate',
+            ),
+        )
+
+
+def test_recorded_contrast_rejects_duplicate_arm_keys() -> None:
+    with pytest.raises(ValueError, match='arm keys must be distinct'):
+        _ = evaluate(
+            higher_recorded_gamma_helps,
+            _recorded_cells(),
+            recorded_contrast=_recorded_contrast(
+                treatment_key='producer-control',
+            ),
+        )
+
+
+def test_recorded_contrast_rejects_arm_value_mismatch() -> None:
+    cells = _recorded_cells()
+    cells[0]['gamma'] = 0.99
+    with pytest.raises(ValueError, match='contrast binds it to 0.8'):
+        _ = evaluate(
+            higher_recorded_gamma_helps,
+            cells,
+            recorded_contrast=_recorded_contrast(),
+        )
+
+
+def test_recorded_contrast_rejects_different_bundle_cells() -> None:
+    with pytest.raises(ValueError, match='does not match cell bundle digest'):
+        _ = evaluate(
+            higher_recorded_gamma_helps,
+            _recorded_cells(),
+            recorded_contrast=_recorded_contrast(
+                bundle_digest='bundle-b',
+            ),
+        )
+
+
+def test_recorded_contrast_cannot_override_executable_doeffect() -> None:
+    with pytest.raises(ValueError, match='DoEffect.*recorded_contrast'):
+        _ = evaluate(
+            treatment_helps_outcome,
+            _synthetic_cells(),
+            recorded_contrast=_recorded_contrast(),
+        )
+
+
 @claim_bridge(
     source=INTERVENTION,
     target='eval_best_burst_mean',
@@ -180,7 +345,7 @@ def test_bridge_power_insufficient_with_few_seeds() -> None:
 
 
 def test_scope_with_repeated_column_reference_in_predicate() -> None:
-    """Regression: `_filter_with_missing_cols` must dedupe
+    """Regression: `filter_cells` must dedupe
     `expr.meta.root_names()` before resolving missing columns.
 
     A bridge predicate like `(pl.col('n_step') == 1) | (pl.col('n_step') == 3)`
@@ -607,5 +772,148 @@ def test_analysis_wrapper_is_directly_callable() -> None:
         {'v': 1.0}, {'v': 2.0}, {'v': 3.0}, {'v': 4.0},
     ]
     assert _scaled_mean(cells, scale=10.0) == 25.0
+    # With `Analysis[C, O, **P]` the mismatched kwarg is a STATIC
+    # error at the call site; the ignore keeps the runtime
+    # demonstration for unchecked callers (scripts outside pyright's
+    # scope still get the TypeError, not a silent drop).
     with pytest.raises(TypeError):
-        _scaled_mean(cells, not_a_param=1)
+        _scaled_mean(cells, not_a_param=1)  # pyright: ignore[reportCallIssue]
+
+
+def test_analysis_call_dispatches_dataframe_by_signature() -> None:
+    """`Analysis.__call__` input dispatch: a `pl.DataFrame` passes
+    through untouched when the fn's cells parameter admits one
+    (the DataFrame-native fast path), and is materialised to
+    per-row mappings exactly once for iterable-only fns. The
+    passthrough branch is the regression case: unconditional
+    dicts-conversion crashed the DataFrame-native
+    dynamic-mediation family."""
+    from corroborate.bridge.analysis import Analysis, analysis
+
+    @analysis
+    def _df_native_probe(cells: pl.DataFrame) -> tuple[str, int]:
+        assert isinstance(cells, pl.DataFrame)
+        return ('dataframe', cells.height)
+
+    @analysis
+    def _iterable_probe(
+        cells: Iterable[Mapping[str, object]],
+    ) -> tuple[str, int]:
+        rows = list(cells)
+        assert not isinstance(cells, pl.DataFrame)
+        return ('rows', len(rows))
+
+    @analysis
+    def _alias_probe(
+        cells: _FrameCells,
+        *,
+        unrelated: _StaticOnlyAnnotation | None = None,
+    ) -> tuple[str, int]:
+        del unrelated
+        assert isinstance(cells, pl.DataFrame)
+        return ('alias', cells.height)
+
+    @analysis
+    def _union_alias_probe(cells: _FrameOrRows) -> tuple[str, int]:
+        if isinstance(cells, pl.DataFrame):
+            return ('union', cells.height)
+        return ('union', len(list(cells)))
+
+    @analysis
+    def _nested_name_probe(cells: _DataFrameRows) -> tuple[str, int]:
+        assert not isinstance(cells, pl.DataFrame)
+        return ('nested-rows', len(list(cells)))
+
+    @analysis
+    def _nested_element_probe(
+        cells: Iterable[pl.DataFrame],
+    ) -> tuple[str, int]:
+        assert not isinstance(cells, pl.DataFrame)
+        return ('nested-frames', len(list(cells)))
+
+    def _direct_alias_probe(cells: _FrameCells) -> tuple[str, int]:
+        return ('direct-alias', cells.height)
+
+    direct = Analysis(fn=_direct_alias_probe, name='_direct_alias_probe')
+
+    df = pl.DataFrame({'a': [1, 2, 3]})
+    assert _df_native_probe.accepts_dataframe is True
+    assert _iterable_probe.accepts_dataframe is False
+    assert _alias_probe.accepts_dataframe is True
+    assert _union_alias_probe.accepts_dataframe is True
+    assert _nested_name_probe.accepts_dataframe is False
+    assert _nested_element_probe.accepts_dataframe is False
+    assert direct.accepts_dataframe is True
+    assert _df_native_probe(df) == ('dataframe', 3)
+    # `.fn` preserves the wrapped function's positional-or-keyword
+    # first parameter instead of falsely exposing it as positional-only.
+    assert _df_native_probe.fn(cells=df) == ('dataframe', 3)
+    assert _iterable_probe(df) == ('rows', 3)
+    assert _iterable_probe([{'a': 1}]) == ('rows', 1)
+    assert _alias_probe(df) == ('alias', 3)
+    assert _union_alias_probe(df) == ('union', 3)
+    assert _nested_name_probe(df) == ('nested-rows', 3)
+    assert _nested_element_probe([df]) == ('nested-frames', 1)
+    assert direct(df) == ('direct-alias', 3)
+
+    # Backward-compatible public annotation: the original two
+    # arguments remain cells/result; ParamSpec is optional third.
+    legacy: Analysis[
+        Iterable[Mapping[str, object]], tuple[str, int]
+    ] = _iterable_probe
+    assert legacy(df) == ('rows', 3)
+
+
+def test_analysis_call_preserves_wrapped_signature_statically() -> None:
+    """`Analysis[C, O, **P]` preserves the wrapped fn's surface
+    through `__call__` (CLAUDE.md: ParamSpec preserves caller
+    signature through generic wrappers): the result type is the
+    fn's declared return type, checked here with `assert_type`
+    under the pyright-strict gate that runs on tests. The negative
+    direction — a mistyped kwarg is a static reportCallIssue — is
+    pinned by the ignore in
+    test_analysis_wrapper_is_directly_callable."""
+    from typing import assert_type
+
+    from corroborate.analyses.paired.paired_g import paired_g
+
+    cells = [
+        c for c in _synthetic_cells()
+        if c.get('env_name') == 'TestEnv'
+    ]
+    result = paired_g(
+        cells,
+        treatment_arm=_TREATMENT_KEY,
+        baseline_arm=_BASELINE_KEY,
+        pair_by=('seed',),
+        source='eval_best_burst_mean',
+    )
+    assert_type(result, PairedGResult)
+    assert result.n_pairs == 30
+
+
+def test_dataframe_native_registered_analyses_detected() -> None:
+    """The signature-derived `accepts_dataframe` flag on the real
+    registered instances: the three DataFrame-native analyses and
+    a dual-input analysis carry it; the iterable-only paired
+    family does not. Guards the exploration contract that
+    `panel.cells` works against every registered analysis."""
+    from corroborate.analyses.diagnostic.mediator_leak_adjudication import (
+        mediator_leak_adjudication,
+    )
+    from corroborate.analyses.dynamic_mediation.partial_spearman import (
+        dynamic_partial_spearman,
+    )
+    from corroborate.analyses.dynamic_mediation.pc_adjacency import (
+        dynamic_pc_adjacency,
+    )
+    from corroborate.analyses.paired.paired_g import paired_g
+    from corroborate.analyses.spearman.partial_spearman import (
+        partial_spearman,
+    )
+
+    assert dynamic_partial_spearman.accepts_dataframe is True
+    assert dynamic_pc_adjacency.accepts_dataframe is True
+    assert mediator_leak_adjudication.accepts_dataframe is True
+    assert partial_spearman.accepts_dataframe is True
+    assert paired_g.accepts_dataframe is False

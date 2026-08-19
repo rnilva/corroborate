@@ -7,7 +7,10 @@ seen — here, ordinary
 DQN. The training script contains no corroborate imports.
 
 The study: whether gamma = 0.99 outperforms gamma = 0.80 on
-CartPole-v1 at 25k steps.
+CartPole-v1 at 25k steps. `sb3_claim.py` codifies that question as
+an executable, data-independent `@claim_bridge`; `analyze.py`
+first explores the adapted run set, then evaluates that authored
+test against the verified record.
 
 ## 1. Train (`train.py`, pure SB3)
 
@@ -25,7 +28,7 @@ and one resolved-config JSON per run.
 A bundle from a real run of this script is committed, so step 2
 can be run without training.
 
-## 2. Verify, adapt, analyse (`analyze.py`, corroborate only)
+## 2. Verify and adapt (`analyze.py`, corroborate only)
 
 ```bash
 uv run python examples/sb3_demo/analyze.py
@@ -43,7 +46,6 @@ admissible: True
   [VERIFIED    ] pairs_complete: verified 3 complete pairs
   [VERIFIED    ] config_isolation: all resolved configs share one template after removing only gamma and seed
   [VERIFIED    ] evaluation_complete: verified 6 × 5 × 5 evaluation extent
-  [UNVERIFIABLE] protocol: no prospective protocol committed; the design is admitted retrospectively
   [UNVERIFIABLE] assignment: assignment process was not mechanically recorded
   [VERIFIED    ] rows_derived: derived 6 seeded-run rows
 ```
@@ -54,10 +56,18 @@ Statements only the producer can make remain `ATTESTED` or
 `UNVERIFIABLE`. A malformed bundle raises with the same
 vocabulary instead of parsing permissively.
 
-The adapted run set is a `Panel`:
+The receipt makes no claim about when the test module was
+authored. A bundle digest proves which files were sealed together;
+it cannot prove that they existed before the observations.
+
+## 3. Explore
+
+The adapted run set is a `Panel`; its cells are a polars
+DataFrame that registered analyses accept directly. Nothing in
+this step requires a declared design.
 
 ```text
-panel: 6 seeded runs × 12 columns
+panel: 6 seeded runs × 18 columns
 ┌─────────────┬──────────┬──────┬───────┬─────────────┐
 │ id          ┆ arm_key  ┆ seed ┆ gamma ┆ return_mean │
 ╞═════════════╪══════════╪══════╪═══════╪═════════════╡
@@ -70,11 +80,79 @@ panel: 6 seeded runs × 12 columns
 └─────────────┴──────────┴──────┴───────┴─────────────┘
 ```
 
-## 3. The pre-registered test
+The adapter derives one `return_mean_at_<step>` column per
+evaluation checkpoint, so the trajectory — not just the final
+mean — is explorable:
 
-The claim is declared before outcomes are read
-(`DirectionalDesign`: one-sided, alpha 0.05, SESOI dz = 0.5,
-3 planned pairs):
+```text
+mean return per checkpoint (seeds pooled per condition):
+┌──────────┬───────┬───────┬───────┬───────┬───────┐
+│ arm_key  ┆ 5000  ┆ 10000 ┆ 15000 ┆ 20000 ┆ 25000 │
+╞══════════╪═══════╪═══════╪═══════╪═══════╪═══════╡
+│ gamma080 ┆ 210.9 ┆ 172.7 ┆ 182.9 ┆ 208.0 ┆ 186.3 │
+│ gamma099 ┆ 164.3 ┆ 172.9 ┆ 199.7 ┆ 135.8 ┆ 124.1 │
+└──────────┴───────┴───────┴───────┴───────┴───────┘
+```
+
+Gamma 0.99 is behind at 5k, level by 10k, ahead at 15k — then
+falls away over the last two checkpoints while gamma 0.80 holds.
+In these three paired seeds, that trajectory is consistent with a
+late decline at the higher gamma. It is descriptive evidence, not
+enough by itself to distinguish degradation from noisy or slower
+learning.
+
+A descriptive paired probe quantifies the same contrast:
+
+```text
+probe: Δ(return_mean) = -62.2 ± 40.0  g=-0.51  pairs helped: 33% of 3
+```
+
+## 4. Author and evaluate the claim test
+
+The claim module contains the scientific test, not the data:
+
+```python
+@claim_bridge(
+    source='gamma',
+    target='return_mean',
+    direction=Direction.DIRECT,
+    tier=Tier.INTERVENTIONAL,
+    pair_by=('seed',),
+    scope=(
+        (pl.col('env_id') == 'CartPole-v1')
+        & pl.col('gamma').is_in([0.80, 0.99])
+    ),
+    predicted_direction='a_gt_b',
+)
+def higher_gamma_improves_return(
+    paired_directional: PairedDirectionalResult,
+    *,
+    alpha: float = 0.05,
+    sesoi_dz: float = 0.5,
+    minimum_pairs: int = 3,
+) -> tuple[Verdict, RefutationClass | None]:
+    del alpha, sesoi_dz, minimum_pairs
+    return paired_directional_verdict(paired_directional)
+```
+
+There are no bundle paths, observed values, or arm labels in this
+module. `analyze.py` binds the external record only at the call
+site:
+
+```python
+evaluation = evaluate(
+    higher_gamma_improves_return,
+    panel.cells,
+    recorded_contrast=study.contrast,
+)
+```
+
+The recorded contrast must match the bridge's `gamma` source.
+Its verified baseline/treatment keys are injected into the named
+`paired_directional` analysis, whose typed result is retained in
+`evaluation.analysis_results` before the bridge body maps it to a
+verdict. `evaluation.evidence_digest` records the exact sealed
+bundle used:
 
 ```text
 claim: gamma 0.99 > gamma 0.80 on return_mean
@@ -83,11 +161,20 @@ claim: gamma 0.99 > gamma 0.80 on return_mean
   verdict: POWER_INSUFFICIENT (UNDERPOWERED)
 ```
 
-At this training length the point estimate runs against the
-claim, and three pairs are not enough evidence to settle it
-either way. The verdict is therefore `POWER_INSUFFICIENT` rather
-than `NO_EFFECT`; with more seeds (`--seeds 8`) the verdict
-follows whatever the data supports.
+At this training length the point estimate runs against the claim,
+and three pairs are not enough evidence to settle it either way.
+The verdict is therefore `POWER_INSUFFICIENT` rather than
+`NO_EFFECT`; with more seeds (`--seeds 8`) the same test module
+follows whatever the compatible data supports.
+
+## 5. Reuse the test
+
+Run the same bridge against any newly adapted study with the same
+measurable schema and contrast path. Producer condition names may
+differ: `recorded_contrast` supplies them at runtime. The adapter
+continues to verify the record's seal, configuration isolation,
+pair completeness, and evaluation extent; the claim module
+continues to own the estimand and decision rule.
 
 ## Producer-side cost
 

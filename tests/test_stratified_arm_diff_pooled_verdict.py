@@ -21,6 +21,7 @@ from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     StratifiedArmDiffPooledResult, stratified_arm_diff_pooled,
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
+from corroborate.core.hypothesis import PredictedDirection
 
 
 _TREATMENT = 'treatment_arm'
@@ -60,7 +61,7 @@ def _make_cells(
 def _run(
     cells: list[dict[str, object]],
     *,
-    predicted_direction: str | None = 'a_gt_b',
+    predicted_direction: PredictedDirection | None = 'a_gt_b',
 ) -> StratifiedArmDiffPooledResult:
     """Direct call to the analysis (bypasses bridge fixture
     layer; tests the primitive in isolation). `jensen_gap=1.0`

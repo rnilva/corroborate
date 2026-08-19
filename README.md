@@ -30,8 +30,7 @@ corroborate provides the apparatus for this kind of test:
 2. Hypotheses are executable. Each edge of a hypothesis is a
    small program called a bridge. Its decorator declares the
    claim's commitments (scope, evidential tier, predicted
-   direction) before any data is seen; its body runs as a test
-   and returns a verdict.
+   direction); its body runs as a test and returns a verdict.
 3. Inconclusive results are a distinct verdict.
    `POWER_INSUFFICIENT` is separate from both `HELD` and
    `NO_EFFECT`, and it propagates through chains of composed
@@ -61,7 +60,8 @@ column names predate them and are kept for compatibility:
 ```python
 from functools import partial
 from corroborate import claim_bridge
-from corroborate.bridge import Direction, Tier, Verdict
+from corroborate.bridge.bridge import Direction, Tier
+from corroborate.bridge.verdict import Verdict
 from corroborate.core.intervention import DoEffect, Intervention
 
 # The mechanism as a unit of intervention: swap greedification,
@@ -78,11 +78,13 @@ INTERVENTION = DoEffect(arms=((), (DDQN_SWAP,)))  # baseline, treatment
     direction=Direction.INVERSE,
     tier=Tier.INTERVENTIONAL,
     predicted_direction='a_lt_b',
-    stratify_by=('env_name',),
 )
 def ddqn_reduces_jensen_gap(
     stratified_arm_diff_pooled: StratifiedArmDiffPooledResult,
+    *,
+    stratify_by: tuple[str, ...] = ('env_name',),
 ) -> Verdict:
+    del stratify_by
     return stratified_arm_diff_pooled.verdict
 ```
 
@@ -105,16 +107,43 @@ Training runs produced by other codebases can be ingested
 without modifying the training code. The producer writes a small
 bundle (run and evaluation records, resolved configurations, and
 a short `contract.json` describing the study);
-`corroborate.data.adapt_study` verifies the bundle and returns a
-`Panel` together with an admissibility receipt. Checks the files
-can prove are marked `VERIFIED`; producer statements remain
-`ATTESTED` or `UNVERIFIABLE`.
+`corroborate.data.adapt_study` verifies the bundle and returns an
+`AdaptedStudy`: validated rows, a recorded contrast, and an
+admissibility receipt. Checks the files can prove are marked
+`VERIFIED`; producer statements remain `ATTESTED` or
+`UNVERIFIABLE`.
+
+The claim remains an ordinary, data-independent `@claim_bridge`
+module. At evaluation time, the verified contrast supplies the
+external producer's arm labels:
+
+```python
+from corroborate.bridge.bridge import evaluate
+from corroborate.data import adapt_study
+from my_claims import higher_gamma_improves_return
+
+study = adapt_study('path/to/bundle')
+panel = study.to_panel()                 # optional exploration
+result = evaluate(
+    higher_gamma_improves_return,        # authored test module
+    panel.cells,
+    recorded_contrast=study.contrast,    # runtime data binding
+)
+```
+
+The bridge declares the measurable edge, scope, predicted
+direction, analysis configuration, and verdict rule. It does not
+import the bundle or hard-code producer-specific condition names.
+The resulting `BridgeEvaluation.evidence_digest` binds its verdict
+to the sealed bundle represented by those cells.
 
 [`examples/sb3_demo/`](examples/sb3_demo/) walks through this
 with stable-baselines3 DQN: training, bundle production,
-adaptation, and a pre-registered directional test. It runs on CPU
-in a few minutes, and a bundle from a real run is committed so
-the analysis half can be run without training.
+adaptation, descriptive exploration on the adapted panel, and
+evaluation of an executable claim module through the same bridge
+path used by native studies. It runs on CPU in a few minutes, and
+a bundle from a real run is committed so the analysis half can be
+run without training.
 
 ## Repository layout
 

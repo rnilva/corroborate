@@ -226,7 +226,11 @@ def test_meta_regression_unpaired_d_rejects_invalid_covariate_key_field() -> Non
     cells = _as_dicts(run_multi_env_paired_arms(
         envs=_envs_by_mu_x(), seeds=range(_N_PAIRS),
     ))
-    covariates_per_key = {f'env_mu_{mu:g}': {'mu_x': mu} for mu in _MU_X_GRID}
+    # Key type `object` — the analysis's `Mapping[object, ...]` is
+    # invariant in its key parameter.
+    covariates_per_key: dict[object, dict[str, float]] = {
+        f'env_mu_{mu:g}': {'mu_x': mu} for mu in _MU_X_GRID
+    }
     with pytest.raises(ValueError, match='covariate_key_field'):
         _ = meta_regression_unpaired_d.fn(
             cells,

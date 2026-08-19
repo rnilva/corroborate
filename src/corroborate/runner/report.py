@@ -80,6 +80,7 @@ class BridgeReportEntry:
     blocked_by: Mapping[str, object] | None
     refutation_class: str | None = None
     assumption_violations: tuple[str, ...] = ()
+    evidence_digest: str | None = None
     extent_hash: int = 0
 
 
@@ -401,6 +402,7 @@ def _build_bridge_entry(
             if evaluation.refutation_class is not None else None
         ),
         assumption_violations=evaluation.assumption_violations,
+        evidence_digest=evaluation.evidence_digest,
         extent_hash=evaluation.extent_hash,
     )
 

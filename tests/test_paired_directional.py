@@ -1,9 +1,8 @@
-"""Reference tests for prospective paired directional inference."""
+"""Reference tests for configured paired directional inference."""
 from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import cast
 
 import numpy as np
 import pytest
@@ -12,7 +11,6 @@ from scipy.stats import skew
 
 from corroborate.analyses.paired.paired_directional import (
     DirectionalAlternative,
-    DirectionalDesign,
     paired_directional,
     paired_directional_verdict,
 )
@@ -20,6 +18,7 @@ from corroborate.analyses.paired.paired_g import (
     _paired_g_assumption_violations,
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
+from corroborate.core.hypothesis import PredictedDirection
 
 
 def _cells(deltas: np.ndarray) -> list[dict[str, object]]:
@@ -42,25 +41,13 @@ def _cells(deltas: np.ndarray) -> list[dict[str, object]]:
     return rows
 
 
-def _design(
-    *,
-    minimum_pairs: int = 52,
-    planned_pairs: int = 64,
-) -> DirectionalDesign:
-    return DirectionalDesign(
-        alternative='greater',
-        alpha=0.05,
-        sesoi_dz=0.35,
-        minimum_pairs=minimum_pairs,
-        planned_pairs=planned_pairs,
-    )
-
-
 def _run(
     deltas: np.ndarray,
     *,
     minimum_pairs: int = 52,
-    planned_pairs: int = 64,
+    predicted_direction: DirectionalAlternative = 'a_gt_b',
+    alpha: float = 0.05,
+    sesoi_dz: float = 0.35,
 ):
     return paired_directional.fn(
         _cells(deltas),
@@ -68,10 +55,10 @@ def _run(
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
-        design=_design(
-            minimum_pairs=minimum_pairs,
-            planned_pairs=planned_pairs,
-        ),
+        predicted_direction=predicted_direction,
+        alpha=alpha,
+        sesoi_dz=sesoi_dz,
+        minimum_pairs=minimum_pairs,
     )
 
 
@@ -94,21 +81,16 @@ def test_support_p_value_matches_scipy_paired_difference_reference() -> None:
     assert result.dz == pytest.approx(
         float(np.mean(deltas) / np.std(deltas, ddof=1)),
     )
-    assert result.design_complete
+    assert result.minimum_pairs_met
     assert paired_directional_verdict(result) == (Verdict.HELD, None)
 
 
-def test_design_round_trips_into_result() -> None:
-    design = _design()
-    result = paired_directional.fn(
-        _cells(0.40 + _centred_spread(64, 0.50)),
-        source='metric',
-        treatment_arm='treatment',
-        baseline_arm='baseline',
-        pair_by=('seed',),
-        design=design,
-    )
-    assert result.design == design
+def test_configuration_round_trips_into_result() -> None:
+    result = _run(0.40 + _centred_spread(64, 0.50))
+    assert result.predicted_direction == 'a_gt_b'
+    assert result.alpha == 0.05
+    assert result.sesoi_dz == 0.35
+    assert result.minimum_pairs == 52
 
 
 def test_equivalence_is_positive_evidence_not_failed_significance() -> None:
@@ -134,16 +116,26 @@ def test_opposite_direction_is_sign_flip() -> None:
     )
 
 
-def test_incomplete_design_remains_inconclusive_even_if_large() -> None:
+def test_lower_prediction_uses_lower_tail() -> None:
+    deltas = -0.40 + _centred_spread(64, 0.50)
+    result = _run(deltas, predicted_direction='a_lt_b')
+    assert result.p_value < 0.05
+    assert paired_directional_verdict(result) == (Verdict.HELD, None)
+
+
+def test_minimum_pairs_gate_remains_inconclusive_even_if_large() -> None:
     deltas = 2.0 + _centred_spread(12, 0.20)
     result = _run(deltas)
     assert result.p_value < 1e-8
-    assert not result.design_complete
+    assert not result.minimum_pairs_met
     assert paired_directional_verdict(result) == (
         Verdict.POWER_INSUFFICIENT,
         RefutationClass.UNDERPOWERED,
     )
-    assert any('design_incomplete' in flag for flag in result.assumption_violations)
+    assert any(
+        'minimum_pairs_not_met' in flag
+        for flag in result.assumption_violations
+    )
 
 
 def test_noncentral_t_interval_contains_point_estimate() -> None:
@@ -164,29 +156,41 @@ def test_paired_skew_diagnostic_matches_adjusted_fisher_pearson() -> None:
     assert f'skew={expected:+.2f}' in skew_flag
 
 
+def _invalid_run(
+    *,
+    predicted_direction: PredictedDirection = 'a_gt_b',
+    alpha: float = 0.05,
+    sesoi_dz: float = 0.35,
+    minimum_pairs: int = 52,
+) -> object:
+    return paired_directional.fn(
+        _cells(np.asarray([0.1, 0.2])),
+        source='metric',
+        treatment_arm='treatment',
+        baseline_arm='baseline',
+        predicted_direction=predicted_direction,
+        alpha=alpha,
+        sesoi_dz=sesoi_dz,
+        minimum_pairs=minimum_pairs,
+    )
+
+
 @pytest.mark.parametrize(
     ('construct', 'message'),
     [
-        (lambda: DirectionalDesign(alpha=0.6), 'alpha'),
-        (lambda: DirectionalDesign(sesoi_dz=0.0), 'sesoi'),
-        (lambda: DirectionalDesign(minimum_pairs=1), 'minimum_pairs'),
+        (lambda: _invalid_run(alpha=0.6), 'alpha'),
+        (lambda: _invalid_run(sesoi_dz=0.0), 'sesoi'),
+        (lambda: _invalid_run(minimum_pairs=1), 'minimum_pairs'),
         (
-            lambda: DirectionalDesign(minimum_pairs=10, planned_pairs=9),
-            'planned_pairs',
-        ),
-        (
-            # cast: deliberately smuggle a value outside the Literal to
-            # prove the runtime validator fails closed where the type
-            # system is bypassed (e.g. YAML-sourced configs).
-            lambda: DirectionalDesign(
-                alternative=cast(DirectionalAlternative, 'two-sided'),
-            ),
-            'alternative',
+            # Valid bridge metadata, but not a directional one-sided
+            # alternative: the analysis must still fail closed.
+            lambda: _invalid_run(predicted_direction='two_sided'),
+            'predicted_direction',
         ),
     ],
 )
-def test_invalid_design_fails_closed(
-    construct: Callable[[], DirectionalDesign],
+def test_invalid_configuration_fails_closed(
+    construct: Callable[[], object],
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):

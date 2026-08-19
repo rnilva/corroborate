@@ -67,6 +67,7 @@ from __future__ import annotations
 from corroborate.analyses.dynamic_mediation._common import (
     ClusterBootstrapEdgeCounts,
     ClusterBootstrapInterval,
+    ColumnOrMeasurable,
     FisherZDLPool,
     Stratum,
     TimeAggregationStatus,
@@ -88,6 +89,7 @@ from corroborate.analyses.dynamic_mediation.pc_adjacency import (
 __all__ = [
     'ClusterBootstrapEdgeCounts',
     'ClusterBootstrapInterval',
+    'ColumnOrMeasurable',
     'DynamicMediationResult',
     'DynamicPCResult',
     'FisherZDLPool',
