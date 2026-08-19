@@ -429,7 +429,15 @@ class Panel:
     `frozen=True` still blocks rebinding."""
     cells: pl.DataFrame
     scope_chain: tuple[pl.Expr, ...] = ()
-    stratify_by: tuple[str, ...] = ('env_name', 'arm_key')
+    # Grouping columns for `diagnostics` and no-args `split_by`.
+    # Neutral by default: () means "no grouping declared", and the
+    # per-stratum probes honestly report empty rather than crash
+    # on vocabulary the record never had (an SB3 panel has no
+    # 'env_name'/'arm_key'). The corpus-shaped constructors
+    # (`from_corpus` / `from_corpora` / `from_cache`) default to
+    # the corpus convention ('env_name', 'arm_key') — corpus
+    # vocabulary lives on the corpus doors, not on the type.
+    stratify_by: tuple[str, ...] = ()
     sources: tuple[CorpusSource, ...] = ()
     required_measurables: frozenset[str] = field(default_factory=frozenset)
     # The record's configuration registry: which columns were
@@ -448,7 +456,7 @@ class Panel:
         cells: pl.DataFrame,
         *,
         scope_chain: tuple[pl.Expr, ...] = (),
-        stratify_by: tuple[str, ...] = ('env_name', 'arm_key'),
+        stratify_by: tuple[str, ...] = (),
         sources: tuple[CorpusSource, ...] = (),
         required_measurables: frozenset[str] = frozenset(),
         leaves: frozenset[str] | None = None,
@@ -457,7 +465,9 @@ class Panel:
         idiomatic exploration-time constructor when the author
         already has cells in hand (e.g. a test fixture, a
         polars expression-built frame, or `pl.read_parquet(...)`
-        of a cache file)."""
+        of a cache file). State `stratify_by` to enable the
+        per-stratum probes (`diagnostics`, no-args `split_by`) —
+        the frame's own vocabulary, not an assumed one."""
         return cls(
             cells=cells,
             scope_chain=scope_chain,
