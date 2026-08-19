@@ -14,8 +14,9 @@ executable, data-independent claim; `analyze.py` loads the runs,
 explores them with plain polars, then evaluates the claim.
 
 (Runs logged your own way — a directory of plain JSON records —
-load via `corroborate.data.load_runs` instead, and any DataFrame
-with the named columns evaluates directly.)
+load via `corroborate.data.load_runs` instead into the same
+shape, and any DataFrame with the named columns evaluates
+directly.)
 
 ## 1. Train (`train.py`, pure SB3)
 
@@ -43,8 +44,10 @@ analysis can be run without training.
 uv run --with 'stable-baselines3>=2.3' examples/sb3_demo/analyze.py
 ```
 
-`corroborate_rl.sb3.load_sb3_runs` reads the folder into one row
-per run. Configuration comes from each checkpoint's own `data`
+`corroborate_rl.sb3.load_sb3_runs` reads the folder into a
+`Panel` — one row per run in `panel.cells`, plus the two facts a
+bare frame cannot carry: the configuration registry and
+provenance. Configuration comes from each checkpoint's own `data`
 record — `model.save()` dumps the algorithm's resolved state, and
 intersecting it with the DQN constructor's signature separates
 what was *configured* (`gamma`, `buffer_size`, `seed`, …; entries
@@ -57,8 +60,9 @@ evaluated there — never silently rebased to an earlier horizon,
 with `return_terminal_n`/`_attempted` recording what it stands
 on), `return_auc` for runs covering the full grid, and one
 `return_mean_at_<step>` column per point. The checkpoint doesn't
-record which environment it trained on, so the analyst states
-that known context in plain polars (`with_columns`).
+record which environment it trained on, so the analyst stamps
+that known context with `with_columns` — which stays a Panel;
+analyst context does not join the configuration registry.
 
 ```text
 loaded: 6 runs × 30 columns
@@ -76,7 +80,7 @@ loaded: 6 runs × 30 columns
 
 ## 3. Explore
 
-The result is an ordinary polars DataFrame; exploration is
+`panel.cells` is an ordinary polars DataFrame; exploration is
 ordinary polars. The trajectory columns make training dynamics —
 not just the final mean — visible:
 
@@ -141,27 +145,25 @@ The bridge is exactly what a native one looks like — no external
 special case: a `DoEffect` in source position, here declaring the
 exact reference and treatment values of an externally-executed
 contrast rather than slot-swap arms. The population scope only
-selects CartPole-v1. Evaluation adds one fact from the data side:
-which columns were *configuration*, recovered from the
-checkpoints themselves — never hand-listed:
+selects CartPole-v1. The Panel already carries the one fact the
+gates need from the data side — which columns were
+*configuration*, recovered from the checkpoints themselves,
+never hand-listed — so evaluation is the claim and the record:
 
 ```python
-evaluation = evaluate(
-    higher_gamma_improves_return, df,
-    leaves=sb3_config_columns(RUNS, DQN),
-)
+evaluation = evaluate(higher_gamma_improves_return, panel)
 ```
 
 Exact matches to 0.80 and 0.99 receive the stable symbolic arm
 identities `baseline` and `treatment`; neither membership nor
 orientation is inferred from observed support or display labels.
-Any additional gamma levels remain in the accumulated DataFrame
+Any additional gamma levels remain in the accumulated record
 but sit outside this declared contrast, available to other
-claims over the same panel.
+claims over the same Panel.
 
 The admission gates then check the contrast over exactly the
-cells this claim admits. `leaves` is authoritative about what was
-configured: the declared source must be a registered
+cells this claim admits. The Panel's registry is authoritative
+about what was configured: the declared source must be a registered
 configuration column (a measurement cannot be the assigned
 parameter of an intervention — BLOCK), a registered leaf that
 moves with gamma inside a seed pair is a co-varied knob (a
@@ -194,9 +196,10 @@ follows whatever the compatible data supports.
 ## 5. Grow the record
 
 The record is live. Run more seeds, re-load, and the same claim
-recomputes on the larger run set — batches concatenate with plain
-`pl.concat`, because a growing study is one run set that happens
-to arrive in parts. A verdict that moves as evidence accretes is
+recomputes on the larger run set — batches pool with
+`concat_panels`, because a growing study is one run set that
+happens to arrive in parts (the pooled Panel keeps carrying the
+union registry). A verdict that moves as evidence accretes is
 the system working. The declared estimand stays fixed while the
 gates re-check arm presence, configuration isolation, and pairing
 over whatever the record has become.

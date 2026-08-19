@@ -108,11 +108,13 @@ modifying the training code, and without any corroborate-specific
 files on the producer's side. For stable-baselines3,
 `corroborate_rl.sb3.load_sb3_runs` reads the artifacts SB3
 already writes — `model.save()` checkpoint zips plus
-`EvalCallback` `evaluations.npz` — into a DataFrame, one row per
-run, configuration flattened to dotted-path columns,
-per-checkpoint outcome aggregates derived. For runs logged in
-your own format, `corroborate.data.load_runs` reads a directory
-of plain JSON records into the same shape. Both are readers, not
+`EvalCallback` `evaluations.npz` — into a `Panel`: one row per
+run in `panel.cells` (configuration flattened to dotted-path
+columns, per-checkpoint outcome aggregates derived), plus the
+two facts a bare frame cannot carry — the configuration registry
+(`leaves`) and provenance (`sources`). For runs logged in your
+own format, `corroborate.data.load_runs` reads a directory of
+plain JSON records into the same shape. Both are readers, not
 gatekeepers.
 
 The claim is an ordinary, data-independent `@claim_bridge`
@@ -139,20 +141,17 @@ GAMMA_EFFECT = DoEffect.from_values(
 )
 def higher_gamma_improves_return(...) -> ...: ...
 
-df = load_runs('path/to/runs')
-result = evaluate(
-    higher_gamma_improves_return, df,
-    leaves=config_columns('path/to/runs'),
-)
+panel = load_runs('path/to/runs')
+result = evaluate(higher_gamma_improves_return, panel)
 ```
 
 The declared reference and treatment values map to the symbolic
 arm identities `baseline` and `treatment`; their order is never
 inferred from observed support or formatted value labels. Other
 values of `gamma` remain valid rows in the growing record but are
-outside this particular contrast, so the same DataFrame can
+outside this particular contrast, so the same Panel can
 accumulate additional conditions — and other claims — over one
-panel. A joint intervention (values assigned together, or one
+record. A joint intervention (values assigned together, or one
 logical setting surfacing as several config fields) declares
 every co-assigned column:
 `DoEffect.from_values(reference={'gamma': 0.80, 'n_step': 1},
@@ -160,8 +159,9 @@ treatment={'gamma': 0.99, 'n_step': 3})`.
 
 `leaves` is the record's configuration registry — which columns
 were *configured* — derived from the record's own config files,
-never hand-listed. It is authoritative about knob-ness, and the
-gates use it both ways: a declared source that is NOT registered
+never hand-listed, and carried by the Panel from load to
+evaluation. It is authoritative about knob-ness, and the gates
+use it both ways: a declared source that is NOT registered
 configuration blocks (a measured column cannot be the assigned
 parameter of an intervention), and a registered leaf that moves
 with the contrast inside a pairing unit blocks as a confound. An
@@ -169,16 +169,17 @@ with the contrast inside a pairing unit blocks as a confound. An
 record — a label is harmless, an unlogged knob is not, and only
 the author can say which. What no registry can attest —
 assignment, randomisation, hidden confounding — stays outside
-the framework's claims either way; omit `leaves` and the
-checkable parts are reported unverified rather than silently
-passed.
+the framework's claims either way; evaluate a record without a
+registry and the checkable parts are reported unverified rather
+than silently passed.
 
 The record is live: run more seeds, re-load, and the same bridge
-recomputes — batches concatenate with plain `pl.concat`, and a
-verdict that moves with the evidence is the system working. (Runs
-logged your own way need no loader at all: any DataFrame with the
-named columns evaluates directly, and `Panel.from_dataframe`
-offers the exploration surface.)
+recomputes — batches pool with `concat_panels`, and a verdict
+that moves with the evidence is the system working. (Runs logged
+your own way need no loader at all: any DataFrame with the named
+columns evaluates directly — pass `leaves=` alongside it if you
+can attest configuration — and `Panel.from_dataframe` carries
+both facts for repeated use.)
 
 [`examples/sb3_demo/`](examples/sb3_demo/) walks through this
 with stable-baselines3 DQN: a tutorial-shaped training script

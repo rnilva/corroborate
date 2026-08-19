@@ -8,9 +8,9 @@ registry comes from), so run with stable-baselines3 available:
     uv run --with 'stable-baselines3>=2.3' examples/sb3_demo/analyze.py
 
 Three steps: read SB3's own artifacts (checkpoint zips +
-EvalCallback logs) into a DataFrame, explore it with plain
+EvalCallback logs) into a Panel, explore its cells with plain
 polars, then evaluate the executable claim test in
-``sb3_claim.py`` against it.
+``sb3_claim.py`` against the Panel.
 
 The record is live: run more seeds, re-load, and the same claim
 test recomputes — a verdict that moves with the evidence is the
@@ -29,20 +29,23 @@ from corroborate.analyses.paired.paired_directional import (
     PairedDirectionalResult,
 )
 from corroborate.bridge.bridge import evaluate
-from corroborate_rl.sb3 import load_sb3_runs, sb3_config_columns
+from corroborate_rl.sb3 import load_sb3_runs
 from sb3_claim import higher_gamma_improves_return
 
 RUNS = Path(__file__).parent / 'runs'
 
-# ── 1. load: SB3's own artifacts in, one row per run out ────────
+# ── 1. load: SB3's own artifacts in, one Panel out ──────────────
 # Configuration is recovered from each checkpoint's `data` record
 # intersected with DQN's constructor signature; evaluations come
-# from EvalCallback's evaluations.npz. The checkpoint doesn't
-# record which environment it trained on, so the analyst states
-# that known context in plain polars.
-df = load_sb3_runs(RUNS, DQN).with_columns(
+# from EvalCallback's evaluations.npz. The Panel carries the
+# cells plus the configuration registry and provenance. The
+# checkpoint doesn't record which environment it trained on, so
+# the analyst stamps that known context (`with_columns` stays a
+# Panel; analyst context does not join the registry).
+panel = load_sb3_runs(RUNS, DQN).with_columns(
     pl.lit('CartPole-v1').alias('env_id'),
 )
+df = panel.cells
 print(f'loaded: {df.height} runs × {df.width} columns')
 print(df.select('id', 'seed', 'gamma', 'return_mean').sort('gamma', 'seed'))
 
@@ -70,17 +73,13 @@ print(paired)
 # ── 3. evaluate the authored claim test ─────────────────────────
 # The claim module owns the estimand and verdict rule: the declared
 # DoEffect maps gamma=0.80 and 0.99 to symbolic baseline/treatment
-# identities — never inferred from observed support. The data side
-# registers which columns were configuration (recovered from the
-# checkpoints themselves); the gates use that registry to verify
-# the declared source is a knob and that no other knob moves with
-# the contrast inside a seed pair. Assignment itself is the one
-# thing no external record can prove.
-evaluation = evaluate(
-    higher_gamma_improves_return,
-    df,
-    leaves=sb3_config_columns(RUNS, DQN),
-)
+# identities — never inferred from observed support. The Panel
+# already carries which columns were configuration (recovered from
+# the checkpoints themselves); the gates use that registry to
+# verify the declared source is a knob and that no other knob
+# moves with the contrast inside a seed pair. Assignment itself is
+# the one thing no external record can prove.
+evaluation = evaluate(higher_gamma_improves_return, panel)
 for warning in evaluation.warnings:
     print(f'\nwarning [{warning.gate_name}]: {warning.message}')
 result_obj = evaluation.analysis_results.get('paired_directional')

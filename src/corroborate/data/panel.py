@@ -6,7 +6,7 @@ one type)."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
 from typing import Literal
@@ -432,6 +432,15 @@ class Panel:
     stratify_by: tuple[str, ...] = ('env_name', 'arm_key')
     sources: tuple[CorpusSource, ...] = ()
     required_measurables: frozenset[str] = field(default_factory=frozenset)
+    # The record's configuration registry: which columns were
+    # CONFIGURED (the external counterpart of a native claim
+    # composition's leaf walk). Run readers populate it from the
+    # record's own artifacts; `evaluate()` consumes it for the
+    # knob-aware admission gates. None means "no registry known" —
+    # the gates then report their checks unverified rather than
+    # silently passing. A fact the frame cannot carry itself; the
+    # Panel is the typed carrier that travels with the cells.
+    leaves: frozenset[str] | None = None
 
     @classmethod
     def from_dataframe(
@@ -442,6 +451,7 @@ class Panel:
         stratify_by: tuple[str, ...] = ('env_name', 'arm_key'),
         sources: tuple[CorpusSource, ...] = (),
         required_measurables: frozenset[str] = frozenset(),
+        leaves: frozenset[str] | None = None,
     ) -> 'Panel':
         """Construct a Panel from a pre-built DataFrame. The
         idiomatic exploration-time constructor when the author
@@ -454,6 +464,7 @@ class Panel:
             stratify_by=stratify_by,
             sources=sources,
             required_measurables=required_measurables,
+            leaves=leaves,
         )
 
     @classmethod
@@ -734,13 +745,7 @@ class Panel:
             return self
         traces = pl.concat(per_source_traces, how='diagonal_relaxed')
         new_cells = self.cells.join(traces, on='id', how='left')
-        return Panel(
-            cells=new_cells,
-            scope_chain=self.scope_chain,
-            stratify_by=self.stratify_by,
-            sources=self.sources,
-            required_measurables=self.required_measurables,
-        )
+        return replace(self, cells=new_cells)
 
     @classmethod
     def from_corpora(
@@ -781,13 +786,22 @@ class Panel:
         the narrowed panel are recomputed from the narrowed cells
         (cheap; the `scope_provenance` chain preserves the parent
         expressions for audit)."""
-        return Panel(
+        return replace(
+            self,
             cells=self.cells.filter(expr),
             scope_chain=self.scope_chain + (expr,),
-            stratify_by=self.stratify_by,
-            sources=self.sources,
-            required_measurables=self.required_measurables,
         )
+
+    def with_columns(self, *exprs: pl.Expr) -> 'Panel':
+        """`cells.with_columns(...)` that stays a Panel — the
+        provenance, registry, and scope lineage travel with the
+        enriched frame. The idiomatic way to stamp analyst-known
+        context the record itself doesn't carry (an SB3 checkpoint
+        doesn't name its environment; the analyst does:
+        `panel.with_columns(pl.lit('CartPole-v1').alias('env_id'))`).
+        Columns added here are analyst context, not configuration —
+        they do not join `leaves`."""
+        return replace(self, cells=self.cells.with_columns(*exprs))
 
     def split_by(
         self, *keys: str,
@@ -874,13 +888,7 @@ class Panel:
         # Panel-side state.
         from corroborate.measurables import compute_missing_columns
         new_cells = compute_missing_columns(self.cells, names)
-        return Panel(
-            cells=new_cells,
-            scope_chain=self.scope_chain,
-            stratify_by=self.stratify_by,
-            sources=self.sources,
-            required_measurables=self.required_measurables,
-        )
+        return replace(self, cells=new_cells)
 
     def measurable_availability_matrix(
         self,
@@ -1066,10 +1074,52 @@ class Panel:
         )
 
 
+def concat_panels(panels: Sequence[Panel]) -> Panel:
+    """Pool batches of a growing record into one Panel.
+
+    Cells concatenate diagonally (heterogeneous columns null-pad),
+    sources concatenate, and the configuration registries union —
+    unless ANY batch has no registry, in which case the pool has
+    none either (an unknown part makes the whole unknown; the
+    gates then report their checks unverified). Scope lineage does
+    not survive pooling: the result is a fresh root, like
+    `from_corpora`. `stratify_by` must agree across batches —
+    silently keeping one of two disagreeing groupings would make
+    `diagnostics` lie about half the pool."""
+    if not panels:
+        raise ValueError('concat_panels: no panels to pool')
+    stratify = {p.stratify_by for p in panels}
+    if len(stratify) != 1:
+        raise ValueError(
+            f'concat_panels: panels disagree on stratify_by: '
+            f'{sorted(stratify)!r}',
+        )
+    leaves: frozenset[str] | None
+    if any(p.leaves is None for p in panels):
+        leaves = None
+    else:
+        leaves = frozenset().union(
+            *(p.leaves for p in panels if p.leaves is not None),
+        )
+    return Panel(
+        cells=pl.concat(
+            [p.cells for p in panels], how='diagonal_relaxed',
+        ),
+        scope_chain=(),
+        stratify_by=panels[0].stratify_by,
+        sources=tuple(s for p in panels for s in p.sources),
+        required_measurables=frozenset().union(
+            *(p.required_measurables for p in panels),
+        ),
+        leaves=leaves,
+    )
+
+
 __all__ = [
     'CorpusSource',
     'DerivedSpec',
     'MeasurableAvailability',
     'Panel',
     'PanelDiagnostics',
+    'concat_panels',
 ]

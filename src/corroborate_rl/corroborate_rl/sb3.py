@@ -4,9 +4,10 @@ The framework side (`corroborate.data.load_runs`) reads a neutral
 directory format and stays library-blind; this module is the
 RL-side integration that turns what SB3 users ALREADY have — a
 folder of runs, each with a checkpoint zip and an `EvalCallback`
-`evaluations.npz` — into the same one-row-per-run DataFrame plus
-the configuration-leaf registry, with zero changes to their
-training script.
+`evaluations.npz` — into the same one-row-per-run `Panel` the
+neutral loader produces — cells plus the configuration-leaf
+registry plus provenance — with zero changes to their training
+script.
 
 Expected layout (what `model.save()` + `EvalCallback` produce)::
 
@@ -24,8 +25,9 @@ Two artifact facts drive the design:
   signature: a leaf is a parameter the entry point accepts, the
   same registration principle as the native substrate's
   ``walk_paths(claim, regime='leaf')``. Entries cloudpickled by
-  SB3 (dicts carrying ``:serialized:``) are dropped — they are
-  callables/spaces, not scalar configuration.
+  SB3 (dicts carrying ``:serialized:``) are kept as opaque
+  equality-comparable payload strings, so differences in them
+  stay visible.
 - ``evaluations.npz`` carries ``timesteps`` (one per evaluation
   point) and ``results`` (per-episode returns at each point) —
   exactly the per-checkpoint evaluation record the neutral loader
@@ -49,17 +51,18 @@ from typing import cast
 import numpy as np
 import polars as pl
 
-# In-repo private reuse: the derivation semantics (dotted-path
-# flattening, per-checkpoint aggregation, collision policy) must
-# stay bit-identical to the neutral loader's, so the helpers are
-# shared rather than re-implemented.
+# The derivation semantics (dotted-path flattening, per-checkpoint
+# aggregation, collision policy, terminal-summary definition) must
+# stay bit-identical to the neutral loader's; both readers import
+# the shared kernel rather than re-implementing it.
 from corroborate.corpus.schema import MeasurementLeaf
-from corroborate.data.loader import (
-    _derive_outcomes,
-    _flatten_config,
-    _outcome_globals,
-    _put,
+from corroborate.data.derive import (
+    derive_outcomes,
+    flatten_config,
+    outcome_globals,
+    put_column,
 )
+from corroborate.data.panel import CorpusSource, Panel
 
 _SERIALIZED_MARKER = ':serialized:'
 
@@ -232,7 +235,7 @@ def load_sb3_runs(
     *,
     corpus: str | None = None,
     checkpoint: str | None = None,
-) -> pl.DataFrame:
+) -> Panel:
     """One row per run subdirectory of `root`: configuration from
     the checkpoint zip (flattened to dotted-path columns) plus the
     derived evaluation aggregates (`return_mean` at the
@@ -245,9 +248,10 @@ def load_sb3_runs(
     Same shape, derivation, and collision policy as
     `corroborate.data.load_runs`; the run id is the subdirectory
     name. `checkpoint` selects a specific zip filename when runs
-    carry several archives. Pair with
-    `sb3_config_columns(root, algo)` for the leaf registry
-    `evaluate(..., leaves=...)` consumes."""
+    carry several archives. The returned Panel carries the
+    configuration-leaf registry and provenance, so
+    `evaluate(claim, panel)` needs nothing else; batches pool via
+    `corroborate.data.concat_panels`."""
     root_path = Path(root)
     run_zips = _run_zips(root_path, checkpoint)
     evaluations: dict[str, dict[int, dict[str, list[float]]]] = {}
@@ -255,28 +259,39 @@ def load_sb3_runs(
         npz_path = run_dir / 'evaluations.npz'
         if npz_path.is_file():
             evaluations[run_dir.name] = _evaluations(npz_path)
-    terminal_by_outcome, grid_by_outcome = _outcome_globals(evaluations)
+    terminal_by_outcome, grid_by_outcome = outcome_globals(evaluations)
     rows: list[dict[str, MeasurementLeaf]] = []
+    leaves: set[str] = set()
     for run_dir, zip_path in run_zips:
         run_id = run_dir.name
         row: dict[str, MeasurementLeaf] = {'id': run_id}
-        _put(
+        put_column(
             row, 'corpus',
             corpus if corpus is not None else root_path.name,
             run_id=run_id,
         )
         config = checkpoint_config(zip_path, algo)
-        for key, value in _flatten_config(config).items():
-            _put(row, key, value, run_id=run_id)
+        for key, value in flatten_config(config).items():
+            put_column(row, key, value, run_id=run_id)
         per_checkpoint = evaluations.get(run_id)
         if per_checkpoint is not None:
-            _derive_outcomes(
+            derive_outcomes(
                 row, per_checkpoint, run_id=run_id,
                 terminal_by_outcome=terminal_by_outcome,
                 grid_by_outcome=grid_by_outcome,
             )
         rows.append(row)
-    return pl.from_dicts(rows, infer_schema_length=None)
+        leaves.update(flatten_config(config))
+    return Panel.from_dataframe(
+        pl.from_dicts(rows, infer_schema_length=None),
+        sources=(
+            CorpusSource(
+                corpus=corpus if corpus is not None else root_path.name,
+                data_root=root_path,
+            ),
+        ),
+        leaves=frozenset(leaves),
+    )
 
 
 def sb3_config_columns(
@@ -295,7 +310,7 @@ def sb3_config_columns(
     names: set[str] = set()
     for _run_dir, zip_path in _run_zips(Path(root), checkpoint):
         config = checkpoint_config(zip_path, algo)
-        names.update(_flatten_config(config))
+        names.update(flatten_config(config))
     return frozenset(names)
 
 

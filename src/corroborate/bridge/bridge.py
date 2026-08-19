@@ -62,6 +62,7 @@ from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.core.claim import Claim
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import ArmRole, DoEffect
+from corroborate.data.panel import Panel
 from corroborate.measurables import Measurable, register
 from corroborate.graph._extent import stable_extent_hash
 
@@ -691,7 +692,7 @@ def _stamp_value_contrast(
 
 def evaluate(
     bridge: Bridge,
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: 'pl.DataFrame | Iterable[Mapping[str, object]] | Panel',
     *,
     claim: Claim[..., object] | None = None,
     module_scope: pl.Expr | None = None,
@@ -734,12 +735,19 @@ def evaluate(
     Bridges that intentionally violate the module-level filter
     must move to a different hypothesis module.
 
+    `cells` may also be a `Panel` — the typed carrier run readers
+    return — in which case its `cells` frame and its `leaves`
+    registry are used together and nothing else needs passing:
+    `evaluate(claim, load_runs(dir))`.
+
     `leaves` (kw-only) is the external record's configuration
     registry: the set of column names the producer's record says
-    were configured (derive it from the record's own artifacts —
-    `corroborate.data.config_columns`,
-    `corroborate_rl.sb3.sb3_config_columns` — or list it by hand
-    for artifact-less data). It is authoritative about knob-ness,
+    were configured. Panels carry it already; the kwarg serves
+    frames built another way (derive it via
+    `corroborate.data.config_columns` /
+    `corroborate_rl.sb3.sb3_config_columns`, or list it by hand
+    for artifact-less data), and when both are present the
+    explicit kwarg wins. It is authoritative about knob-ness,
     and the gates use it both ways: a value-based DoEffect whose
     declared columns are NOT registered configuration is blocked
     (a measurement cannot be the assigned parameter), and a
@@ -759,6 +767,12 @@ def evaluate(
             f'body — @claim_bridge always populates it; constructing '
             f'a Bridge directly with holds_when=None is unsupported.',
         )
+    # A Panel is cells + facts: unwrap the frame and adopt its
+    # registry unless the caller passed one explicitly.
+    if isinstance(cells, Panel):
+        if leaves is None:
+            leaves = cells.leaves
+        cells = cells.cells
     # One-shot iterables must survive both deferred-scope resolution and
     # the eventual analysis pass. Materialise them once at the boundary.
     if not isinstance(cells, pl.DataFrame):

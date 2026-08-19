@@ -15,11 +15,15 @@ primitives, not through a shared Panel type.
 
 Externally-produced runs enter through `load_runs`
 (`corroborate.data.loader`): a directory of plain producer files
-becomes a DataFrame of one row per run, ready for polars
-exploration, `Panel.from_dataframe`, or direct bridge
-evaluation. The loader is a reader, not a gatekeeper — study-
-design checks live on the claim being evaluated, as admission
-gates.
+becomes a Panel of one row per run — cells plus the two facts a
+bare frame cannot carry, provenance (`sources`) and the
+configuration registry (`leaves`) — ready for polars exploration
+via `panel.cells` and direct bridge evaluation via
+`evaluate(claim, panel)`. Batches of a growing record pool with
+`concat_panels`. The loader is a reader, not a gatekeeper —
+study-design checks live on the claim being evaluated, as
+admission gates. The derivation semantics shared by every run
+reader live in `corroborate.data.derive`.
 
 See `corroborate/data/panel.py` for the load-bearing types."""
 from __future__ import annotations
@@ -31,6 +35,7 @@ from corroborate.data.panel import (
     MeasurableAvailability,
     Panel,
     PanelDiagnostics,
+    concat_panels,
 )
 
 __all__ = [
@@ -39,6 +44,7 @@ __all__ = [
     'MeasurableAvailability',
     'Panel',
     'PanelDiagnostics',
+    'concat_panels',
     'config_columns',
     'load_runs',
 ]

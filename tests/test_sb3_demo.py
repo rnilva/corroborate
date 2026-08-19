@@ -57,21 +57,27 @@ class _DQN_SIGNATURE:  # noqa: N801 — stands in for the DQN class
 
 
 def test_committed_sb3_artifacts_evaluate_the_claim_module() -> None:
-    df = load_sb3_runs(_RUNS, _DQN_SIGNATURE).with_columns(
+    panel = load_sb3_runs(_RUNS, _DQN_SIGNATURE).with_columns(
         pl.lit('CartPole-v1').alias('env_id'),
     )
+    df = panel.cells
     assert df.height == 6
     # Configuration recovered from the checkpoints themselves:
     assert set(df['gamma'].to_list()) == {0.8, 0.99}
     assert df['buffer_size'].unique().to_list() == [50_000]
 
-    leaves = sb3_config_columns(_RUNS, _DQN_SIGNATURE)
+    # The Panel carries the registry the loader recovered:
+    leaves = panel.leaves
+    assert leaves == sb3_config_columns(_RUNS, _DQN_SIGNATURE)
+    assert leaves is not None
     assert 'gamma' in leaves and 'seed' in leaves
-    # Runtime state never registers as configuration:
+    # Runtime state never registers as configuration, and analyst
+    # context stamped post-load doesn't either:
     assert 'num_timesteps' not in leaves
     assert 'exploration_rate' not in leaves
+    assert 'env_id' not in leaves
 
-    evaluation = evaluate(higher_gamma_improves_return, df, leaves=leaves)
+    evaluation = evaluate(higher_gamma_improves_return, panel)
 
     assert evaluation.n_cells_in_scope == 6
     assert evaluation.extent_hash != 0

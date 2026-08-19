@@ -20,7 +20,6 @@ import zipfile
 from pathlib import Path
 
 import numpy as np
-import polars as pl
 import pytest
 
 from corroborate.analyses.paired.arm_mean_diff import (
@@ -29,6 +28,7 @@ from corroborate.analyses.paired.arm_mean_diff import (
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge, evaluate
 from corroborate.bridge.verdict import Verdict
 from corroborate.core.intervention import DoEffect
+from corroborate.data import concat_panels
 from corroborate_rl.sb3 import (
     checkpoint_config,
     load_sb3_runs,
@@ -134,7 +134,7 @@ def test_checkpoint_config_intersects_constructor_signature(
 
 def test_load_sb3_runs_derives_closed_form_columns(tmp_path: Path) -> None:
     _make_sb3_runs(tmp_path)
-    df = load_sb3_runs(tmp_path, _FakeDQN)
+    df = load_sb3_runs(tmp_path, _FakeDQN).cells
 
     assert df.height == 4
     for row in df.to_dicts():
@@ -190,15 +190,13 @@ def test_end_to_end_value_contrast_on_sb3_artifacts(tmp_path: Path) -> None:
     """The potential-user path: a folder of ordinary SB3 outputs,
     no training-script changes, straight to a gated verdict.
     Closed form: mean_diff = 110 − 100 = 10 exactly at n = 2 per
-    condition."""
+    condition. The Panel carries the configuration registry, so
+    `evaluate` needs nothing beyond the claim and the record."""
     _make_sb3_runs(tmp_path)
-    df = load_sb3_runs(tmp_path, _FakeDQN)
+    panel = load_sb3_runs(tmp_path, _FakeDQN)
+    assert panel.leaves == sb3_config_columns(tmp_path, _FakeDQN)
 
-    evaluation = evaluate(
-        _higher_gamma_improves_sb3_return,
-        df,
-        leaves=sb3_config_columns(tmp_path, _FakeDQN),
-    )
+    evaluation = evaluate(_higher_gamma_improves_sb3_return, panel)
     assert evaluation.verdict is Verdict.HELD
     assert evaluation.blocked_by is None
     result = evaluation.analysis_results['arm_mean_diff']
@@ -218,13 +216,10 @@ def test_unmatched_sb3_level_is_outside_declared_effect(
     other = tmp_path / 'other' / 'gamma090-s0'
     _write_checkpoint(other / 'model.zip', gamma=0.90, seed=0)
     _write_evaluations(other / 'evaluations.npz', base=10_000.0)
-    pooled = pl.concat(
-        [
-            load_sb3_runs(declared, _FakeDQN),
-            load_sb3_runs(tmp_path / 'other', _FakeDQN),
-        ],
-        how='diagonal',
-    )
+    pooled = concat_panels([
+        load_sb3_runs(declared, _FakeDQN),
+        load_sb3_runs(tmp_path / 'other', _FakeDQN),
+    ])
 
     evaluation = evaluate(_higher_gamma_improves_sb3_return, pooled)
 
@@ -263,7 +258,7 @@ def test_string_algo_without_sb3_raises_with_guidance() -> None:
 def test_runs_without_evaluations_load_config_only(tmp_path: Path) -> None:
     run_dir = tmp_path / 'run-a'
     _write_checkpoint(run_dir / 'model.zip', gamma=0.9, seed=0)
-    df = load_sb3_runs(tmp_path, _FakeDQN)
+    df = load_sb3_runs(tmp_path, _FakeDQN).cells
     assert df.height == 1
     assert df['gamma'].to_list() == [0.9]
     assert 'return_mean' not in df.columns
@@ -277,7 +272,7 @@ def test_stray_subdirectories_are_walked_past(tmp_path: Path) -> None:
     _write_checkpoint(run_dir / 'model.zip', gamma=0.9, seed=0)
     (tmp_path / 'tb_logs').mkdir()
     (tmp_path / 'tb_logs' / 'events.out.tfevents.0').write_text('')
-    df = load_sb3_runs(tmp_path, _FakeDQN)
+    df = load_sb3_runs(tmp_path, _FakeDQN).cells
     assert df['id'].to_list() == ['run-a']
 
     empty = tmp_path / 'no-runs-here'
@@ -286,21 +281,17 @@ def test_stray_subdirectories_are_walked_past(tmp_path: Path) -> None:
         load_sb3_runs(empty, _FakeDQN)
 
 
-def test_pooling_sb3_batches_is_plain_concat(tmp_path: Path) -> None:
+def test_pooling_sb3_batches_is_concat_panels(tmp_path: Path) -> None:
+    """A growing record pools batch by batch; the union Panel
+    keeps carrying the registry, so evaluation stays two-argument."""
     _make_sb3_runs(tmp_path / 'batch_a', seeds=(0, 1))
     _make_sb3_runs(tmp_path / 'batch_b', seeds=(2, 3))
-    pooled = pl.concat(
-        [
-            load_sb3_runs(tmp_path / 'batch_a', _FakeDQN),
-            load_sb3_runs(tmp_path / 'batch_b', _FakeDQN),
-        ],
-        how='diagonal',
-    )
-    evaluation = evaluate(
-        _higher_gamma_improves_sb3_return,
-        pooled,
-        leaves=sb3_config_columns(tmp_path / 'batch_a', _FakeDQN),
-    )
+    pooled = concat_panels([
+        load_sb3_runs(tmp_path / 'batch_a', _FakeDQN),
+        load_sb3_runs(tmp_path / 'batch_b', _FakeDQN),
+    ])
+    assert pooled.leaves == sb3_config_columns(tmp_path / 'batch_a', _FakeDQN)
+    evaluation = evaluate(_higher_gamma_improves_sb3_return, pooled)
     assert evaluation.verdict is Verdict.HELD
     result = evaluation.analysis_results['arm_mean_diff']
     assert isinstance(result, ArmMeanDiffResult)
@@ -325,7 +316,7 @@ def test_ambiguous_checkpoint_series_requires_explicit_selection(
 
     df = load_sb3_runs(
         tmp_path, _FakeDQN, checkpoint='rl_model_20000_steps.zip',
-    )
+    ).cells
     assert df.height == 1
     assert 'gamma' in df.columns
 
@@ -345,7 +336,7 @@ def test_non_finite_terminal_episodes_stay_visible(tmp_path: Path) -> None:
             [[1.0, 2.0], [3.0, float('nan')]], dtype=np.float64,
         ),
     )
-    row = load_sb3_runs(tmp_path / 'partial', _FakeDQN).to_dicts()[0]
+    row = load_sb3_runs(tmp_path / 'partial', _FakeDQN).cells.to_dicts()[0]
     assert row['return_mean'] == 3.0
     assert row['return_terminal_n'] == 1
     assert row['return_terminal_attempted'] == 2
@@ -363,7 +354,7 @@ def test_non_finite_terminal_episodes_stay_visible(tmp_path: Path) -> None:
             [[1.0, 2.0], [float('nan'), float('nan')]], dtype=np.float64,
         ),
     )
-    row = load_sb3_runs(tmp_path / 'failed', _FakeDQN).to_dicts()[0]
+    row = load_sb3_runs(tmp_path / 'failed', _FakeDQN).cells.to_dicts()[0]
     # Sole run in the frame: the never-derived terminal column is
     # absent outright (a multi-run frame null-pads it instead).
     assert row.get('return_mean') is None

@@ -159,7 +159,7 @@ def _make_runs(
 
 def test_load_runs_derives_closed_form_columns(tmp_path: Path) -> None:
     _make_runs(tmp_path)
-    df = load_runs(tmp_path)
+    df = load_runs(tmp_path).cells
 
     assert df.height == 4
     for row in df.to_dicts():
@@ -197,11 +197,11 @@ def test_corpus_name_defaults_to_directory_and_is_overridable(
 ) -> None:
     _make_runs(tmp_path / 'batch_a')
     assert (
-        load_runs(tmp_path / 'batch_a')['corpus'].unique().to_list()
+        load_runs(tmp_path / 'batch_a').cells['corpus'].unique().to_list()
         == ['batch_a']
     )
     named = load_runs(tmp_path / 'batch_a', corpus='pilot-1')
-    assert named['corpus'].unique().to_list() == ['pilot-1']
+    assert named.cells['corpus'].unique().to_list() == ['pilot-1']
 
 
 def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
@@ -211,7 +211,7 @@ def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
             _BASELINE_ENT: (20,), _TREATMENT_ENT: (20,),
         },
     )
-    df = load_runs(tmp_path)
+    df = load_runs(tmp_path).cells
     for row in df.to_dicts():
         assert row['return_auc'] == row['return_mean']
         assert row['return_mean_at_20'] == row['return_mean']
@@ -233,7 +233,7 @@ def test_ragged_grids_never_rebase_the_terminal_summary(
             _BASELINE_ENT: _CHECKPOINTS, _TREATMENT_ENT: (10,),
         },
     )
-    df = load_runs(tmp_path)
+    df = load_runs(tmp_path).cells
     for row in df.to_dicts():
         pair_key = row['training.seed']
         assert isinstance(pair_key, int)
@@ -291,7 +291,7 @@ def test_identical_curves_at_different_horizons_yield_no_effect(
     _write_jsonl(root / 'runs.jsonl', runs)
     _write_jsonl(root / 'evaluations.jsonl', evaluations)
 
-    df = load_runs(root)
+    df = load_runs(root).cells
     baseline_terminal = df.filter(
         pl.col('algorithm.ent_coef') == _BASELINE_ENT,
     )['return_mean'].to_list()
@@ -323,7 +323,7 @@ def test_non_finite_terminal_stays_missing(tmp_path: Path) -> None:
             row['return'] = float('nan')
     _write_jsonl(evaluations_path, rows)
 
-    df = load_runs(tmp_path)
+    df = load_runs(tmp_path).cells
     baseline = df.filter(pl.col('id') == baseline_id).to_dicts()[0]
     assert baseline['return_mean'] is None
     assert baseline['return_terminal_n'] == 0
@@ -346,7 +346,7 @@ def test_config_flattening_is_injective_and_keeps_arrays(
         tmp_path,
         extra_config_fields={'policy_kwargs': {'net_arch': [64, 64]}},
     )
-    df = load_runs(tmp_path)
+    df = load_runs(tmp_path).cells
     assert df['policy_kwargs.net_arch'].unique().to_list() == ['[64, 64]']
     assert 'policy_kwargs.net_arch' in config_columns(tmp_path)
 
@@ -373,7 +373,7 @@ def test_non_numeric_evaluation_fields_are_not_outcomes(
         row['note'] = 'greedy rollout'
     _write_jsonl(evaluations_path, rows)
 
-    df = load_runs(tmp_path)
+    df = load_runs(tmp_path).cells
     assert 'note_mean' not in df.columns
     assert 'note' not in df.columns
 
@@ -387,7 +387,7 @@ def test_missing_optional_files_load_without_their_columns(
     _make_runs(
         tmp_path, write_evaluations=False, write_provenance=False,
     )
-    df = load_runs(tmp_path)
+    df = load_runs(tmp_path).cells
     assert df.height == 4
     assert 'return_mean' not in df.columns
     assert 'program' not in df.columns
@@ -473,7 +473,7 @@ def test_conflicting_column_values_raise_and_equal_values_pass(
 
     agreeing = tmp_path / 'agreeing'
     _make_runs(agreeing, extra_run_fields={'environment.id': 'MountainCar-v0'})
-    df = load_runs(agreeing)
+    df = load_runs(agreeing).cells
     assert df['environment.id'].unique().to_list() == ['MountainCar-v0']
 
 
@@ -525,28 +525,43 @@ def test_config_columns_derives_the_leaf_registry(tmp_path: Path) -> None:
     })
 
 
+def test_panel_carries_the_registry_to_evaluate(tmp_path: Path) -> None:
+    """The Panel is the typed carrier for what a bare frame cannot
+    hold: `leaves` equals the standalone registry derivation, the
+    source records where the cells came from, and `evaluate`
+    consumes the Panel with nothing else passed."""
+    _make_runs(tmp_path)
+    panel = load_runs(tmp_path)
+    assert panel.leaves == config_columns(tmp_path)
+    assert [s.corpus for s in panel.sources] == [tmp_path.name]
+
+    evaluation = evaluate(_entropy_bonus_improves_return, panel)
+    assert evaluation.verdict is Verdict.HELD
+    assert evaluation.blocked_by is None
+    assert evaluation.warnings == ()
+
+
 def test_batches_of_the_same_study_pool(tmp_path: Path) -> None:
     """Evidence is a live record: two batches of seeds loaded
-    separately concatenate into one run set, and the same claim
-    evaluates against the pool — the run-more-seeds workflow the
-    hypothesis layer exists for. Closed form: the pair diff
-    cancels every term except the condition bases, so mean_diff =
-    -90 - (-100) = 10 exactly at n = 4 per condition."""
+    separately pool into one Panel — cells diagonally, registries
+    by union, sources by concatenation — and the same claim
+    evaluates against the pool with nothing else passed: the
+    run-more-seeds workflow the hypothesis layer exists for.
+    Closed form: the pair diff cancels every term except the
+    condition bases, so mean_diff = -90 - (-100) = 10 exactly at
+    n = 4 per condition."""
+    from corroborate.data import concat_panels
+
     _make_runs(tmp_path / 'batch_a', training_seeds=(7, 9))
     _make_runs(tmp_path / 'batch_b', training_seeds=(11, 13))
-    pooled = pl.concat(
-        [
-            load_runs(tmp_path / 'batch_a'),
-            load_runs(tmp_path / 'batch_b'),
-        ],
-        how='diagonal',
-    )
+    pooled = concat_panels([
+        load_runs(tmp_path / 'batch_a'),
+        load_runs(tmp_path / 'batch_b'),
+    ])
+    assert [s.corpus for s in pooled.sources] == ['batch_a', 'batch_b']
+    assert pooled.leaves == config_columns(tmp_path / 'batch_a')
 
-    evaluation = evaluate(
-        _entropy_bonus_improves_return,
-        pooled,
-        leaves=config_columns(tmp_path / 'batch_a'),
-    )
+    evaluation = evaluate(_entropy_bonus_improves_return, pooled)
     assert evaluation.verdict is Verdict.HELD
     assert evaluation.blocked_by is None
     result = evaluation.analysis_results['arm_mean_diff']
@@ -565,7 +580,7 @@ def test_loaded_frame_agrees_with_dict_rows_through_an_analysis(
     per-condition final means `base + 2.5 + (pair_key - 7)` →
     variance 2 at n = 2 per condition → SE = sqrt(2), df = 2."""
     _make_runs(tmp_path)
-    df = load_runs(tmp_path)
+    df = load_runs(tmp_path).cells
     labelled = df.with_columns(
         pl.when(pl.col('algorithm.ent_coef') == _TREATMENT_ENT)
         .then(pl.lit('treatment'))
