@@ -303,6 +303,19 @@ def test_split_by_partitions_into_sub_panels() -> None:
         assert env_seen == {k[0]}
 
 
+def test_split_by_carries_the_registry() -> None:
+    """A sub-Panel keeps the parent's configuration registry —
+    evaluating a stratum must not silently degrade the knob-aware
+    gates to unverified. Guards the explicit-construction pitfall
+    (a new carried field forgotten at one re-construction site)."""
+    panel = Panel.from_dataframe(
+        _make_cells_dataframe(),
+        leaves=frozenset({'optimizer.inner.lr'}),
+    )
+    for sub in panel.split_by('env_name').values():
+        assert sub.leaves == frozenset({'optimizer.inner.lr'})
+
+
 def test_derive_mean_per_stratum() -> None:
     """`Panel.derive(DerivedSpec('_panel_test_jens', 'mean', None))`
     computes mean of _panel_test_jens per stratum, dropping NaN cells

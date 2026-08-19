@@ -808,10 +808,12 @@ class Panel:
     ) -> Mapping[tuple[object, ...], 'Panel']:
         """Partition cells by the named keys; return a mapping
         from stratum-id tuple to sub-Panel. Each sub-Panel
-        inherits `scope_chain`, `sources`, `required_measurables`;
-        its `stratify_by` is unchanged (the panel can still
-        compute per-stratum diagnostics with a coarser grouping
-        than the split keys).
+        inherits every carried fact (`scope_chain`, `sources`,
+        `required_measurables`, `leaves` — via `replace`, so a
+        future field can't be silently dropped here); its
+        `stratify_by` is unchanged (the panel can still compute
+        per-stratum diagnostics with a coarser grouping than the
+        split keys).
 
         Uses `polars.DataFrame.partition_by(... as_dict=True)`
         — a single-pass partition rather than per-stratum
@@ -836,12 +838,8 @@ class Panel:
             return tuple(str(v) for v in k)
         for k_raw in sorted(partitions, key=_sort_key):
             stratum_id: tuple[object, ...] = tuple(k_raw)
-            out[stratum_id] = Panel(
-                cells=partitions[k_raw],
-                scope_chain=self.scope_chain,
-                stratify_by=self.stratify_by,
-                sources=self.sources,
-                required_measurables=self.required_measurables,
+            out[stratum_id] = replace(
+                self, cells=partitions[k_raw],
             )
         return out
 
