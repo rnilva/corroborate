@@ -3,8 +3,9 @@
 Every invocation of `runner.run()` (with `write_report=True`)
 serializes a structured report to disk capturing: per-bridge verdict
 + every typed analysis-result dataclass (fields AND `@property`
-accessors) + admission-gate outcomes + cell sample sizes + provenance
-(git commit, timestamp, the existing measurable-signature manifest).
+accessors) + admission-gate outcomes + cell sample sizes + execution
+metadata (git commit, timestamp, and the existing measurable-signature
+manifest).
 
 The report is the load-bearing audit artifact:
 
@@ -14,6 +15,11 @@ The report is the load-bearing audit artifact:
   asserts verdict identity — sentinel against accidental bridge edits.
 - Memory entries that name effect sizes can be cross-checked against
   the report rather than trusting hand-typed numbers.
+
+It deliberately carries no evidence digest or chronology proof. The
+git revision and `extent_hash` are execution metadata: `extent_hash`
+groups a de-duplicated set of string cell IDs and does not identify row
+contents, multiplicity, provenance, or an external data snapshot.
 
 The cache parquet (`experiments/data/cache/<short>.parquet`) remains
 a pure speedup — separate decision whether to commit.
@@ -44,6 +50,7 @@ import numpy as np
 import polars as pl
 
 from corroborate.bridge.bridge import Bridge, BridgeEvaluation
+from corroborate.core.intervention import DoEffect
 from corroborate.measurables.measurable import Measurable
 
 
@@ -62,7 +69,10 @@ class ErroredBridgeEntry:
 class BridgeReportEntry:
     """One bridge's outcome: structural metadata + verdict + every
     analysis result (with property accessors expanded) + admission
-    gates + sample-size diagnostics. JSON-friendly via `_coerce_value`."""
+    gates + sample-size diagnostics. `extent_hash` remains a
+    graph-grouping diagnostic for compatibility; it is not evidence
+    identity or an integrity attestation. JSON-friendly via
+    `_coerce_value`."""
     bridge_name: str
     source_name: str
     target_name: str
@@ -80,8 +90,11 @@ class BridgeReportEntry:
     blocked_by: Mapping[str, object] | None
     refutation_class: str | None = None
     assumption_violations: tuple[str, ...] = ()
-    evidence_digest: str | None = None
     extent_hash: int = 0
+    # True for a value-based DoEffect over externally-produced rows:
+    # the tier is author-asserted, not framework-executed. Keeps
+    # external effects machine-distinguishable in persisted reports.
+    external_effect: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -402,8 +415,11 @@ def _build_bridge_entry(
             if evaluation.refutation_class is not None else None
         ),
         assumption_violations=evaluation.assumption_violations,
-        evidence_digest=evaluation.evidence_digest,
         extent_hash=evaluation.extent_hash,
+        external_effect=(
+            isinstance(bridge.source, DoEffect)
+            and bridge.source.is_value_based
+        ),
     )
 
 

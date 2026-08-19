@@ -25,6 +25,7 @@ import math
 from collections.abc import Mapping
 
 from corroborate.analyses.link.cross_stratum_property_slope import (
+    DerivedCovariateSpec,
     cross_stratum_property_slope,
 )
 
@@ -225,3 +226,30 @@ def test_cross_stratum_property_slope_dataframe_input_identical_to_cells() -> No
     assert (
         result_panel.cohen_d_per_stratum == result_cells.cohen_d_per_stratum
     )
+
+
+def test_cross_stratum_property_slope_honours_custom_arm_field() -> None:
+    """Both the effect panel and an arm-filtered derived covariate
+    use the caller-selected arm column."""
+    cells: list[Mapping[str, object]] = []
+    for cell in _build_cells():
+        row = dict(cell)
+        row['contrast_arm'] = row.pop('arm_key')
+        cells.append(row)
+    result = cross_stratum_property_slope.fn(
+        cells,
+        treatment_arm='treatment',
+        baseline_arm='baseline',
+        arm_field='contrast_arm',
+        source='y_mean',
+        covariate_name='mu_x_cov',
+        derived_covariate=DerivedCovariateSpec(
+            column='mu_x', aggregator='mean', arm_filter='baseline',
+        ),
+        covariate_key_field='env_name',
+        scope_predictor='z_mean',
+        min_baseline_predictor=0.0,
+        min_strata=8,
+    )
+    assert result.n_strata == len(_ENV_MU_X)
+    assert result.rho > 0.95

@@ -243,3 +243,30 @@ def test_meta_regression_unpaired_d_rejects_invalid_covariate_key_field() -> Non
             scope_predictor='y_mean',
             min_baseline_predictor=float('-inf'),
         )
+
+
+def test_meta_regression_unpaired_d_honours_custom_arm_field() -> None:
+    """The effect panel and continuous baseline covariate use the
+    same caller-selected arm column."""
+    cells: list[Mapping[str, object]] = []
+    for cell in _as_dicts(run_multi_env_paired_arms(
+        envs=_envs_by_mu_x(), seeds=range(_N_PAIRS),
+    )):
+        row = dict(cell)
+        row['contrast_arm'] = row.pop('arm_key')
+        cells.append(row)
+    result = meta_regression_unpaired_d.fn(
+        cells,
+        treatment_arm='treatment',
+        baseline_arm='baseline',
+        arm_field='contrast_arm',
+        source='y_mean',
+        continuous_covariate='mu_x',
+        continuous_covariate_arm='baseline',
+        stratify_by=('env_name',),
+        scope_predictor='y_mean',
+        min_baseline_predictor=float('-inf'),
+        min_seeds_per_arm=5,
+    )
+    assert result.n_strata == len(_MU_X_GRID)
+    assert [coef.name for coef in result.coefficients] == ['mu_x']

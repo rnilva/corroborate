@@ -60,9 +60,8 @@ column names predate them and are kept for compatibility:
 ```python
 from functools import partial
 from corroborate import claim_bridge
-from corroborate.bridge.bridge import Direction, Tier
-from corroborate.bridge.verdict import Verdict
-from corroborate.core.intervention import DoEffect, Intervention
+from corroborate.bridge import Direction, Tier, Verdict
+from corroborate.core import DoEffect, Intervention
 
 # The mechanism as a unit of intervention: swap greedification,
 # leave everything else unchanged.
@@ -103,47 +102,92 @@ uv run corroborate hypothesis experiments.findings.<name> --render evidence.svg
 
 ## Using external runs
 
-Training runs produced by other codebases can be ingested
-without modifying the training code. The producer writes a small
-bundle (run and evaluation records, resolved configurations, and
-a short `contract.json` describing the study);
-`corroborate.data.adapt_study` verifies the bundle and returns an
-`AdaptedStudy`: validated rows, a recorded contrast, and an
-admissibility receipt. Checks the files can prove are marked
-`VERIFIED`; producer statements remain `ATTESTED` or
-`UNVERIFIABLE`.
+Training runs produced by other codebases evaluate without
+modifying the training code, and without any corroborate-specific
+files on the producer's side. For stable-baselines3,
+`corroborate_rl.sb3.load_sb3_runs` reads the artifacts SB3
+already writes — `model.save()` checkpoint zips plus
+`EvalCallback` `evaluations.npz` — into a `Panel`: one row per
+run in `panel.cells` (configuration flattened to dotted-path
+columns, per-checkpoint outcome aggregates derived), plus the
+two facts a bare frame cannot carry — the configuration registry
+(`leaves`) and provenance (`sources`). For runs logged in your
+own format, `corroborate.data.load_runs` reads a directory of
+plain JSON records into the same shape. Both are readers, not
+gatekeepers.
 
-The claim remains an ordinary, data-independent `@claim_bridge`
-module. At evaluation time, the verified contrast supplies the
-external producer's arm labels:
+The claim is an ordinary, data-independent `@claim_bridge`
+module — the same shape as a native bridge, with no external
+special case. An external contrast uses `DoEffect.from_values`
+to fix its estimand independently of whichever values happen to
+occur in a particular DataFrame:
 
 ```python
-from corroborate.bridge.bridge import evaluate
-from corroborate.data import adapt_study
-from my_claims import higher_gamma_improves_return
-
-study = adapt_study('path/to/bundle')
-panel = study.to_panel()                 # optional exploration
-result = evaluate(
-    higher_gamma_improves_return,        # authored test module
-    panel.cells,
-    recorded_contrast=study.contrast,    # runtime data binding
+GAMMA_EFFECT = DoEffect.from_values(
+    source='gamma',
+    reference=0.80,
+    treatment=0.99,
 )
+
+@claim_bridge(
+    source=GAMMA_EFFECT,
+    target='return_mean',
+    tier=Tier.INTERVENTIONAL,
+    pair_by=('seed',),
+    scope=pl.col('env_id') == 'CartPole-v1',
+    predicted_direction='a_gt_b',
+    ...
+)
+def higher_gamma_improves_return(...) -> ...: ...
+
+panel = load_runs('path/to/runs')
+result = evaluate(higher_gamma_improves_return, panel)
 ```
 
-The bridge declares the measurable edge, scope, predicted
-direction, analysis configuration, and verdict rule. It does not
-import the bundle or hard-code producer-specific condition names.
-The resulting `BridgeEvaluation.evidence_digest` binds its verdict
-to the sealed bundle represented by those cells.
+The declared reference and treatment values map to the symbolic
+arm identities `baseline` and `treatment`; their order is never
+inferred from observed support or formatted value labels. Other
+values of `gamma` remain valid rows in the growing record but are
+outside this particular contrast, so the same Panel can
+accumulate additional conditions — and other claims — over one
+record. A joint intervention (values assigned together, or one
+logical setting surfacing as several config fields) declares
+every co-assigned column:
+`DoEffect.from_values(reference={'gamma': 0.80, 'n_step': 1},
+treatment={'gamma': 0.99, 'n_step': 3})`.
+
+`leaves` is the record's configuration registry — which columns
+were *configured* — derived from the record's own config files,
+never hand-listed, and carried by the Panel from load to
+evaluation. It is authoritative about knob-ness, and the gates
+use it both ways: a declared source that is NOT registered
+configuration blocks (a measured column cannot be the assigned
+parameter of an intervention), and a registered leaf that moves
+with the contrast inside a pairing unit blocks as a confound. An
+*unregistered* column moving with the contrast warns on the
+record — a label is harmless, an unlogged knob is not, and only
+the author can say which. What no registry can attest —
+assignment, randomisation, hidden confounding — stays outside
+the framework's claims either way; evaluate a record without a
+registry and the checkable parts are reported unverified rather
+than silently passed.
+
+The record is live: run more seeds, re-load, and the same bridge
+recomputes — batches pool with `concat_panels`, and a verdict
+that moves with the evidence is the system working. (Runs logged
+your own way need no loader at all: any DataFrame with the named
+columns evaluates directly — pass `leaves=` alongside it if you
+can attest configuration — and `Panel.from_dataframe` carries
+both facts for repeated use.)
 
 [`examples/sb3_demo/`](examples/sb3_demo/) walks through this
-with stable-baselines3 DQN: training, bundle production,
-adaptation, descriptive exploration on the adapted panel, and
-evaluation of an executable claim module through the same bridge
-path used by native studies. It runs on CPU in a few minutes, and
-a bundle from a real run is committed so the analysis half can be
-run without training.
+with stable-baselines3 DQN: a tutorial-shaped training script
+with zero recording code, loading of SB3's own artifacts,
+descriptive exploration in plain polars, and evaluation of an
+executable claim module through the same bridge path used by
+native studies. It runs on CPU in a few minutes, and artifacts
+from a real run are committed so the analysis half can be run
+without training.
 
 ## Repository layout
 

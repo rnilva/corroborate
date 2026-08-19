@@ -55,6 +55,7 @@ def meta_regression_per_burst(
     *,
     treatment_arm: str,
     baseline_arm: str,
+    arm_field: str = 'arm_key',
     pair_by: tuple[str, ...] = ('seed',),
     source: Measurable[
         Mapping[str, object], npt.NDArray[np.floating],
@@ -95,6 +96,7 @@ def meta_regression_per_burst(
         cells_list,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
+        arm_field=arm_field,
         pair_by=pair_by,
         source=source,
         dedupe_strategy=dedupe_strategy,

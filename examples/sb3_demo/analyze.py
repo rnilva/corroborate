@@ -1,91 +1,87 @@
-"""Analyse the SB3 bundle — corroborate's side of the boundary.
+"""Analyse the SB3 runs — corroborate's side of the boundary.
 
 Run from the repo root, **after** `train.py` has produced
-`examples/sb3_demo/bundle/`. No SB3 or torch needed here:
+`examples/sb3_demo/runs/`. Reading SB3's artifacts needs the
+DQN constructor's signature (that is where the configuration
+registry comes from), so run with stable-baselines3 available:
 
-    uv run python examples/sb3_demo/analyze.py
+    uv run --with 'stable-baselines3>=2.3' examples/sb3_demo/analyze.py
 
-Four steps: seal, adapt (verify + normalise, receipt printed),
-explore the run set as a Panel (trajectory + descriptive probe),
-then evaluate the executable claim test in ``sb3_claim.py``.
+Three steps: read SB3's own artifacts (checkpoint zips +
+EvalCallback logs) into a Panel, explore its cells with plain
+polars, then evaluate the executable claim test in
+``sb3_claim.py`` against the Panel.
+
+The record is live: run more seeds, re-load, and the same claim
+test recomputes — a verdict that moves with the evidence is the
+system working. (Runs logged your own way? A directory of plain
+JSON records loads via ``corroborate.data.load_runs``, and any
+DataFrame evaluates directly.)
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 import polars as pl
+from stable_baselines3 import DQN
 
 from corroborate.analyses.paired.paired_directional import (
     PairedDirectionalResult,
 )
-from corroborate.analyses.paired.paired_g import paired_g
-from corroborate.bridge.bridge import evaluate
-from corroborate.data import adapt_study, seal_bundle
+from corroborate.bridge import evaluate
+from corroborate_rl.sb3 import load_sb3_runs
 from sb3_claim import higher_gamma_improves_return
 
-BUNDLE = Path(__file__).parent / 'bundle'
+RUNS = Path(__file__).parent / 'runs'
 
-# ── 1. seal: content-address the record ─────────────────────────
-if not (BUNDLE / 'manifest.json').exists():
-    seal_bundle(BUNDLE)
-    print(f'sealed: {BUNDLE / "manifest.json"}')
+# ── 1. load: SB3's own artifacts in, one Panel out ──────────────
+# Configuration is recovered from each checkpoint's `data` record
+# intersected with DQN's constructor signature; evaluations come
+# from EvalCallback's evaluations.npz. The Panel carries the
+# cells plus the configuration registry and provenance. The
+# checkpoint doesn't record which environment it trained on, so
+# the analyst stamps that known context (`with_columns` stays a
+# Panel; analyst context does not join the registry).
+panel = load_sb3_runs(RUNS, DQN).with_columns(
+    pl.lit('CartPole-v1').alias('env_id'),
+)
+df = panel.cells
+print(f'loaded: {df.height} runs × {df.width} columns')
+print(df.select('id', 'seed', 'gamma', 'return_mean').sort('gamma', 'seed'))
 
-# ── 2. adapt: verify + normalise, fail-closed ───────────────────
-study = adapt_study(BUNDLE)
-print(f'\nadmissible: {study.receipt.admissible}')
-for check in study.receipt.checks:
-    print(f'  [{check.status.name:12s}] {check.code}: {check.message}')
-
-# ── 3. explore the run set as a Panel ───────────────────────────
-# `panel.cells` is a polars DataFrame; registered analyses accept
-# it directly. This is descriptive exploration, not the authored
-# claim test.
-panel = study.to_panel()
-print(f'\npanel: {panel.cells.height} seeded runs × '
-      f'{panel.cells.width} columns')
-print(panel.cells.select(
-    'id', 'arm_key', 'seed', 'gamma', 'return_mean',
-).sort('arm_key', 'seed'))
-
-# How the contrast evolves over training: the adapter derives one
-# `return_mean_at_<step>` column per evaluation checkpoint, so the
-# trajectory — not just the final mean — is explorable.
+# ── 2. explore, in plain polars ─────────────────────────────────
+# One `return_mean_at_<step>` column per evaluation point makes
+# the trajectory — not just the final mean — explorable.
 curve_cols = sorted(
-    (
-        c for c in panel.cells.columns
-        if c.startswith('return_mean_at_')
-        and c.rsplit('_', 1)[-1].isdigit()
-    ),
+    (c for c in df.columns if c.startswith('return_mean_at_')),
     key=lambda c: int(c.rsplit('_', 1)[-1]),
 )
 print('\nmean return per checkpoint (seeds pooled per condition):')
-print(panel.cells.group_by('arm_key').agg(
+print(df.group_by('gamma').agg(
     pl.col(c).mean().round(1).alias(c.removeprefix('return_mean_at_'))
     for c in curve_cols
-).sort('arm_key'))
+).sort('gamma'))
 
-# A descriptive paired probe of the same contrast: direction and
-# magnitude while looking around.
-probe = paired_g(
-    panel.cells,
-    source='return_mean',
-    treatment_arm=study.contrast.treatment_key,
-    baseline_arm=study.contrast.baseline_key,
-    pair_by=('seed',),
-)
-print(f'\nprobe: Δ(return_mean) = {probe.mean_diff:+.1f} '
-      f'± {probe.mean_diff_se:.1f}  g={probe.g:+.2f}  '
-      f'pairs helped: {probe.helped_fraction:.0%} of {probe.n_pairs}')
+# The same contrast per seed pair, descriptively.
+wide = df.pivot('gamma', index='seed', values='return_mean')
+paired = wide.with_columns(
+    (pl.col('0.99') - pl.col('0.8')).alias('delta'),
+).sort('seed')
+print('\nΔ(return_mean) per seed (gamma 0.99 − 0.80):')
+print(paired)
 
-# ── 4. evaluate the authored claim test ─────────────────────────
-# The claim module owns the edge, scope, predicted direction,
-# statistical configuration, and verdict rule. The verified record
-# supplies only its producer-specific arm labels at evaluation time.
-evaluation = evaluate(
-    higher_gamma_improves_return,
-    panel.cells,
-    recorded_contrast=study.contrast,
-)
+# ── 3. evaluate the authored claim test ─────────────────────────
+# The claim module owns the estimand and verdict rule: the declared
+# DoEffect maps gamma=0.80 and 0.99 to symbolic baseline/treatment
+# identities — never inferred from observed support. The Panel
+# already carries which columns were configuration (recovered from
+# the checkpoints themselves); the gates use that registry to
+# verify the declared source is a knob and that no other knob
+# moves with the contrast inside a seed pair. Assignment itself is
+# the one thing no external record can prove.
+evaluation = evaluate(higher_gamma_improves_return, panel)
+for warning in evaluation.warnings:
+    print(f'\nwarning [{warning.gate_name}]: {warning.message}')
 result_obj = evaluation.analysis_results.get('paired_directional')
 if not isinstance(result_obj, PairedDirectionalResult):
     raise RuntimeError('claim did not produce paired_directional evidence')

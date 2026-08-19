@@ -109,6 +109,24 @@ def _make_cells_dataframe() -> pl.DataFrame:
     })
 
 
+_CORPUS_STRATIFY = ('env_name', 'arm_key')
+
+
+def _corpus_panel(
+    *,
+    required_measurables: frozenset[str] = frozenset(),
+) -> Panel:
+    """The fixture frame as a corpus-shaped Panel. `Panel`'s own
+    `stratify_by` default is neutral (`()` — no grouping
+    declared), so the corpus grouping these per-stratum tests
+    probe is stated here, once."""
+    return Panel.from_dataframe(
+        _make_cells_dataframe(),
+        stratify_by=_CORPUS_STRATIFY,
+        required_measurables=required_measurables,
+    )
+
+
 def test_from_dataframe_constructs_exploration_panel() -> None:
     """`Panel.from_dataframe(df)` is the test-fixture / hand-built
     constructor. No scope_chain, no sources — pure exploration
@@ -119,15 +137,36 @@ def test_from_dataframe_constructs_exploration_panel() -> None:
     assert panel.scope_chain == ()
     assert panel.sources == ()
     assert panel.required_measurables == frozenset()
-    # stratify_by defaults to (env_name, arm_key).
-    assert panel.stratify_by == ('env_name', 'arm_key')
+    # Neutral by default — no grouping declared, no assumed
+    # corpus vocabulary.
+    assert panel.stratify_by == ()
+
+
+def test_external_shaped_panel_probes_report_empty_not_crash() -> None:
+    """A record that never had the corpus columns (an SB3 load,
+    a hand-built frame) must not crash the per-stratum probes
+    with a ColumnNotFoundError about vocabulary it never used.
+    With no grouping declared, `diagnostics` reports empty maps
+    and no-args `split_by` returns no strata — honest "nothing
+    declared", not a crash."""
+    panel = Panel.from_dataframe(pl.DataFrame({
+        'id': ['a', 'b'],
+        'seed': [0, 1],
+        'gamma': [0.8, 0.99],
+        'return_mean': [100.0, 110.0],
+    }))
+    assert panel.diagnostics.n_cells_per_stratum == {}
+    assert panel.split_by() == {}
+    # An explicit key still partitions — grouping is a statement,
+    # not a capability the neutral default removes.
+    assert len(panel.split_by('gamma')) == 2
 
 
 def test_diagnostics_n_cells_per_stratum() -> None:
     """`n_cells_per_stratum` reports the per-stratum cell count
     used to detect inflation. With 3 envs × 2 arms × 3 seeds each,
     every stratum should be 3."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     diag = panel.diagnostics
     for env in ['FourRooms-misc', 'Asterix-MinAtar', 'Snake-jumanji']:
         for arm in ['baseline', 'ddqn']:
@@ -142,7 +181,7 @@ def test_diagnostics_corpora_per_stratum_surfaces_hp_mixing() -> None:
     stamps per stratum. The FR cells came from 2 corpora — this
     surfaces the today's-FR-style inflation at hypothesis run
     time (BUT does not enforce; the bridge author reads + decides)."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     diag = panel.diagnostics
     assert diag.corpora_per_stratum[('FourRooms-misc', 'baseline')] == (
         frozenset({'fr_corpA', 'fr_corpB'})
@@ -179,7 +218,9 @@ def test_diagnostics_programs_per_stratum_surfaces_program_blind_pooling(
         # Single: one program. Legacy: null (pre-program corpus).
         'program': ['dqn', 'paired_dqn', 'dqn', 'dqn', None, None],
     })
-    diag = Panel.from_dataframe(df).diagnostics
+    diag = Panel.from_dataframe(
+        df, stratify_by=_CORPUS_STRATIFY,
+    ).diagnostics
     # Program-blind collision surfaced.
     assert diag.programs_per_stratum[('Mix', 'baseline')] == (
         frozenset({'dqn', 'paired_dqn'})
@@ -196,7 +237,7 @@ def test_diagnostics_programs_per_stratum_absent_column() -> None:
     """A panel whose cells carry no `program` column at all reports
     an empty set per stratum (not a KeyError) — old corpora pre-date
     the typed column."""
-    diag = Panel.from_dataframe(_make_cells_dataframe()).diagnostics
+    diag = _corpus_panel().diagnostics
     assert diag.programs_per_stratum[('Asterix-MinAtar', 'baseline')] == (
         frozenset()
     )
@@ -212,7 +253,7 @@ def test_diagnostics_nonunique_configs_surfaces_hp_heterogeneity() -> None:
     The FR baseline stratum has lr=1e-4 for 2 cells, lr=2e-4 for
     1 cell → 2 distinct configs. Every other stratum is
     homogeneous → 1."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     diag = panel.diagnostics
     assert diag.nonunique_configs_per_stratum[
         ('FourRooms-misc', 'baseline')
@@ -234,7 +275,7 @@ def test_diagnostics_finite_fraction_exploration_mode() -> None:
     # Both measurable names ARE registered in the framework's
     # @measurable registry (used by other tests / implementation).
     # This test confirms the auto-detection picks them up.
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     diag = panel.diagnostics
     for env in ['FourRooms-misc', 'Asterix-MinAtar', 'Snake-jumanji']:
         for arm in ['baseline', 'ddqn']:
@@ -253,8 +294,7 @@ def test_diagnostics_finite_fraction_required_measurables_narrows_report() -> No
     finite-fraction map only reports those names. The frame's
     other measurable cols are present but excluded from the
     diagnostic."""
-    panel = Panel.from_dataframe(
-        _make_cells_dataframe(),
+    panel = _corpus_panel(
         required_measurables=frozenset({'_panel_test_jens'}),
     )
     diag = panel.diagnostics
@@ -264,11 +304,36 @@ def test_diagnostics_finite_fraction_required_measurables_narrows_report() -> No
     assert set(per_meas.keys()) == {'_panel_test_jens'}
 
 
+def test_diagnostics_config_fingerprint_trusts_carried_registry() -> None:
+    """When the Panel carries `leaves`, the nonunique-configs
+    diagnostic fingerprints exactly the registered columns — a
+    measured outcome that varies per cell is not configuration and
+    must not inflate the count. Without a registry the exclusion
+    heuristic cannot know `return_mean` is measured, so it counts
+    it: 1 config with the registry vs 3 without."""
+    df = pl.DataFrame({
+        'id': ['a', 'b', 'c'],
+        'env_id': ['E', 'E', 'E'],
+        'gamma': [0.99, 0.99, 0.99],
+        'return_mean': [1.0, 2.0, 3.0],
+    })
+    with_registry = Panel.from_dataframe(
+        df, stratify_by=('env_id',), leaves=frozenset({'gamma'}),
+    )
+    assert with_registry.diagnostics.nonunique_configs_per_stratum[
+        ('E',)
+    ] == 1
+    without_registry = Panel.from_dataframe(df, stratify_by=('env_id',))
+    assert without_registry.diagnostics.nonunique_configs_per_stratum[
+        ('E',)
+    ] == 3
+
+
 def test_narrow_extends_scope_chain_and_filters_cells() -> None:
     """`panel.narrow(expr)` returns a new Panel with `expr`
     appended to `scope_chain`; cells are filtered; diagnostics
     are recomputed from the narrowed cells (no inheritance)."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     narrowed = panel.narrow(pl.col('env_name') == 'FourRooms-misc')
     assert narrowed.cells.height == 6
     assert len(narrowed.scope_chain) == 1
@@ -303,13 +368,26 @@ def test_split_by_partitions_into_sub_panels() -> None:
         assert env_seen == {k[0]}
 
 
+def test_split_by_carries_the_registry() -> None:
+    """A sub-Panel keeps the parent's configuration registry —
+    evaluating a stratum must not silently degrade the knob-aware
+    gates to unverified. Guards the explicit-construction pitfall
+    (a new carried field forgotten at one re-construction site)."""
+    panel = Panel.from_dataframe(
+        _make_cells_dataframe(),
+        leaves=frozenset({'optimizer.inner.lr'}),
+    )
+    for sub in panel.split_by('env_name').values():
+        assert sub.leaves == frozenset({'optimizer.inner.lr'})
+
+
 def test_derive_mean_per_stratum() -> None:
     """`Panel.derive(DerivedSpec('_panel_test_jens', 'mean', None))`
     computes mean of _panel_test_jens per stratum, dropping NaN cells
     pre-aggregation. With 1 NaN + 2 finite cells per stratum
     (mean of the 2 finite values), the FR baseline values
     [NaN, 0.5, 0.6] yield mean 0.55."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     means = panel.derive(DerivedSpec('_panel_test_jens', 'mean'))
     assert math.isclose(means[('FourRooms-misc', 'baseline')], 0.55, abs_tol=1e-9)
     assert math.isclose(means[('FourRooms-misc', 'ddqn')], 0.25, abs_tol=1e-9)
@@ -319,7 +397,7 @@ def test_derive_std_per_stratum() -> None:
     """Sample SD (ddof=1) per stratum. FR baseline finite cells
     [0.5, 0.6] → SD = sqrt(((0.5-0.55)^2 + (0.6-0.55)^2) / 1)
     = sqrt(0.005) ≈ 0.0707."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     stds = panel.derive(DerivedSpec('_panel_test_jens', 'std'))
     assert math.isclose(
         stds[('FourRooms-misc', 'baseline')], math.sqrt(0.005), abs_tol=1e-9,
@@ -332,7 +410,7 @@ def test_derive_with_cell_filter_narrows_aggregation_input() -> None:
     cell surviving. For `'mean'`/`'median'` the default
     `effective_min_n=1` admits single-cell strata; for `'std'`
     (`effective_min_n=2`) ALL strata are skipped."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     means = panel.derive(DerivedSpec(
         '_panel_test_outcome', 'mean',
         cell_filter=pl.col('seed') == 0,
@@ -436,6 +514,10 @@ def test_from_corpus_loads_runs_and_measurements(tmp_path: Path) -> None:
     assert len(panel.sources) == 1
     assert panel.sources[0].corpus == 'syn_corpus'
     assert panel.sources[0].data_root == corpus.parent.resolve()
+    # Registry derived from the corpus itself: `x` is the one
+    # config column (id/arm_key are RunRow fields, env_name/seed
+    # exogenous, `_panel_test_jens` a registered measurable).
+    assert panel.leaves == frozenset({'x'})
 
 
 def test_from_corpus_missing_runs_returns_empty(tmp_path: Path) -> None:
@@ -484,6 +566,109 @@ def test_from_corpora_unions_cells_with_diagonal_relaxed(
     cells_b = panel.cells.filter(pl.col('corpus') == 'corpB')
     assert cells_a['y_extra'].null_count() == 2
     assert cells_b['y_extra'].to_list() == [10.0, 20.0]
+    # Registry unions across the contributing corpora.
+    assert panel.leaves == frozenset({'x', 'y_extra'})
+
+
+def test_from_corpus_registry_grounds_on_measurements_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The corpus's own `measurements.parquet` schema names its
+    measurable columns as of its build — artifact-side grounding
+    that works even when the implementation's registry isn't
+    imported in this process (simulated by emptying the live
+    registry)."""
+    corpus = tmp_path / 'corp'
+    corpus.mkdir()
+    pl.DataFrame({
+        'id': ['c0', 'c1'],
+        'env_name': ['env1', 'env1'],
+        'arm_key': ['baseline', 'ddqn'],
+        'seed': [0, 0],
+        'optimizer.inner.lr': [1e-4, 1e-4],
+        'gamma': [0.99, 0.99],
+    }).write_parquet(corpus / 'runs.parquet')
+    pl.DataFrame({
+        'id': ['c0', 'c1'],
+        '_panel_gap3_meas': [0.1, 0.2],
+    }).write_parquet(corpus / 'measurements.parquet')
+
+    monkeypatch.setattr(
+        'corroborate.measurables.registered_names', lambda: (),
+    )
+    panel = Panel.from_corpus(corpus)
+    assert panel.leaves == frozenset({'optimizer.inner.lr', 'gamma'})
+
+
+def test_from_corpus_without_grounding_keeps_registry_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No measurements sidecar AND no live registry: a measurable
+    column is indistinguishable from a configuration leaf, so the
+    registry stays None — honest "unverified" at the gates beats
+    flipping outcome columns into phantom confounds."""
+    corpus = tmp_path / 'corp'
+    corpus.mkdir()
+    pl.DataFrame({
+        'id': ['c0'],
+        'env_name': ['env1'],
+        'arm_key': ['baseline'],
+        'gamma': [0.99],
+    }).write_parquet(corpus / 'runs.parquet')
+    monkeypatch.setattr(
+        'corroborate.measurables.registered_names', lambda: (),
+    )
+    assert Panel.from_corpus(corpus).leaves is None
+
+
+def test_from_cache_registry_grounds_on_hashes_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cache side of the same derivation: `.hashes.json` names the
+    cache's measurable columns; the partition grounds on it with
+    no live registry."""
+    cache = tmp_path / 'hyp.parquet'
+    pl.DataFrame({
+        'id': ['c0'],
+        'env_name': ['e'],
+        'arm_key': ['baseline'],
+        'gamma': [0.9],
+        'gap3_cached_measurable': [0.5],
+    }).write_parquet(cache)
+    (tmp_path / 'hyp.hashes.json').write_text(
+        '{"gap3_cached_measurable": "sig"}',
+    )
+    monkeypatch.setattr(
+        'corroborate.data.panel._resolve_cache_path',
+        lambda module: cache,
+    )
+    monkeypatch.setattr(
+        'corroborate.measurables.registered_names', lambda: (),
+    )
+    panel = Panel.from_cache('fake.module.for.resolver')
+    assert panel.leaves == frozenset({'gamma'})
+
+
+def test_concat_panels_empty_batch_does_not_poison_registry(
+    tmp_path: Path,
+) -> None:
+    """A zero-row batch (e.g. `from_corpus` of a not-yet-swept
+    directory, whose registry is necessarily unknown) contributes
+    no cells and must not erase the pool's registry — the same
+    contributing-only rule `from_corpora` applies."""
+    from corroborate.data import concat_panels
+
+    populated = Panel.from_dataframe(
+        pl.DataFrame({'id': ['a'], 'gamma': [0.9]}),
+        leaves=frozenset({'gamma'}),
+    )
+    empty_dir = tmp_path / 'not_yet_swept'
+    empty_dir.mkdir()
+    empty = Panel.from_corpus(empty_dir)
+    assert empty.cells.height == 0 and empty.leaves is None
+    pooled = concat_panels([populated, empty])
+    assert pooled.leaves == frozenset({'gamma'})
+    assert pooled.cells.height == 1
 
 
 def test_with_traces_joins_on_demand(tmp_path: Path) -> None:
@@ -559,7 +744,7 @@ def test_diagnostics_memoised_on_repeated_access() -> None:
     PanelDiagnostics object across multiple `.diagnostics`
     accesses (frozen+slots-compatible lazy memo). Verified via
     `is` identity: second access returns the SAME object."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     diag_1 = panel.diagnostics
     diag_2 = panel.diagnostics
     assert diag_1 is diag_2, (
@@ -571,7 +756,7 @@ def test_narrow_returns_panel_with_fresh_diag_cache() -> None:
     """`narrow` constructs a NEW Panel with a fresh empty
     `_diag_cache`. Without this, all narrowed panels would
     share the parent's stale diagnostics."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = _corpus_panel()
     parent_diag = panel.diagnostics
     narrowed = panel.narrow(pl.col('env_name') == 'FourRooms-misc')
     narrowed_diag = narrowed.diagnostics

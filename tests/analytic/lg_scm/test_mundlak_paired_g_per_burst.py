@@ -282,3 +282,24 @@ def test_mundlak_intercept_absorbs_predictor_offset() -> None:
         f'env-mean offset; a >10% drift indicates the env-mean '
         f'projection is mis-computed.'
     )
+
+
+def test_mundlak_honours_custom_arm_field() -> None:
+    """The paired panel and baseline-only predictor join share the
+    caller-selected arm column."""
+    cells: list[Mapping[str, object]] = []
+    for cell in _build_phased_panel():
+        row = dict(cell)
+        row['contrast_arm'] = row.pop('arm_key')
+        cells.append(row)
+    result = mundlak_paired_g_per_burst.fn(
+        cells,
+        treatment_arm='treatment',
+        baseline_arm='baseline',
+        arm_field='contrast_arm',
+        pair_by=('seed',),
+        source=_PER_BURST_Y_MEAN,
+        predictor_name='_mundlak_lg_scm_predictor',
+    )
+    assert result.n_strata == len(_MU_X_GRID)
+    assert result.n_obs == len(_MU_X_GRID) * _N_BURSTS

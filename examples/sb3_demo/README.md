@@ -4,13 +4,19 @@ This example measures the integration cost of using corroborate
 on training runs produced by an implementation it has never
 seen — here, ordinary
 [stable-baselines3](https://github.com/DLR-RM/stable-baselines3)
-DQN. The training script contains no corroborate imports.
+DQN. The training script is exactly what an SB3 tutorial writes —
+no corroborate imports, no recording code, no extra files — and
+the analysis reads SB3's own artifacts.
 
-The study: whether gamma = 0.99 outperforms gamma = 0.80 on
-CartPole-v1 at 25k steps. `sb3_claim.py` codifies that question as
-an executable, data-independent `@claim_bridge`; `analyze.py`
-first explores the adapted run set, then evaluates that authored
-test against the verified record.
+The question: whether gamma = 0.99 outperforms gamma = 0.80 on
+CartPole-v1 at 25k steps. `sb3_claim.py` codifies it as an
+executable, data-independent claim; `analyze.py` loads the runs,
+explores them with plain polars, then evaluates the claim.
+
+(Runs logged your own way — a directory of plain JSON records —
+load via `corroborate.data.load_runs` instead into the same
+shape, and any DataFrame with the named columns evaluates
+directly.)
 
 ## 1. Train (`train.py`, pure SB3)
 
@@ -18,110 +24,110 @@ test against the verified record.
 uv run examples/sb3_demo/train.py --seeds 3 --steps 25000   # ~10 min on CPU
 ```
 
-Two conditions, three paired seeds each. At five checkpoints,
-each run is evaluated once per fixed evaluation seed. The script
-writes the bundle: `contract.json` (the study description, about
-25 lines — the only corroborate-specific file the producer
-authors), `runs.jsonl`, `evaluations.jsonl`, `provenance.json`,
-and one resolved-config JSON per run.
-
-A bundle from a real run of this script is committed, so step 2
-can be run without training.
-
-## 2. Verify and adapt (`analyze.py`, corroborate only)
-
-```bash
-uv run python examples/sb3_demo/analyze.py
-```
-
-The adapter verifies the bundle before any analysis. Output from
-the committed bundle:
+Two gamma values, three paired seeds each: construct `DQN`, train
+with an `EvalCallback` (5 evaluation episodes every 5k steps),
+`model.save()`. What lands on disk is SB3's output, nothing else:
 
 ```text
-admissible: True
-  [VERIFIED    ] manifest_files: verified 10 sealed files
-  [VERIFIED    ] bundle_digest: bundle digest 46b2721f04d3…
-  [VERIFIED    ] provenance_recorded: execution provenance recorded for producer 'stable-baselines3 DQN demo producer'
-  [ATTESTED    ] provenance_attested: producer identity and invocation are attested by the record, not mechanically verified
-  [VERIFIED    ] pairs_complete: verified 3 complete pairs
-  [VERIFIED    ] config_isolation: all resolved configs share one template after removing only gamma and seed
-  [VERIFIED    ] evaluation_complete: verified 6 × 5 × 5 evaluation extent
-  [UNVERIFIABLE] assignment: assignment process was not mechanically recorded
-  [VERIFIED    ] rows_derived: derived 6 seeded-run rows
+runs/
+  gamma080-s0/model.zip           model.save()
+  gamma080-s0/evaluations.npz     EvalCallback's evaluation log
+  ...
 ```
 
-Statements the files can prove are `VERIFIED` (the seal, pair
-completeness, that the configurations differ only in gamma).
-Statements only the producer can make remain `ATTESTED` or
-`UNVERIFIABLE`. A malformed bundle raises with the same
-vocabulary instead of parsing permissively.
+Artifacts from a real run of this script are committed, so the
+analysis can be run without training.
 
-The receipt makes no claim about when the test module was
-authored. A bundle digest proves which files were sealed together;
-it cannot prove that they existed before the observations.
+## 2. Load (`analyze.py`, corroborate's side)
+
+```bash
+uv run --with 'stable-baselines3>=2.3' examples/sb3_demo/analyze.py
+```
+
+`corroborate_rl.sb3.load_sb3_runs` reads the folder into a
+`Panel` — one row per run in `panel.cells`, plus the two facts a
+bare frame cannot carry: the configuration registry and
+provenance. Configuration comes from each checkpoint's own `data`
+record — `model.save()` dumps the algorithm's resolved state, and
+intersecting it with the DQN constructor's signature separates
+what was *configured* (`gamma`, `buffer_size`, `seed`, …; entries
+SB3 could not JSON-encode, like `train_freq`, are kept as opaque
+but equality-comparable strings) from runtime state
+(`num_timesteps`, the decayed `exploration_rate`). Evaluations
+come from `evaluations.npz`, aggregated into `return_mean` at the
+record-wide terminal evaluation point (null for a run not
+evaluated there — never silently rebased to an earlier horizon,
+with `return_terminal_n`/`_attempted` recording what it stands
+on), `return_auc` for runs covering the full grid, and one
+`return_mean_at_<step>` column per point. The checkpoint doesn't
+record which environment it trained on, so the analyst stamps
+that known context with `with_columns` — which stays a Panel;
+analyst context does not join the configuration registry.
+
+```text
+loaded: 6 runs × 30 columns
+┌─────────────┬──────┬───────┬─────────────┐
+│ id          ┆ seed ┆ gamma ┆ return_mean │
+╞═════════════╪══════╪═══════╪═════════════╡
+│ gamma080-s0 ┆ 0    ┆ 0.8   ┆ 157.0       │
+│ gamma080-s1 ┆ 1    ┆ 0.8   ┆ 205.8       │
+│ gamma080-s2 ┆ 2    ┆ 0.8   ┆ 173.6       │
+│ gamma099-s0 ┆ 0    ┆ 0.99  ┆ 98.8        │
+│ gamma099-s1 ┆ 1    ┆ 0.99  ┆ 238.0       │
+│ gamma099-s2 ┆ 2    ┆ 0.99  ┆ 86.2        │
+└─────────────┴──────┴───────┴─────────────┘
+```
 
 ## 3. Explore
 
-The adapted run set is a `Panel`; its cells are a polars
-DataFrame that registered analyses accept directly. Nothing in
-this step requires a declared design.
-
-```text
-panel: 6 seeded runs × 18 columns
-┌─────────────┬──────────┬──────┬───────┬─────────────┐
-│ id          ┆ arm_key  ┆ seed ┆ gamma ┆ return_mean │
-╞═════════════╪══════════╪══════╪═══════╪═════════════╡
-│ gamma080-s0 ┆ gamma080 ┆ 0    ┆ 0.8   ┆ 156.2       │
-│ gamma080-s1 ┆ gamma080 ┆ 1    ┆ 0.8   ┆ 162.6       │
-│ gamma080-s2 ┆ gamma080 ┆ 2    ┆ 0.8   ┆ 240.2       │
-│ gamma099-s0 ┆ gamma099 ┆ 0    ┆ 0.99  ┆ 100.2       │
-│ gamma099-s1 ┆ gamma099 ┆ 1    ┆ 0.99  ┆ 166.4       │
-│ gamma099-s2 ┆ gamma099 ┆ 2    ┆ 0.99  ┆ 105.8       │
-└─────────────┴──────────┴──────┴───────┴─────────────┘
-```
-
-The adapter derives one `return_mean_at_<step>` column per
-evaluation checkpoint, so the trajectory — not just the final
-mean — is explorable:
+`panel.cells` is an ordinary polars DataFrame; exploration is
+ordinary polars. The trajectory columns make training dynamics —
+not just the final mean — visible:
 
 ```text
 mean return per checkpoint (seeds pooled per condition):
-┌──────────┬───────┬───────┬───────┬───────┬───────┐
-│ arm_key  ┆ 5000  ┆ 10000 ┆ 15000 ┆ 20000 ┆ 25000 │
-╞══════════╪═══════╪═══════╪═══════╪═══════╪═══════╡
-│ gamma080 ┆ 210.9 ┆ 172.7 ┆ 182.9 ┆ 208.0 ┆ 186.3 │
-│ gamma099 ┆ 164.3 ┆ 172.9 ┆ 199.7 ┆ 135.8 ┆ 124.1 │
-└──────────┴───────┴───────┴───────┴───────┴───────┘
+┌───────┬───────┬───────┬───────┬───────┬───────┐
+│ gamma ┆ 5000  ┆ 10000 ┆ 15000 ┆ 20000 ┆ 25000 │
+╞═══════╪═══════╪═══════╪═══════╪═══════╪═══════╡
+│ 0.8   ┆ 189.5 ┆ 173.1 ┆ 184.8 ┆ 248.5 ┆ 178.8 │
+│ 0.99  ┆ 196.5 ┆ 175.5 ┆ 184.9 ┆ 145.0 ┆ 141.0 │
+└───────┴───────┴───────┴───────┴───────┴───────┘
+
+Δ(return_mean) per seed (gamma 0.99 − 0.80):
+┌──────┬───────┬───────┬───────┐
+│ seed ┆ 0.8   ┆ 0.99  ┆ delta │
+╞══════╪═══════╪═══════╪═══════╡
+│ 0    ┆ 157.0 ┆ 98.8  ┆ -58.2 │
+│ 1    ┆ 205.8 ┆ 238.0 ┆ 32.2  │
+│ 2    ┆ 173.6 ┆ 86.2  ┆ -87.4 │
+└──────┴───────┴───────┴───────┘
 ```
 
-Gamma 0.99 is behind at 5k, level by 10k, ahead at 15k — then
-falls away over the last two checkpoints while gamma 0.80 holds.
-In these three paired seeds, that trajectory is consistent with a
-late decline at the higher gamma. It is descriptive evidence, not
-enough by itself to distinguish degradation from noisy or slower
-learning.
+The two conditions track each other through 15k steps — then
+gamma 0.99 falls away over the last two checkpoints while gamma
+0.80 holds. In these three paired seeds, that trajectory is
+consistent with a late decline at the higher gamma. It is
+descriptive evidence, not enough by itself to distinguish
+degradation from noisy or slower learning.
 
-A descriptive paired probe quantifies the same contrast:
-
-```text
-probe: Δ(return_mean) = -62.2 ± 40.0  g=-0.51  pairs helped: 33% of 3
-```
-
-## 4. Author and evaluate the claim test
+## 4. Author and evaluate the claim
 
 The claim module contains the scientific test, not the data:
 
 ```python
-@claim_bridge(
+GAMMA_EFFECT = DoEffect.from_values(
     source='gamma',
+    reference=0.80,
+    treatment=0.99,
+)
+
+@claim_bridge(
+    source=GAMMA_EFFECT,
     target='return_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     pair_by=('seed',),
-    scope=(
-        (pl.col('env_id') == 'CartPole-v1')
-        & pl.col('gamma').is_in([0.80, 0.99])
-    ),
+    scope=pl.col('env_id') == 'CartPole-v1',
     predicted_direction='a_gt_b',
 )
 def higher_gamma_improves_return(
@@ -135,29 +141,49 @@ def higher_gamma_improves_return(
     return paired_directional_verdict(paired_directional)
 ```
 
-There are no bundle paths, observed values, or arm labels in this
-module. `analyze.py` binds the external record only at the call
-site:
+The bridge is exactly what a native one looks like — no external
+special case: a `DoEffect` in source position, here declaring the
+exact reference and treatment values of an externally-executed
+contrast rather than slot-swap arms. The population scope only
+selects CartPole-v1. The Panel already carries the one fact the
+gates need from the data side — which columns were
+*configuration*, recovered from the checkpoints themselves,
+never hand-listed — so evaluation is the claim and the record:
 
 ```python
-evaluation = evaluate(
-    higher_gamma_improves_return,
-    panel.cells,
-    recorded_contrast=study.contrast,
-)
+evaluation = evaluate(higher_gamma_improves_return, panel)
 ```
 
-The recorded contrast must match the bridge's `gamma` source.
-Its verified baseline/treatment keys are injected into the named
-`paired_directional` analysis, whose typed result is retained in
-`evaluation.analysis_results` before the bridge body maps it to a
-verdict. `evaluation.evidence_digest` records the exact sealed
-bundle used:
+Exact matches to 0.80 and 0.99 receive the stable symbolic arm
+identities `baseline` and `treatment`; neither membership nor
+orientation is inferred from observed support or display labels.
+Any additional gamma levels remain in the accumulated record
+but sit outside this declared contrast, available to other
+claims over the same Panel.
+
+The admission gates then check the contrast over exactly the
+cells this claim admits. The Panel's registry is authoritative
+about what was configured: the declared source must be a registered
+configuration column (a measurement cannot be the assigned
+parameter of an intervention — BLOCK), a registered leaf that
+moves with gamma inside a seed pair is a co-varied knob (a
+confound — BLOCK, unless it was assigned jointly, in which case
+the declaration widens to
+`from_values(reference={...}, treatment={...})`), and an
+unregistered column moving with the contrast warns — a label is
+harmless, an unlogged knob is not, and only the author can say
+which. `contrast_present` blocks when a declared arm is absent
+from the record, and `pair_completeness` warns when a seed is
+missing one condition. A blocked claim gets the verdict
+`INADMISSIBLE` — quality problems land on the verdict record,
+not in a separate report. What no registry can attest —
+assignment, randomisation, hidden confounding — stays outside
+the framework's claims for external runs.
 
 ```text
 claim: gamma 0.99 > gamma 0.80 on return_mean
-  n_pairs=3  mean_diff=-62.2 (CI -179.0..+54.6)
-  dz=-0.90  p=0.8698
+  n_pairs=3  mean_diff=-37.8 (CI -142.9..+67.3)
+  dz=-0.61  p=0.7981
   verdict: POWER_INSUFFICIENT (UNDERPOWERED)
 ```
 
@@ -167,19 +193,20 @@ The verdict is therefore `POWER_INSUFFICIENT` rather than
 `NO_EFFECT`; with more seeds (`--seeds 8`) the same test module
 follows whatever the compatible data supports.
 
-## 5. Reuse the test
+## 5. Grow the record
 
-Run the same bridge against any newly adapted study with the same
-measurable schema and contrast path. Producer condition names may
-differ: `recorded_contrast` supplies them at runtime. The adapter
-continues to verify the record's seal, configuration isolation,
-pair completeness, and evaluation extent; the claim module
-continues to own the estimand and decision rule.
+The record is live. Run more seeds, re-load, and the same claim
+recomputes on the larger run set — batches pool with
+`concat_panels`, because a growing study is one run set that
+happens to arrive in parts (the pooled Panel keeps carrying the
+union registry). A verdict that moves as evidence accretes is
+the system working. The declared estimand stays fixed while the
+gates re-check arm presence, configuration isolation, and pairing
+over whatever the record has become.
 
 ## Producer-side cost
 
-The corroborate-specific work in `train.py` is `contract.json`:
-study id, the contrast parameter (`gamma`) with its two condition
-names and values, the pairing field (`seed`), the scope
-(`env_id`), and the evaluation extent. Sealing, verification,
-Panel construction, and analysis happen on corroborate's side.
+Zero. Not zero files — zero *anything*: `train.py` is the
+tutorial-shaped SB3 script, and the analysis reads the artifacts
+SB3 already writes. If you have a folder of checkpoint zips and
+`EvalCallback` logs from last month, this works on it today.

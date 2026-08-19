@@ -15,6 +15,7 @@ through, body skipped on BLOCK — is covered too)."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import cast
 
 import polars as pl
 import pytest
@@ -26,14 +27,18 @@ from corroborate.analyses.paired.paired_g import PairedGResult
 from corroborate.bridge.admission import (
     AUTO_GATES,
     AdmissionGate,
+    GateContext,
     GateLevel,
     GateResult,
+    contrast_isolation,
+    contrast_present,
     distinct_arms,
     distinct_units,
     exogenous_scope,
     exogenous_source,
     is_endogenous,
     no_predicted_direction,
+    pair_completeness,
     resolved_source,
 )
 from corroborate.bridge.bridge import (
@@ -109,6 +114,7 @@ def _synthetic_cells(
 
 
 _NO_CELLS: Sequence[Mapping[str, object]] = ()
+_CTX = GateContext()
 
 
 # ---------- distinct_arms (BLOCK) ----------
@@ -127,7 +133,7 @@ def test_distinct_arms_blocks_self_vs_self_do_effect() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    result = distinct_arms(bridge, _NO_CELLS)
+    result = distinct_arms(bridge, _NO_CELLS, _CTX)
     assert result is not None
     assert result.level is GateLevel.BLOCK
     assert result.passed is False
@@ -142,7 +148,7 @@ def test_distinct_arms_silent_when_arms_differ() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert distinct_arms(bridge, _NO_CELLS) is None
+    assert distinct_arms(bridge, _NO_CELLS, _CTX) is None
 
 
 def test_distinct_arms_silent_for_non_do_effect_source() -> None:
@@ -155,7 +161,7 @@ def test_distinct_arms_silent_for_non_do_effect_source() -> None:
         tier=Tier.ASSOCIATIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert distinct_arms(bridge, _NO_CELLS) is None
+    assert distinct_arms(bridge, _NO_CELLS, _CTX) is None
 
 
 # ---------- exogenous_source (BLOCK) ----------
@@ -171,16 +177,14 @@ def test_exogenous_source_blocks_hp_string_on_interventional() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    result = exogenous_source(bridge, _NO_CELLS, claim=_test_claim)
+    result = exogenous_source(bridge, _NO_CELLS, GateContext(claim=_test_claim))
     assert result is not None
     assert result.level is GateLevel.BLOCK
     assert "'gamma'" in result.message
 
 
-def test_exogenous_source_short_circuits_without_claim() -> None:
-    """Without a substrate claim threaded through, the gate has
-    no leaf set to consult — short-circuit (gate-doesn't-apply
-    semantics). Framework-only tests rely on this."""
+def test_exogenous_source_blocks_plain_external_intervention() -> None:
+    """Neither observed support nor `leaves` witnesses assignment."""
     bridge = Bridge(
         name='no_claim',
         source='gamma',
@@ -188,7 +192,48 @@ def test_exogenous_source_short_circuits_without_claim() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_source(bridge, _NO_CELLS, claim=None) is None
+    result = exogenous_source(
+        bridge, _NO_CELLS, GateContext(leaves=frozenset({'gamma'})),
+    )
+    assert result is not None
+    assert result.level is GateLevel.BLOCK
+    assert 'DoEffect.from_values' in result.message
+
+
+def test_exogenous_source_grades_value_effects_by_the_registry() -> None:
+    """The leaf registry is authoritative for value effects: a
+    declared source that IS registered configuration passes; one
+    that is NOT registered blocks (a measurement cannot be the
+    assigned parameter); no registry at all leaves knob-ness
+    unverified — a WARN on the record, not a silent pass. The
+    check sits before the tier guard, so omitting
+    `tier=INTERVENTIONAL` cannot suppress it (graph construction
+    treats every DoEffect as interventional)."""
+    bridge = Bridge(
+        name='external_effect',
+        source=DoEffect.from_values(
+            source='gamma', reference=0.8, treatment=0.99,
+        ),
+        target='eval_best_burst_mean',
+        # Omit tier deliberately (see above).
+        holds_when=lambda paired_g: Verdict.HELD,
+    )
+    unverified = exogenous_source(bridge, _NO_CELLS, GateContext())
+    assert unverified is not None
+    assert unverified.level is GateLevel.WARN
+    assert 'no configuration registry' in unverified.message
+
+    registered = exogenous_source(
+        bridge, _NO_CELLS, GateContext(leaves=frozenset({'gamma'})),
+    )
+    assert registered is None
+
+    measured = exogenous_source(
+        bridge, _NO_CELLS, GateContext(leaves=frozenset({'lr'})),
+    )
+    assert measured is not None
+    assert measured.level is GateLevel.BLOCK
+    assert 'cannot be the assigned parameter' in measured.message
 
 
 def test_exogenous_source_passes_for_do_effect() -> None:
@@ -201,11 +246,11 @@ def test_exogenous_source_passes_for_do_effect() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_source(bridge, _NO_CELLS, claim=_test_claim) is None
+    assert exogenous_source(bridge, _NO_CELLS, GateContext(claim=_test_claim)) is None
 
 
 @pytest.fixture
-def _registered_endogenous() -> str:
+def _registered_leaf_only() -> str:
     """Register a single measurable for the duration of this test;
     the auto-pruning happens at process exit, but the registry's
     same-name idempotence means subsequent re-registrations are
@@ -225,8 +270,8 @@ def _registered_endogenous() -> str:
     return name
 
 
-def test_exogenous_source_passes_for_registered_measurable(
-    _registered_endogenous: str,
+def test_exogenous_source_blocks_leaf_only_measurable(
+    _registered_leaf_only: str,
 ) -> None:
     """A registered measurable whose `reads=()` closure has no
     elements outside the claim's leaves classifies as exogenous
@@ -238,7 +283,7 @@ def test_exogenous_source_passes_for_registered_measurable(
     key) is tested below in test_is_endogenous_*."""
     bridge = Bridge(
         name='ok',
-        source=_registered_endogenous,
+        source=_registered_leaf_only,
         target='eval_best_burst_mean',
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
@@ -247,9 +292,32 @@ def test_exogenous_source_passes_for_registered_measurable(
     # → is_endogenous returns False → BLOCK fires. This is the
     # correct behaviour: a measurable that closes over nothing
     # carries no cell-derived signal.
-    result = exogenous_source(bridge, _NO_CELLS, claim=_test_claim)
+    result = exogenous_source(bridge, _NO_CELLS, GateContext(claim=_test_claim))
     assert result is not None
     assert result.level is GateLevel.BLOCK
+
+
+def test_exogenous_source_passes_native_endogenous_measurable() -> None:
+    """A claim-backed measurable touching trajectory data remains a
+    valid native interventional source."""
+    from corroborate.measurables import (
+        Measurable, register, registered_names,
+    )
+    name = '_test_admission_trajectory_measurable'
+    if name not in registered_names():
+        register(Measurable(
+            fn=lambda record: 0.0,
+            name=name,
+            reads=('done',),
+        ))
+    bridge = Bridge(
+        name='native_measured_effect',
+        source=name,
+        target='eval_best_burst_mean',
+        tier=Tier.INTERVENTIONAL,
+        holds_when=lambda partial_spearman: Verdict.HELD,
+    )
+    assert exogenous_source(bridge, _NO_CELLS, GateContext(claim=_test_claim)) is None
 
 
 def test_exogenous_source_passes_on_associational_tier() -> None:
@@ -262,7 +330,7 @@ def test_exogenous_source_passes_on_associational_tier() -> None:
         tier=Tier.ASSOCIATIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_source(bridge, _NO_CELLS, claim=_test_claim) is None
+    assert exogenous_source(bridge, _NO_CELLS, GateContext(claim=_test_claim)) is None
 
 
 # ---------- exogenous_scope (WARN) ----------
@@ -279,7 +347,7 @@ def test_exogenous_scope_warns_on_hp_only_filter() -> None:
         scope=pl.col('lr') == 1e-4,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    result = exogenous_scope(bridge, _NO_CELLS, claim=_test_claim)
+    result = exogenous_scope(bridge, _NO_CELLS, GateContext(claim=_test_claim))
     assert result is not None
     assert result.level is GateLevel.WARN
     assert "'lr'" in result.message
@@ -299,7 +367,7 @@ def test_exogenous_scope_warns_on_env_name_only_scope() -> None:
         scope=pl.col('env_name') == 'TestEnv',
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    result = exogenous_scope(bridge, _NO_CELLS, claim=_test_claim)
+    result = exogenous_scope(bridge, _NO_CELLS, GateContext(claim=_test_claim))
     assert result is not None
     assert result.level is GateLevel.WARN
 
@@ -316,7 +384,7 @@ def test_exogenous_scope_silent_when_mixed() -> None:
         scope=(pl.col('env_name') == 'TestEnv') & (pl.col('jensen_gap') > 0),
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_scope(bridge, _NO_CELLS, claim=_test_claim) is None
+    assert exogenous_scope(bridge, _NO_CELLS, GateContext(claim=_test_claim)) is None
 
 
 def test_exogenous_scope_silent_when_no_scope() -> None:
@@ -327,7 +395,7 @@ def test_exogenous_scope_silent_when_no_scope() -> None:
         scope=None,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_scope(bridge, _NO_CELLS, claim=_test_claim) is None
+    assert exogenous_scope(bridge, _NO_CELLS, GateContext(claim=_test_claim)) is None
 
 
 def test_exogenous_scope_short_circuits_without_claim() -> None:
@@ -340,7 +408,7 @@ def test_exogenous_scope_short_circuits_without_claim() -> None:
         scope=pl.col('lr') == 1e-4,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert exogenous_scope(bridge, _NO_CELLS, claim=None) is None
+    assert exogenous_scope(bridge, _NO_CELLS, GateContext()) is None
 
 
 # ---------- no_predicted_direction (INFO) ----------
@@ -354,7 +422,7 @@ def test_no_predicted_direction_fires_when_absent() -> None:
         predicted_direction=None,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    result = no_predicted_direction(bridge, _NO_CELLS)
+    result = no_predicted_direction(bridge, _NO_CELLS, _CTX)
     assert result is not None
     assert result.level is GateLevel.INFO
 
@@ -367,23 +435,29 @@ def test_no_predicted_direction_silent_when_set() -> None:
         predicted_direction='a_lt_b',
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert no_predicted_direction(bridge, _NO_CELLS) is None
+    assert no_predicted_direction(bridge, _NO_CELLS, _CTX) is None
 
 
 # ---------- AUTO_GATES wiring ----------
 
 
-def test_auto_gates_tuple_contains_all_six() -> None:
+def test_auto_gates_tuple_contains_all_nine() -> None:
     """Sanity: the framework's auto-gate list is exactly the
-    six functions shipped post-Phase-A0 (resolved_source added
-    so typo'd source strings surface before the endogeneity
-    test classifies them as endogenous-by-elimination;
-    distinct_units added so a source that varies at a coarser
-    grain than the cell reports its effective n instead of
-    letting the row count stand in for it)."""
+    nine shipped functions, in diagnostic-priority order —
+    `resolved_source` before the endogeneity test so typo'd
+    sources surface as typos; `contrast_present` and
+    `exogenous_source` before `distinct_units` so a value-contrast
+    record without its contrast, and a native leaf-sourced
+    interventional bridge, each hear the structural diagnosis
+    rather than the effective-n symptom; the contrast-quality
+    gates (`contrast_isolation`, `pair_completeness`) after the
+    structural gates, checking the derived conditions per claim,
+    per extent, on the verdict record."""
     assert AUTO_GATES == (
-        distinct_arms, resolved_source, distinct_units,
-        exogenous_source, exogenous_scope, no_predicted_direction,
+        distinct_arms, resolved_source, contrast_present,
+        exogenous_source, distinct_units, exogenous_scope,
+        contrast_isolation, pair_completeness,
+        no_predicted_direction,
     )
 
 
@@ -409,7 +483,7 @@ def test_distinct_units_blocks_replicated_source() -> None:
          'bed_prop': p, 'outcome': 20.0 + i}
         for p in (0.38, 0.62, 0.74) for i in range(4)
     ]
-    res = distinct_units(_units_bridge(), cells)
+    res = distinct_units(_units_bridge(), cells, _CTX)
     assert res is not None and not res.passed
     assert res.level is GateLevel.BLOCK
     assert '3 distinct values across 12 cells' in res.message
@@ -423,7 +497,7 @@ def test_distinct_units_silent_when_source_is_per_cell() -> None:
          'bed_prop': 0.40 + 0.01 * (s * 4 + i), 'outcome': 20.0 + s}
         for s in range(3) for i in range(4)
     ]
-    assert distinct_units(_units_bridge(), cells) is None
+    assert distinct_units(_units_bridge(), cells, _CTX) is None
 
 
 def test_distinct_units_warns_above_block_threshold() -> None:
@@ -434,7 +508,7 @@ def test_distinct_units_warns_above_block_threshold() -> None:
          'bed_prop': 0.10 * s, 'outcome': 20.0 + i}
         for s in range(8) for i in range(3)
     ]
-    res = distinct_units(_units_bridge(), cells)
+    res = distinct_units(_units_bridge(), cells, _CTX)
     assert res is not None and res.level is GateLevel.WARN
     assert '8 distinct values across 24 cells' in res.message
 
@@ -449,7 +523,7 @@ def test_distinct_units_silent_on_mild_ties() -> None:
          'bed_prop': v, 'outcome': 20.0 + i}
         for i, v in enumerate(values)
     ]
-    assert distinct_units(_units_bridge(), cells) is None
+    assert distinct_units(_units_bridge(), cells, _CTX) is None
 
 
 def test_distinct_units_silent_on_do_effect_source() -> None:
@@ -463,7 +537,7 @@ def test_distinct_units_silent_on_do_effect_source() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert distinct_units(bridge, _synthetic_cells()) is None
+    assert distinct_units(bridge, _synthetic_cells(), _CTX) is None
 
 
 def test_distinct_units_silent_on_bool_source() -> None:
@@ -482,7 +556,7 @@ def test_distinct_units_silent_on_bool_source() -> None:
          'diverged': i % 2 == 0, 'outcome': 20.0 + i}
         for i in range(12)
     ]
-    assert distinct_units(bridge, cells) is None
+    assert distinct_units(bridge, cells, _CTX) is None
 
 
 # ---------- evaluate() integration: BLOCK short-circuits ----------
@@ -563,10 +637,9 @@ def test_per_bridge_gate_appended_and_blocks() -> None:
     def always_block(
         bridge: Bridge,
         cells: Sequence[Mapping[str, object]],
-        *,
-        claim: object = None,
+        ctx: GateContext,
     ) -> GateResult | None:
-        del bridge, cells, claim
+        del bridge, cells, ctx
         return GateResult(
             gate_name='custom',
             level=GateLevel.BLOCK,
@@ -574,7 +647,9 @@ def test_per_bridge_gate_appended_and_blocks() -> None:
             message='custom block',
         )
 
-    custom: tuple[AdmissionGate, ...] = (always_block,)
+    custom: tuple[AdmissionGate, ...] = (
+        cast(AdmissionGate, always_block),
+    )
 
     @claim_bridge(
         source=_INTERVENTION,
@@ -655,7 +730,7 @@ def test_resolved_source_blocks_on_missing_column() -> None:
     cells: list[Mapping[str, object]] = [
         {'mc_return': 1.0, 'eval_best_burst_mean': 0.0},
     ]
-    result = resolved_source(bridge, cells)
+    result = resolved_source(bridge, cells, _CTX)
     assert result is not None
     assert result.level is GateLevel.BLOCK
     assert "'mc_returns'" in result.message
@@ -672,7 +747,7 @@ def test_resolved_source_silent_on_present_column() -> None:
     cells: list[Mapping[str, object]] = [
         {'jensen_gap': 0.5, 'eval_best_burst_mean': 1.0},
     ]
-    assert resolved_source(bridge, cells) is None
+    assert resolved_source(bridge, cells, _CTX) is None
 
 
 def test_resolved_source_silent_on_do_effect() -> None:
@@ -686,7 +761,7 @@ def test_resolved_source_silent_on_do_effect() -> None:
         holds_when=lambda paired_g: Verdict.HELD,
     )
     cells: list[Mapping[str, object]] = [{'eval_best_burst_mean': 1.0}]
-    assert resolved_source(bridge, cells) is None
+    assert resolved_source(bridge, cells, _CTX) is None
 
 
 def test_resolved_source_silent_on_empty_cells() -> None:
@@ -699,4 +774,4 @@ def test_resolved_source_silent_on_empty_cells() -> None:
         tier=Tier.ASSOCIATIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert resolved_source(bridge, _NO_CELLS) is None
+    assert resolved_source(bridge, _NO_CELLS, _CTX) is None

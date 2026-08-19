@@ -1,8 +1,11 @@
-"""Executable claim test for the SB3 study.
+"""Executable claim test for the SB3 runs.
 
-This module knows the estimand and the decision rule.  It deliberately knows
-nothing about the bundle, adapter, producer, or producer-specific arm labels;
-those are bound from the verified record only when the bridge is evaluated.
+This module knows the estimand and the decision rule: which exact
+parameter values define reference and treatment, on which outcome,
+over which population, and what statistical rule maps the evidence
+to a verdict. It knows nothing about file layouts or how the runs
+were produced, and the declaration does not verify external
+assignment; it evaluates any compatible DataFrame.
 """
 from __future__ import annotations
 
@@ -12,20 +15,30 @@ from corroborate.analyses.paired.paired_directional import (
     PairedDirectionalResult,
     paired_directional_verdict,
 )
-from corroborate.bridge.bridge import Direction, Tier, claim_bridge
-from corroborate.bridge.verdict import RefutationClass, Verdict
+from corroborate.bridge import (
+    Direction,
+    RefutationClass,
+    Tier,
+    Verdict,
+    claim_bridge,
+)
+from corroborate.core import DoEffect
+
+
+GAMMA_EFFECT = DoEffect.from_values(
+    source='gamma',
+    reference=0.80,
+    treatment=0.99,
+)
 
 
 @claim_bridge(
-    source='gamma',
+    source=GAMMA_EFFECT,
     target='return_mean',
     direction=Direction.DIRECT,
     tier=Tier.INTERVENTIONAL,
     pair_by=('seed',),
-    scope=(
-        (pl.col('env_id') == 'CartPole-v1')
-        & pl.col('gamma').is_in([0.80, 0.99])
-    ),
+    scope=pl.col('env_id') == 'CartPole-v1',
     predicted_direction='a_gt_b',
 )
 def higher_gamma_improves_return(
@@ -43,4 +56,4 @@ def higher_gamma_improves_return(
 BRIDGES = (higher_gamma_improves_return,)
 
 
-__all__ = ['BRIDGES', 'higher_gamma_improves_return']
+__all__ = ['BRIDGES', 'GAMMA_EFFECT', 'higher_gamma_improves_return']

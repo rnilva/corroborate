@@ -6,7 +6,7 @@ one type)."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
 from typing import Literal
@@ -31,7 +31,7 @@ from corroborate.corpus.catalogue import (
 _FRAMEWORK_IDENTITY_COLS: frozenset[str] = frozenset({
     'id', 'parent_id', 'cycle_id', 'treatment_arm_id',
     'timestamp', 'verdict', 'arm_key', 'arm_is_baseline',
-    'corpus', 'bundle_digest',
+    'corpus',
 })
 
 
@@ -254,6 +254,84 @@ def _is_excluded_col(
     return col in measurable_names
 
 
+def _derive_native_leaves(
+    cells: pl.DataFrame,
+    *,
+    artifact_measurables: frozenset[str] | None,
+) -> frozenset[str] | None:
+    """The corpus-native configuration registry, derived by the
+    catalogue's canonical column partition (the same machinery
+    behind `corroborate catalogue --leaves`) — the native mirror
+    of what run readers recover from external artifacts.
+
+    Registered-measurable columns must be excludable for the
+    partition to be meaningful. Grounding comes from the corpus's
+    own sidecar artifact (`measurements.parquet` schema / cache
+    `.hashes.json` keys) and/or the live `@measurable` registry.
+    With neither — no sidecar and an empty registry — a measurable
+    column is indistinguishable from a configuration leaf, and the
+    honest answer is None (registry unknown) rather than an
+    over-inclusive guess that would flip outcome columns into
+    phantom confounds at the admission gates."""
+    from corroborate.corpus.catalogue import partition_columns
+    from corroborate.measurables import registered_names
+    if cells.height == 0:
+        return None
+    registry = frozenset(registered_names())
+    if artifact_measurables is None and not registry:
+        return None
+    leaf_cols, _exogenous = partition_columns(
+        cells.columns,
+        dict(cells.schema),
+        exogenous_keys=_DEFAULT_EXOGENOUS_KEYS,
+        exogenous_prefixes=_DEFAULT_EXOGENOUS_PREFIXES,
+        extra_excluded=(
+            _FRAMEWORK_IDENTITY_COLS
+            | (artifact_measurables or frozenset())
+        ),
+    )
+    return frozenset(leaf_cols)
+
+
+def _read_manifest_measurables(cache_path: Path) -> frozenset[str] | None:
+    """Measurable-column names from the cache's `.hashes.json`
+    manifest — the artifact-side grounding for the cache leaf
+    partition. None when the manifest is absent or unreadable
+    (pre-manifest caches keep working; grounding falls back to
+    the live registry)."""
+    from json import JSONDecodeError
+
+    from corroborate._internals.json import loads as _json_loads
+    from corroborate._internals.narrow import is_mapping_str_object
+    from corroborate.runner.runner import manifest_path
+    mpath = manifest_path(cache_path)
+    if not mpath.exists():
+        return None
+    try:
+        parsed = _json_loads(mpath.read_text())
+    except (OSError, JSONDecodeError):
+        return None
+    if not is_mapping_str_object(parsed):
+        return None
+    return frozenset(parsed)
+
+
+def cache_leaves(
+    cells: pl.DataFrame, cache_path: Path,
+) -> frozenset[str] | None:
+    """The configuration registry for a cache frame — the
+    canonical column partition grounded on the cache's own
+    `.hashes.json` manifest plus the live `@measurable` registry.
+    Shared by `Panel.from_cache` and the runner's evaluate loop so
+    the CLI/runner entry point and `evaluate(bridge, panel)` gate
+    a value-based DoEffect claim identically. None when the
+    partition cannot be grounded (see `_derive_native_leaves`)."""
+    return _derive_native_leaves(
+        cells,
+        artifact_measurables=_read_manifest_measurables(cache_path),
+    )
+
+
 def _resolve_cache_path(hypothesis_module: str) -> Path | None:
     """Resolve `<hyp_module>` → its default cache parquet path
     via the runner. Returns None when the module can't import."""
@@ -429,9 +507,27 @@ class Panel:
     `frozen=True` still blocks rebinding."""
     cells: pl.DataFrame
     scope_chain: tuple[pl.Expr, ...] = ()
-    stratify_by: tuple[str, ...] = ('env_name', 'arm_key')
+    # Grouping columns for `diagnostics` and no-args `split_by`.
+    # Neutral by default: () means "no grouping declared", and the
+    # per-stratum probes honestly report empty rather than crash
+    # on vocabulary the record never had (an SB3 panel has no
+    # 'env_name'/'arm_key'). The corpus-shaped constructors
+    # (`from_corpus` / `from_corpora` / `from_cache`) default to
+    # the corpus convention ('env_name', 'arm_key') — corpus
+    # vocabulary lives on the corpus doors, not on the type.
+    stratify_by: tuple[str, ...] = ()
     sources: tuple[CorpusSource, ...] = ()
     required_measurables: frozenset[str] = field(default_factory=frozenset)
+    # The record's configuration registry: which columns were
+    # CONFIGURED (the external counterpart of a native claim
+    # composition's leaf walk). Run readers populate it from the
+    # record's own artifacts, the corpus constructors derive it
+    # from the corpus's own sidecars (`_derive_native_leaves`);
+    # `evaluate()` consumes it for the knob-aware admission gates. None means "no registry known" —
+    # the gates then report their checks unverified rather than
+    # silently passing. A fact the frame cannot carry itself; the
+    # Panel is the typed carrier that travels with the cells.
+    leaves: frozenset[str] | None = None
 
     @classmethod
     def from_dataframe(
@@ -439,21 +535,25 @@ class Panel:
         cells: pl.DataFrame,
         *,
         scope_chain: tuple[pl.Expr, ...] = (),
-        stratify_by: tuple[str, ...] = ('env_name', 'arm_key'),
+        stratify_by: tuple[str, ...] = (),
         sources: tuple[CorpusSource, ...] = (),
         required_measurables: frozenset[str] = frozenset(),
+        leaves: frozenset[str] | None = None,
     ) -> 'Panel':
         """Construct a Panel from a pre-built DataFrame. The
         idiomatic exploration-time constructor when the author
         already has cells in hand (e.g. a test fixture, a
         polars expression-built frame, or `pl.read_parquet(...)`
-        of a cache file)."""
+        of a cache file). State `stratify_by` to enable the
+        per-stratum probes (`diagnostics`, no-args `split_by`) —
+        the frame's own vocabulary, not an assumed one."""
         return cls(
             cells=cells,
             scope_chain=scope_chain,
             stratify_by=stratify_by,
             sources=sources,
             required_measurables=required_measurables,
+            leaves=leaves,
         )
 
     @classmethod
@@ -492,8 +592,14 @@ class Panel:
             )
         cells = pl.read_parquet(runs_path)
         meas_path = corpus_path / 'measurements.parquet'
+        # The sidecar's schema is the artifact-side grounding for
+        # the leaf partition below: it names this corpus's
+        # measurable columns as of its build, independent of what
+        # the current process has imported.
+        meas_artifact_cols: frozenset[str] | None = None
         if meas_path.exists() and 'id' in cells.columns:
             meas = pl.read_parquet(meas_path)
+            meas_artifact_cols = frozenset(meas.columns) - {'id'}
             # Collision resolution delegated to
             # `corpus.measurements.resolve_runs_meas_collision`
             # — single source of truth shared with
@@ -561,6 +667,9 @@ class Panel:
             cells=cells,
             stratify_by=stratify_by,
             sources=(source,),
+            leaves=_derive_native_leaves(
+                cells, artifact_measurables=meas_artifact_cols,
+            ),
         )
 
     @classmethod
@@ -596,6 +705,7 @@ class Panel:
             cells=cells,
             stratify_by=stratify_by,
             sources=sources,
+            leaves=cache_leaves(cells, cache_path),
         )
 
     def to_cache(
@@ -734,13 +844,7 @@ class Panel:
             return self
         traces = pl.concat(per_source_traces, how='diagonal_relaxed')
         new_cells = self.cells.join(traces, on='id', how='left')
-        return Panel(
-            cells=new_cells,
-            scope_chain=self.scope_chain,
-            stratify_by=self.stratify_by,
-            sources=self.sources,
-            required_measurables=self.required_measurables,
-        )
+        return replace(self, cells=new_cells)
 
     @classmethod
     def from_corpora(
@@ -769,10 +873,26 @@ class Panel:
         sources_combined: tuple[CorpusSource, ...] = tuple(
             s for p in panels for s in p.sources
         )
+        # Registry union over the corpora that contributed cells —
+        # same None-poisoning rule as `concat_panels`: one
+        # contributing corpus with an unknown registry makes the
+        # union unknown. Empty corpora contribute nothing and
+        # don't poison.
+        contributing = [p for p in panels if p.cells.height > 0]
+        leaves: frozenset[str] | None
+        if contributing and all(
+            p.leaves is not None for p in contributing
+        ):
+            leaves = frozenset().union(
+                *(p.leaves for p in contributing if p.leaves is not None),
+            )
+        else:
+            leaves = None
         return cls(
             cells=cells,
             stratify_by=stratify_by,
             sources=sources_combined,
+            leaves=leaves,
         )
 
     def narrow(self, expr: pl.Expr) -> 'Panel':
@@ -781,23 +901,34 @@ class Panel:
         the narrowed panel are recomputed from the narrowed cells
         (cheap; the `scope_provenance` chain preserves the parent
         expressions for audit)."""
-        return Panel(
+        return replace(
+            self,
             cells=self.cells.filter(expr),
             scope_chain=self.scope_chain + (expr,),
-            stratify_by=self.stratify_by,
-            sources=self.sources,
-            required_measurables=self.required_measurables,
         )
+
+    def with_columns(self, *exprs: pl.Expr) -> 'Panel':
+        """`cells.with_columns(...)` that stays a Panel — the
+        provenance, registry, and scope lineage travel with the
+        enriched frame. The idiomatic way to stamp analyst-known
+        context the record itself doesn't carry (an SB3 checkpoint
+        doesn't name its environment; the analyst does:
+        `panel.with_columns(pl.lit('CartPole-v1').alias('env_id'))`).
+        Columns added here are analyst context, not configuration —
+        they do not join `leaves`."""
+        return replace(self, cells=self.cells.with_columns(*exprs))
 
     def split_by(
         self, *keys: str,
     ) -> Mapping[tuple[object, ...], 'Panel']:
         """Partition cells by the named keys; return a mapping
         from stratum-id tuple to sub-Panel. Each sub-Panel
-        inherits `scope_chain`, `sources`, `required_measurables`;
-        its `stratify_by` is unchanged (the panel can still
-        compute per-stratum diagnostics with a coarser grouping
-        than the split keys).
+        inherits every carried fact (`scope_chain`, `sources`,
+        `required_measurables`, `leaves` — via `replace`, so a
+        future field can't be silently dropped here); its
+        `stratify_by` is unchanged (the panel can still compute
+        per-stratum diagnostics with a coarser grouping than the
+        split keys).
 
         Uses `polars.DataFrame.partition_by(... as_dict=True)`
         — a single-pass partition rather than per-stratum
@@ -822,12 +953,8 @@ class Panel:
             return tuple(str(v) for v in k)
         for k_raw in sorted(partitions, key=_sort_key):
             stratum_id: tuple[object, ...] = tuple(k_raw)
-            out[stratum_id] = Panel(
-                cells=partitions[k_raw],
-                scope_chain=self.scope_chain,
-                stratify_by=self.stratify_by,
-                sources=self.sources,
-                required_measurables=self.required_measurables,
+            out[stratum_id] = replace(
+                self, cells=partitions[k_raw],
             )
         return out
 
@@ -874,13 +1001,7 @@ class Panel:
         # Panel-side state.
         from corroborate.measurables import compute_missing_columns
         new_cells = compute_missing_columns(self.cells, names)
-        return Panel(
-            cells=new_cells,
-            scope_chain=self.scope_chain,
-            stratify_by=self.stratify_by,
-            sources=self.sources,
-            required_measurables=self.required_measurables,
-        )
+        return replace(self, cells=new_cells)
 
     def measurable_availability_matrix(
         self,
@@ -979,15 +1100,26 @@ class Panel:
         # forced when the data subpackage is loaded standalone.
         from corroborate.measurables import registered_names
         measurable_names = frozenset(registered_names())
-        config_cols = [
-            c for c in self.cells.columns
-            if not _is_excluded_col(
-                c,
-                exogenous_keys=exogenous_keys,
-                exogenous_prefixes=exogenous_prefixes,
-                measurable_names=measurable_names,
-            )
-        ]
+        if self.leaves is not None:
+            # The carried registry is authoritative: the record
+            # itself said which columns were configured. The
+            # exclusion heuristic below is the fallback for
+            # panels that don't carry one — it cannot know that
+            # an unregistered moving column is a measurement, so
+            # it would count outcomes as config heterogeneity.
+            config_cols = [
+                c for c in self.cells.columns if c in self.leaves
+            ]
+        else:
+            config_cols = [
+                c for c in self.cells.columns
+                if not _is_excluded_col(
+                    c,
+                    exogenous_keys=exogenous_keys,
+                    exogenous_prefixes=exogenous_prefixes,
+                    measurable_names=measurable_names,
+                )
+            ]
         # Which measurable cols to compute finiteness for.
         if self.required_measurables:
             meas_cols = [
@@ -1066,10 +1198,95 @@ class Panel:
         )
 
 
+def concat_panels(panels: Sequence[Panel]) -> Panel:
+    """Pool batches of a growing record into one Panel.
+
+    Cells concatenate diagonally (heterogeneous columns null-pad),
+    sources concatenate, and the configuration registries union —
+    unless any CONTRIBUTING batch has no registry, in which case
+    the pool has none either (an unknown part makes the whole
+    unknown; the gates then report their checks unverified). A
+    zero-row batch contributes nothing — neither cells nor
+    registry poisoning. Scope lineage does not survive pooling:
+    the result is a fresh root, like `from_corpora`.
+    `stratify_by` must agree across contributing batches —
+    silently keeping one of two disagreeing groupings would make
+    `diagnostics` lie about half the pool.
+
+    Terminal-derived outcome columns must agree on their horizon:
+    each reader derives `<o>_mean` at ITS OWN record's terminal
+    checkpoint (`corroborate.data.derive`), so pooling batches
+    whose terminals differ would put means at different training
+    budgets in one column — the exact manufactured effect the
+    record-wide-terminal rule exists to prevent, reintroduced
+    through pooling. Batches disagreeing on an outcome's terminal
+    (read off their `<o>_mean_at_<cp>` columns) raise; the fix is
+    to re-load the union as ONE record (one loader call over the
+    combined directories re-derives terminals record-wide), or to
+    author the claim against an explicit `<o>_mean_at_<cp>`
+    column both batches carry."""
+    if not panels:
+        raise ValueError('concat_panels: no panels to pool')
+    contributing = [p for p in panels if p.cells.height > 0]
+    if not contributing:
+        return Panel(
+            cells=pl.DataFrame(),
+            scope_chain=(),
+            stratify_by=panels[0].stratify_by,
+            sources=tuple(s for p in panels for s in p.sources),
+        )
+    stratify = {p.stratify_by for p in contributing}
+    if len(stratify) != 1:
+        raise ValueError(
+            f'concat_panels: panels disagree on stratify_by: '
+            f'{sorted(stratify)!r}',
+        )
+    from corroborate.data.derive import terminal_checkpoints_by_outcome
+    terminals: dict[str, int] = {}
+    for p in contributing:
+        for root, checkpoint in terminal_checkpoints_by_outcome(
+            p.cells.columns,
+        ).items():
+            known = terminals.setdefault(root, checkpoint)
+            if known != checkpoint:
+                raise ValueError(
+                    f'concat_panels: batches disagree on the '
+                    f'record-wide terminal for outcome {root!r} '
+                    f'({known} vs {checkpoint}) — pooled '
+                    f'{root}_mean would compare different training '
+                    f'budgets. Re-load the union as one record '
+                    f'(one loader call over the combined '
+                    f'directories), or author the claim against an '
+                    f'explicit {root}_mean_at_<checkpoint> column '
+                    f'both batches carry.',
+                )
+    leaves: frozenset[str] | None
+    if any(p.leaves is None for p in contributing):
+        leaves = None
+    else:
+        leaves = frozenset().union(
+            *(p.leaves for p in contributing if p.leaves is not None),
+        )
+    return Panel(
+        cells=pl.concat(
+            [p.cells for p in contributing], how='diagonal_relaxed',
+        ),
+        scope_chain=(),
+        stratify_by=contributing[0].stratify_by,
+        sources=tuple(s for p in panels for s in p.sources),
+        required_measurables=frozenset().union(
+            *(p.required_measurables for p in panels),
+        ),
+        leaves=leaves,
+    )
+
+
 __all__ = [
     'CorpusSource',
     'DerivedSpec',
     'MeasurableAvailability',
     'Panel',
     'PanelDiagnostics',
+    'cache_leaves',
+    'concat_panels',
 ]

@@ -25,11 +25,11 @@ post-evaluation graph.
 |---|---|---|
 | Typed node | `@measurable` / `DoEffect` / raw column | `corroborate.measurables` / `core.intervention` |
 | Typed edge | `@claim_bridge` → `Bridge` | `corroborate.bridge.bridge` |
-| Edge identity (post-eval) | `(source_key, target_key, extent_hash)` | `corroborate.graph.causal.BridgeEdge` |
+| Dataset-relative edge grouping | `(source_key, target_key, extent_hash)` | `corroborate.graph.causal.BridgeEdge` |
 | Pearl rung per edge | `Tier` (associational / interventional / invariant) | `corroborate.graph.causal.Tier` |
 | Post-eval evidence label | `BridgeEdge.evidentiary_level` | `corroborate.graph.causal.EvidentiaryLevel` |
 | Graph topology (pre-eval) | `authored_graph(bridges)` | `corroborate.graph.causal` |
-| Per-bridge admitted-cell hash | `BridgeEvaluation.extent_hash` | `corroborate.bridge.bridge` |
+| Per-bridge string-ID-set key | `BridgeEvaluation.extent_hash` | `corroborate.bridge.bridge` |
 | Evidence stamper (post-eval) | `evaluated_graph(bridges, post_eval)` | `corroborate.graph.causal` |
 | Cluster query | `clusters_by_extent` + `cluster_verdict` + `ClusterVerdict` | `corroborate.graph.causal` |
 | Direction composition | `compose_direction(edges)` | multiplicative algebra |
@@ -46,8 +46,9 @@ machinery IS the implementation of the principle.
 bridge produces one `BridgeEdge` at evaluation time with one
 verdict-derived `evidentiary_level`. **Causal-mechanism claims
 do not live at the bridge level** — they live at the graph
-level, queryable via cluster-identity grouping on the post-evaluated
-graph.
+level. An authored `Finding` names the bridges that compose the
+claim; post-evaluation extent grouping is a dataset-relative
+diagnostic, not scientific identity.
 
 ### 2. Bridge names should describe the edge, not the claim
 
@@ -72,19 +73,21 @@ sibling-bridge-paired so the cluster carries cluster-level
 evidence and the mechanism name reads on the cluster, not the
 individual bridge.
 
-### 3. Refutation clusters via SHARED SCOPE, not author labels
+### 3. Refutation clusters are authored; extent grouping checks them
 
 A claim like "X causes Y under scope S" requires a *cluster* of
-bridges all testing edges with the same identity — same
-`(source, target)` and same admitted cell-set (same
-`extent_hash`).
+bridges testing the same `(source, target)` over the intended
+population. The corresponding `Finding` explicitly names those
+bridges. Sharing a named scope predicate keeps that intent visible
+and normally makes the bridges admit the same rows.
 
-The framework derives cluster identity *structurally* from the
-data, not from author-declared metadata. Two bridges cluster iff
-they admit identical cells on the current cache. To corroborate a
-claim, author bridges that share a NAMED scope predicate (e.g. a
-module-level constant in `_scope.py`); when the runner evaluates
-them, all members hash to the same extent → automatic cluster.
+`extent_hash` provides a compact post-evaluation cross-check: matching
+keys mean the bridges reported the same de-duplicated string-ID set
+under a shared ID namespace. It does not compare row values or
+multiplicity and cannot establish provenance, chronology, or semantic
+scope equivalence. Author bridges with a named scope predicate (for
+example a module-level constant in `_scope.py`) for code reuse and
+clarity; do not treat the key as proof of the scientific claim.
 
 The canonical 3-bridge pattern (used by
 `reach_link_backdoor_ate_negative` + `_placebo_refuted` +
@@ -108,24 +111,25 @@ def reach_link_placebo_refuted(...): ...
 def reach_link_rcc_robust(...): ...
 ```
 
-All three import the same `DDQN_RELEVANT_SCOPE` constant → all
-three admit the same cells → all three share `extent_hash` → they
-form a cluster on `(jensen_gap, eval_best_burst_mean,
-<DDQN_RELEVANT_SCOPE hash>)`. A walker iterating the post-eval
-graph by extent groups them automatically.
+All three import the same `DDQN_RELEVANT_SCOPE` constant. If they
+report the same admitted string IDs, the post-evaluation graph groups
+them under one `(jensen_gap, eval_best_burst_mean, extent_hash)` key.
+The `Finding` remains the authored statement that they belong to one
+claim.
 
-Authors who want a cluster MUST share the named expression.
-Authors who inline scope (`scope=pl.col('env_name')=='X'`) get
-fresh expressions each time → distinct extents → singletons. The
-discipline hooks structural clustering into code organization.
+Authors should share the named expression when they intend one scope,
+but object identity is irrelevant: semantically equivalent expressions
+that admit the same IDs produce the same key, while the same expression
+can produce a different key as the record grows.
 
-### 4. Scope IS the cluster discriminator — via the data it admits
+### 4. Scope determines evidence eligibility; the key summarises IDs
 
 Two bridges with the same `(source, target)` but different scope
-expressions admit different cells; their `extent_hash` differs;
-they form distinct clusters. The framework derives this from the
-data the scope admits, not from any stringified scope
-representation.
+expressions often admit different string-ID sets and therefore have
+different keys. Distinct scopes can nevertheless coincide on a finite
+dataset, and equal ID-set keys say nothing about whether row contents
+are equal. The key summarises the current admitted IDs, not the scope
+expression or a persistent evidence snapshot.
 
 Concrete examples in the frozen study's
 `experiments/findings/ddqn/` (`submission` branch):
@@ -142,22 +146,17 @@ Concrete examples in the frozen study's
   distinct clusters (NOT corroborators, since polarity-disjoint
   sub-claims).
 
-### 5. Empty extent is honest indistinguishability
+### 5. Empty evidence is determined by counts, not by a digest
 
-When a bridge's scope admits zero cells on the current cache, its
-`extent_hash` is `hash(frozenset())` — the same as every other
-empty-extent bridge. Multiple AWAITING-DATA bridges sharing the
-empty extent cluster together: the framework cannot
-*empirically* distinguish what they test. This reflects the
-epistemic truth that no test was possible, not author intent
-collapse.
+When a bridge admits zero rows, `n_cells_in_scope == 0` is the
+source of truth. Such bridges also share the grouping key for the empty
+ID set. The converse is not guaranteed: a non-empty external frame
+whose IDs are absent or non-string also contributes no strings to the
+key. Consumers must not infer dataset emptiness, identity, or
+provenance from `extent_hash` alone.
 
-As corpus data lands, empty-extent clusters fragment: a new sweep
-that distinguishes two previously-untestable bridges separates
-them into distinct extents. Cross-version diff (`Graph.diff`)
-captures this evolution. The framework's "claims tested against
-data, results revisable as data grows" commitment extends to
-cluster identity itself.
+As data lands, the grouping can change. That is ordinary execution
+metadata for a live record, not evidence of which snapshot came first.
 
 ## Causal claims as graph queries
 
@@ -228,8 +227,9 @@ but heterogeneous along covariate C" requires a *scope cluster*:
 a pool bridge that emits HELD_WITH_SCOPE_FLAG when between-stratum
 I² ≥ 0.5, plus a meta-regression sibling whose coefficient on C
 tests the cleavage. Both bridges share a NAMED scope predicate
-(same `extent_hash` → automatic cluster on the post-evaluated
-graph).
+for one authored population. Matching extent keys are a useful
+execution-time cross-check; the `Finding` explicitly composes the
+siblings.
 
 The pool side uses the `stratified_arm_diff_pooled` analysis
 primitive (`corroborate.analyses.stratified_arm_diff_pooled`),
@@ -264,9 +264,9 @@ def cleavage_at_C(meta_regression: MetaRegressionResult) -> Verdict:
 The pool bridge's HELD_WITH_SCOPE_FLAG triggers the recipe:
 "which covariate predicts the per-stratum effect?", answered by
 the sibling meta-regression. The scope-cluster shape is the
-empirical scope claim's structural unit — same `(source,
-target, extent_hash)` on the post-evaluated graph → automatic
-cluster.
+empirical scope claim's structural unit. The authored `Finding`
+defines that unit; a shared `(source, target, extent_hash)` is only
+diagnostic agreement on the current de-duplicated string-ID set.
 
 The methodology is in `ANALYSIS_RECIPE.md` §1.5 (`submission`
 branch); the discipline against treating
@@ -290,11 +290,11 @@ docstring.
   edges? which `evidentiary_level`? which extent cluster?).
   Otherwise it's interpretation unanchored to the framework's
   evidence.
-- **Inline scope when clustering is intended**. Each
-  `pl.col(...)>X` expression is a fresh polars Expr; copy-pasting
-  scope predicates across bridges produces distinct extents even
-  when the predicates are semantically identical. Refactor shared
-  predicates to module-level constants (`_scope.py`).
+- **Duplicated inline scope when clustering is intended**. Repeating
+  a predicate obscures whether sibling bridges intend the same
+  population. Refactor it to a module-level constant (`_scope.py`) for
+  authoring clarity. Expression object identity does not affect the
+  extent key; only the admitted string IDs do.
 - **`proportion_mediated` for mediation claims**. Deleted
   2026-05-18 (statistical case: ratio explodes near zero,
   lands outside [0, 1] under suppression, first-difference
@@ -305,9 +305,9 @@ docstring.
   multicollinearity-robust) paired with `mediation_dowhy`
   (typed `linearity_status` diagnostic) at the same scope.
 - **HP-conditioned bridges named as if HP-invariant**. A bridge
-  on sync=500 scope tests an edge at sync=500. The extent-hash
-  encodes that constraint empirically. Don't paper over it in the
-  bridge name.
+  on sync=500 scope tests an edge at sync=500. The bridge declaration,
+  not an ID-set hash, carries that constraint. Don't paper over it in
+  the bridge name.
 
 ## Connection to existing framework docs
 
@@ -324,10 +324,10 @@ on the `submission` branch.)
 - `PRIMITIVES_AUDIT.md` four-question test for primitives: this
   principle says "don't add chain-claim primitives — the existing
   graph + cluster query IS the chain primitive."
-- `UNCONSUMED_PRIMITIVES_AUDIT.md` Round 3 documents the
-  resolution that landed extent-based cluster identity (replacing
-  the typed-but-unwired `condition_desc` + `claim_id` fields and
-  retiring auto-promotion).
+- `UNCONSUMED_PRIMITIVES_AUDIT.md` Round 3 documents the historical
+  resolution that introduced extent-based grouping (replacing the
+  typed-but-unwired `condition_desc` + `claim_id` fields and retiring
+  auto-promotion). The grouping key is now explicitly non-authoritative.
 
 ## Honest scope
 

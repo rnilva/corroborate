@@ -1,5 +1,5 @@
 """Tests for `corroborate.graph.causal` evidence(E) stamper +
-cluster-identity queries.
+dataset-relative extent-grouping queries.
 
 Covers the framework primitives promoted from
 `experiments/findings/ddqn/walks.py` per docs/HYPOTHESIS_AS_GRAPH.md
@@ -22,7 +22,6 @@ from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import claim_bridge
 from corroborate.bridge.verdict import Verdict
 from corroborate.graph.causal import (
-    stable_extent_hash,
     BridgeEdge,
     ClusterVerdict,
     Direction,
@@ -90,12 +89,19 @@ def _bridge_interventional(_stub_analysis: object) -> Verdict:
 def test_evaluated_graph_held_associational_correlational() -> None:
     g = evaluated_graph(
         (_bridge_assoc_a,),
-        {'_bridge_assoc_a': PostEvalEntry(verdict=Verdict.HELD, extent_hash=12345)},
+        {
+            '_bridge_assoc_a': PostEvalEntry(
+                verdict=Verdict.HELD,
+                extent_hash=12345,
+                n_cells_in_scope=7,
+            ),
+        },
     )
     edges = tuple(g.edges)
     assert len(edges) == 1
     assert edges[0].metadata.evidentiary_level == 'correlational'
     assert edges[0].metadata.extent_hash == 12345
+    assert edges[0].metadata.n_cells_in_scope == 7
 
 
 def test_evaluated_graph_held_interventional_causal_one_sided() -> None:
@@ -194,8 +200,7 @@ def test_evaluated_graph_preserves_topology() -> None:
 # ============ clusters_by_extent ============
 
 def test_clusters_by_extent_groups_by_triple() -> None:
-    """Two bridges sharing `(source, target, extent_hash)` cluster
-    together; the framework derives identity from the data."""
+    """Matching `(source, target, extent_hash)` values group together."""
     g = evaluated_graph(
         (_bridge_assoc_a, _bridge_assoc_b),
         {
@@ -210,7 +215,7 @@ def test_clusters_by_extent_groups_by_triple() -> None:
 
 def test_clusters_by_extent_separates_distinct_extent_hashes() -> None:
     """Same `(source, target)` but different extents → two
-    clusters, not one. Cluster identity is the triple."""
+    groups, not one."""
     g = evaluated_graph(
         (_bridge_assoc_a, _bridge_assoc_b),
         {
@@ -243,7 +248,12 @@ def test_clusters_by_extent_singletons_at_distinct_sources() -> None:
 
 # ============ cluster_verdict ============
 
-def _edge(level: str, extent_hash: int = 1) -> BridgeEdge:
+def _edge(
+    level: str,
+    extent_hash: int = 1,
+    *,
+    n_cells_in_scope: int = 1,
+) -> BridgeEdge:
     """Synthetic BridgeEdge for cluster_verdict tests — only
     `evidentiary_level` and `extent_hash` matter."""
     return BridgeEdge(
@@ -252,6 +262,7 @@ def _edge(level: str, extent_hash: int = 1) -> BridgeEdge:
         tier=Tier.ASSOCIATIONAL,
         evidentiary_level=level,  # pyright: ignore[reportArgumentType]
         extent_hash=extent_hash,
+        n_cells_in_scope=n_cells_in_scope,
     )
 
 
@@ -290,14 +301,37 @@ def test_cluster_verdict_underpowered_mixed_unevaluated() -> None:
 
 
 def test_cluster_verdict_empty_extent_all_empty() -> None:
-    """All members admit zero cells (shared empty-frozenset hash)
-    → EMPTY_EXTENT, even if their levels suggest otherwise."""
-    empty_hash = stable_extent_hash(())
+    """Explicit zero row counts, not an ID digest, mean empty."""
     members = (
-        _edge('correlational', empty_hash),
-        _edge('refuted', empty_hash),
+        _edge('correlational', n_cells_in_scope=0),
+        _edge('refuted', n_cells_in_scope=0),
     )
     assert cluster_verdict(members) == ClusterVerdict.EMPTY_EXTENT
+
+
+def test_cluster_verdict_does_not_infer_empty_from_id_key() -> None:
+    """A non-empty frame can have no usable string IDs."""
+    from corroborate.graph.causal import EMPTY_EXTENT_HASH
+
+    members = (
+        _edge(
+            'correlational', EMPTY_EXTENT_HASH, n_cells_in_scope=2,
+        ),
+    )
+    assert cluster_verdict(members) == ClusterVerdict.SUPPORTED
+
+
+def test_cluster_verdict_mixed_empty_and_nonempty_is_underpowered() -> None:
+    members = (
+        _edge('correlational', n_cells_in_scope=0),
+        _edge('causal_one_sided', n_cells_in_scope=3),
+    )
+    assert cluster_verdict(members) == ClusterVerdict.UNDERPOWERED
+
+
+def test_cluster_verdict_unknown_count_is_underpowered() -> None:
+    members = (_edge('correlational', n_cells_in_scope=-1),)
+    assert cluster_verdict(members) == ClusterVerdict.UNDERPOWERED
 
 
 def test_cluster_verdict_empty_members_underpowered() -> None:
@@ -406,3 +440,41 @@ def test_walk_scope_rejects_deferred_scope() -> None:
     import pytest
     with pytest.raises(TypeError, match='deferred-scope'):
         walk_scope((stub,))
+
+
+def test_external_value_effects_stay_distinguishable_in_the_graph() -> None:
+    """Both effects carry Tier.INTERVENTIONAL — the tier is the
+    author's declared interpretation — but a value-based effect's
+    assignment is author-asserted, not framework-executed, and the
+    edge keeps that fact machine-readable."""
+    from corroborate.analyses.paired.paired_g import PairedGResult
+    from corroborate.core.claim import claim as claim_decorator
+    from corroborate.core.intervention import (
+        DoEffect, Intervention,
+    )
+    from corroborate.graph.causal import authored_graph
+
+    @claim_decorator
+    def _swap_op(x: int) -> int:
+        return x
+
+    structural = DoEffect(
+        arms=((), (Intervention(slot_path='op', replacement=_swap_op),)),
+    )
+    declared = DoEffect.from_values(
+        source='gamma', reference=0.8, treatment=0.99,
+    )
+
+    @claim_bridge(source=structural, target='outcome')
+    def _executed(paired_g: PairedGResult) -> Verdict:
+        return Verdict.HELD
+
+    @claim_bridge(source=declared, target='outcome')
+    def _asserted(paired_g: PairedGResult) -> Verdict:
+        return Verdict.HELD
+
+    g = authored_graph((_executed, _asserted))
+    by_name = {e.metadata.bridge_name: e.metadata for e in g.edges}
+    assert by_name['_executed'].external_effect is False
+    assert by_name['_asserted'].external_effect is True
+    assert by_name['_executed'].tier is by_name['_asserted'].tier

@@ -95,6 +95,29 @@ def test_class_satisfies_hypothesis_protocol() -> None:
     assert isinstance(_StubHypothesis, Hypothesis)
 
 
+def test_run_intervention_rejects_value_based_effect(
+    tmp_path: Path,
+) -> None:
+    """External value effects classify existing rows; they are not
+    structural arm programmes for the sweep runner to dispatch."""
+    out_dir = tmp_path / 'must-not-be-created'
+    effect = DoEffect.from_values(
+        source='gamma', reference=0.8, treatment=0.99,
+    )
+
+    with pytest.raises(ValueError, match='requires a structural DoEffect'):
+        run_intervention(
+            effect,
+            base=_base_theory,
+            measurables=(),
+            grid_points=[{}],
+            runner=_stub_runner,
+            out_dir=out_dir,
+        )
+
+    assert not out_dir.exists()
+
+
 def _make_run(arm_key: str, **measurements: object) -> RunRow:
     import uuid
     leaf_measurements: dict[str, str | int | float | bool] = {}

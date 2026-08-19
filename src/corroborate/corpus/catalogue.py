@@ -531,22 +531,31 @@ _DEFAULT_EXOGENOUS_KEYS = DEFAULT_EXOGENOUS_KEYS
 _DEFAULT_EXOGENOUS_PREFIXES = DEFAULT_EXOGENOUS_PREFIXES
 
 
-def _partition_columns(
+def partition_columns(
     columns: Sequence[str],
     dtypes: Mapping[str, pl.DataType],
     *,
     exogenous_keys: frozenset[str],
     exogenous_prefixes: tuple[str, ...],
+    extra_excluded: frozenset[str] = frozenset(),
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Partition a parquet's column list into (leaves, exogenous).
+    """Partition a parquet's column list into (leaves, exogenous)
+    — the canonical answer to "which columns are configuration"
+    for framework-native frames, shared by the catalogue's
+    `--leaves` view and `Panel.from_corpus` / `from_cache`'s
+    registry derivation.
 
     Excludes framework-typed RunRow fields (single source of truth:
     `_RUN_ROW_TYPED_FIELDS` in schema.py); registered measurables
     + legacy keys (via `leaf_signature.non_leaf_names`); trajectory
     (List-dtype) columns; and bundle-placeholder columns (the
-    `optimizer` column when `optimizer.inner.lr` exists)."""
+    `optimizer` column when `optimizer.inner.lr` exists).
+    `extra_excluded` adds caller-known non-leaves the live process
+    cannot infer — post-ingest stamps (`corpus`), and measurable
+    names recovered from a corpus's own sidecar artifacts when the
+    implementation's registry isn't imported."""
     from corroborate.corpus.leaf_signature import non_leaf_names
-    excluded = non_leaf_names() | _RUNROW_FIELDS
+    excluded = non_leaf_names() | _RUNROW_FIELDS | extra_excluded
     leaves_out: list[str] = []
     exogenous_out: list[str] = []
     for c in columns:
@@ -651,7 +660,7 @@ def arm_leaves(
             continue
         col_names = schema.names()
         dtypes: dict[str, pl.DataType] = dict(zip(col_names, schema.dtypes()))
-        leaves, exogenous_cols = _partition_columns(
+        leaves, exogenous_cols = partition_columns(
             col_names, dtypes,
             exogenous_keys=ex_keys,
             exogenous_prefixes=ex_pre,

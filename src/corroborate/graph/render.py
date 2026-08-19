@@ -136,6 +136,7 @@ def _aggregate_verdict(
         name: PostEvalEntry(
             verdict=evaluation.verdict,
             extent_hash=evaluation.extent_hash,
+            n_cells_in_scope=evaluation.n_cells_in_scope,
         )
         for name, evaluation in evaluations.items()
     }

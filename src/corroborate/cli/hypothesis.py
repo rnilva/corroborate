@@ -37,7 +37,7 @@ from typing import cast
 from corroborate.bridge import Bridge, BridgeEvaluation
 from corroborate.core.finding import Finding
 from corroborate.graph.causal import (
-    EMPTY_EXTENT_HASH, PostEvalEntry,
+    PostEvalEntry,
     cluster_verdict, clusters_by_extent, composed_verdict, evaluated_graph,
 )
 from corroborate.runner import check, check_cache_sources, evict, run
@@ -728,11 +728,12 @@ def _print_verdicts(
     violation_counts: dict[str, int] = {}
     n_with_violations = 0
     # Extent clusters: bridges keyed by `(source_name, target_name,
-    # extent_hash)` admit identical cell-sets — refutation-cluster
-    # identity under extent-based grouping. Two bridges with the
-    # same key are corroborating the same edge on the same cells.
-    # Track per-member verdict so we can compose a cluster-level
-    # verdict (supported / refuted / underpowered / empty_extent).
+    # extent_hash)` report the same de-duplicated string-ID set under
+    # the caller's current ID namespace. This is a compact grouping
+    # hint, not evidence identity: row contents, multiplicity,
+    # provenance, and chronology are absent. Track per-member verdict
+    # so we can compose a dataset-relative cluster-level verdict
+    # (supported / refuted / underpowered / empty_extent).
     extent_clusters: dict[
         tuple[str, str, int], list[tuple[str, int, str]],
     ] = {}
@@ -787,16 +788,20 @@ def _print_verdicts(
     # `experiments/findings/ddqn/finding_*.py` walks show the
     # canonical use pattern for Findings.
     post_eval = {
-        name: PostEvalEntry(verdict=ev.verdict, extent_hash=ev.extent_hash)
+        name: PostEvalEntry(
+            verdict=ev.verdict,
+            extent_hash=ev.extent_hash,
+            n_cells_in_scope=ev.n_cells_in_scope,
+        )
         for name, ev in results.items()
     }
     g = evaluated_graph(bridges, post_eval)
     graph_clusters = clusters_by_extent(g)
     multi = [(k, v) for k, v in extent_clusters.items() if len(v) >= 2]
     empty_members = [
-        (name, n) for (_, _, h), members in extent_clusters.items()
+        (name, n) for members in extent_clusters.values()
         for name, n, _ in members
-        if h == EMPTY_EXTENT_HASH
+        if n == 0
     ]
     if multi or empty_members:
         print()
@@ -804,13 +809,18 @@ def _print_verdicts(
         for (src, tgt, h), members in sorted(
             multi, key=lambda x: (-len(x[1]), x[0][:2]),
         ):
-            n = members[0][1]
+            member_counts = sorted({member[1] for member in members})
+            n_label = (
+                str(member_counts[0])
+                if len(member_counts) == 1
+                else f'mixed:{member_counts}'
+            )
             src_short = src if len(src) < 50 else src[:47] + '...'
             edge_members = graph_clusters.get((src, tgt, h), ())
             verdict_label = cluster_verdict(edge_members).value
             print(
                 f'  {verdict_label:14s}  ({len(members)} bridges, '
-                f'n_cells={n})  {src_short} → {tgt}',
+                f'n_cells={n_label})  {src_short} → {tgt}',
             )
             for member_name, _, _ in members:
                 print(f'      {member_name}')

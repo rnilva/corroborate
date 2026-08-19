@@ -15,6 +15,7 @@ Sub-modules:
 - `bridge.admission` — admission-gate types (`AdmissionGate`,
   `GateLevel`, `GateResult`) and the framework's auto-gates
   (`distinct_arms`, `exogenous_source`, `exogenous_scope`,
+  `contrast_present`, `contrast_isolation`, `pair_completeness`,
   `no_predicted_direction`).
 - `bridge.analysis` — `@analysis` decorator, `Analysis`
   wrapper, analysis registry, `resolve_for_holds_when`
@@ -26,13 +27,17 @@ Sub-modules:
 Consumers `from corroborate.bridge import X`."""
 from corroborate.bridge.admission import (
     AdmissionGate,
+    GateContext,
     GateLevel,
     GateResult,
+    contrast_isolation,
+    contrast_present,
     distinct_arms,
     exogenous_scope,
     exogenous_source,
     is_endogenous,
     no_predicted_direction,
+    pair_completeness,
     resolved_source,
 )
 from corroborate.bridge.analysis import (
@@ -42,7 +47,8 @@ from corroborate.bridge.analysis import (
 from corroborate.bridge.bridge import (
     Bridge,
     BridgeEvaluation,
-    RecordedContrastBinding,
+    Direction,
+    Tier,
     claim_bridge,
     evaluate,
 )
@@ -66,13 +72,17 @@ __all__ = [
     'Analysis',
     'Bridge',
     'BridgeEvaluation',
+    'Direction',
+    'GateContext',
     'GateLevel',
     'GateResult',
-    'RecordedContrastBinding',
     'RefutationClass',
+    'Tier',
     'Verdict',
     'analysis',
     'claim_bridge',
+    'contrast_isolation',
+    'contrast_present',
     'distinct_arms',
     'evaluate',
     'exogenous_scope',
@@ -86,6 +96,7 @@ __all__ = [
     'is_endogenous',
     'no_predicted_direction',
     'null_predict_verdict',
+    'pair_completeness',
     'partition_aggregate',
     'resolved_source',
 ]

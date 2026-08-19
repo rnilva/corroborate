@@ -36,6 +36,7 @@ def meta_regression_paired_g(
     *,
     treatment_arm: str,
     baseline_arm: str,
+    arm_field: str = 'arm_key',
     pair_by: tuple[str, ...],
     source: str,
     covariates_per_env: Mapping[str, Mapping[str, float]],
@@ -64,6 +65,7 @@ def meta_regression_paired_g(
         list(cells),
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
+        arm_field=arm_field,
         source=source,
         pair_by=pair_by,
     )

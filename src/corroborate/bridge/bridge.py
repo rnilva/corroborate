@@ -40,7 +40,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
 from types import MappingProxyType
-from typing import Protocol, cast
+from typing import cast
 
 import polars as pl
 
@@ -49,17 +49,20 @@ from corroborate.bridge._filter import filter_cells
 from corroborate.bridge.deferred_scope import DeferredScope
 from corroborate.bridge.admission import (
     AUTO_GATES,
+    CONTRAST_ARM_FIELD,
     AdmissionGate,
+    GateContext,
     GateLevel,
     GateResult,
-    distinct_units,
-    exogenous_source,
+    resolved_source,
+    value_contrast_active,
 )
 from corroborate.bridge.analysis import resolve_for_holds_when
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.core.claim import Claim
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import ArmRole, DoEffect
+from corroborate.data.panel import Panel
 from corroborate.measurables import Measurable, register
 from corroborate.graph._extent import stable_extent_hash
 
@@ -78,44 +81,14 @@ from corroborate.graph.causal import Direction, Tier  # noqa: E402
 # - `Measurable`: instance passed by value (typically a value-
 #   composed reduction like `mean_window(from_key('q_max'), 0.5,
 #   1.0)`). The framework normalises to `.name`.
-# - `DoEffect`: ONLY valid as `Bridge.source`, not target. Marks
-#   the bridge as Pearl-rung-2 — the source IS the do-contrast,
-#   not a measurable. Per `intervention.py:153`: "Pearl-rung-2
-#   edges in the causal graph have an *intervention* as the
-#   source node, NOT a measurable." Analyses that consume a
-#   DoEffect-sourced bridge get the contrast's `treatment_arm` /
-#   `baseline_arm` extracted into their kwargs by `evaluate()`.
+# - `DoEffect`: ONLY valid as `Bridge.source`, not target. It may
+#   describe native structural interventions or an exact external
+#   value contrast from `DoEffect.from_values`. Analyses receive
+#   its `treatment_arm` / `baseline_arm` identities from
+#   `evaluate()`; observed data never invents those identities.
 type BridgeEndpoint = (
     str | Measurable[Mapping[str, object], object] | DoEffect
 )
-
-
-class RecordedContrastBinding(Protocol):
-    """Verified runtime binding for an externally executed contrast.
-
-    The bridge layer depends only on this structural surface, not on
-    ``corroborate.data.adapter``.  ``RecordedContrast`` satisfies it,
-    while the authored bridge remains independent of any bundle or
-    producer-specific arm labels.
-    """
-
-    @property
-    def parameter_path(self) -> str: ...
-
-    @property
-    def baseline_key(self) -> str: ...
-
-    @property
-    def treatment_key(self) -> str: ...
-
-    @property
-    def baseline_value(self) -> float: ...
-
-    @property
-    def treatment_value(self) -> float: ...
-
-    @property
-    def bundle_digest(self) -> str: ...
 
 
 def endpoint_name(e: BridgeEndpoint) -> str:
@@ -257,7 +230,17 @@ class Bridge:
     tuple forwarded to analyses that compute paired contrasts.
     Typed Bridge field (rather than holds_when default) since
     81% of bridges use the same `('seed',)` value and never
-    consume it in their body."""
+    consume it in their body.
+
+    A contrast executed OUTSIDE the framework is still a fixed
+    estimand: declare it with
+    `DoEffect.from_values(source='gamma', reference=0.80,
+    treatment=0.99)`. Evaluation matches only those exact values
+    and assigns the symbolic analysis identities `baseline` and
+    `treatment`; observed support and display formatting never
+    determine arm identity or orientation. Other values remain
+    compatible with the growing record but are outside this
+    contrast."""
     name: str
     source: BridgeEndpoint
     target: BridgeEndpoint
@@ -385,10 +368,11 @@ class BridgeEvaluation:
     `blocked_by`: set when `verdict == INADMISSIBLE` — the first
     BLOCK-level gate that vetoed the bridge. Body did not run.
 
-    `n_cells_in_scope`: row count after `bridge.scope` was applied.
-    Equal to the input cell-count when `bridge.scope is None`. Used
-    by the post-run report to surface sample-size diagnostics
-    without re-running the scope filter.
+    `n_cells_in_scope`: row count after population scope and, for a
+    value-based DoEffect, exact declared-arm selection were applied.
+    Unmatched values are outside that estimand and do not contribute.
+    Used by the post-run report to surface sample-size diagnostics
+    without re-running the filters.
 
     `assumption_violations`: flat tuple of distributional /
     sample-size flags collected from each analysis result's
@@ -403,21 +387,13 @@ class BridgeEvaluation:
     downstream consumers (extent-cluster grouping, walks) can key
     by edge endpoints without re-loading the Bridge.
 
-    `evidence_digest`: content identity of an externally adapted
-    bundle when evaluation used a recorded contrast. ``None`` for
-    native/ordinary cell sets. This makes cached evaluation records
-    distinguish evidence from different sealed bundles.
-
-    `extent_hash`: stable BLAKE2b identity of the set of cell IDs admitted by
-    the bridge's effective scope (`bridge.scope ∧ module_scope`).
-    Two bridges with the same `(source_name, target_name,
-    extent_hash)` admit identical cell-sets on the current cache
-    — the extent-based cluster identity proposed at the
-    findings-walk layer. Empty-scope bridges share
-    `stable_extent_hash(())`, honestly reflecting "framework cannot
-    distinguish these on this cache." Cluster identity is
-    therefore corpus-dependent by design (bridge verdicts already
-    are; cluster identity inherits the dependency)."""
+    `extent_hash`: a compact, process-portable grouping key over the
+    de-duplicated string IDs admitted by the bridge's effective scope
+    (`bridge.scope ∧ module_scope`). It is diagnostic metadata only and
+    never participates in admission or verdict computation. Matching
+    keys do not establish equal row contents, multiplicity, provenance,
+    chronology, or dataset identity. `n_cells_in_scope`, not this key,
+    determines whether the admitted extent is empty."""
     bridge_name: str
     verdict: Verdict
     analysis_results: Mapping[str, object]
@@ -428,7 +404,6 @@ class BridgeEvaluation:
     refutation_class: 'RefutationClass | None' = None
     source_name: str = ''
     target_name: str = ''
-    evidence_digest: str | None = None
     extent_hash: int = 0
     """**Sub-classification of NO_EFFECT** (or, more rarely, of
     POWER_INSUFFICIENT). Bridge bodies that distinguish "predicted
@@ -558,6 +533,8 @@ def _require_predicted_direction(
     )
 
 
+
+
 def claim_bridge(
     *,
     source: BridgeEndpoint,
@@ -596,9 +573,15 @@ def claim_bridge(
     via `DoEffect.treatment_arm_key()` / `baseline_arm_key()` (the
     canonical_str fingerprints of the typed Intervention tuples)
     at evaluate() time and threads them into the analysis's kwargs.
-    When `source` is a string/Measurable, no contrast is set and
-    the analysis runs without arm-pairing (correlation-style or
-    pre-paired bridges).
+
+    An interventional bridge whose contrast was executed OUTSIDE
+    the framework uses
+    `DoEffect.from_values(source=..., reference=..., treatment=...)`.
+    The declaration fixes both membership and orientation; the
+    framework never infers them from the values observed in a
+    particular record. A plain string/Measurable source on a
+    non-interventional bridge runs without arm-pairing
+    (correlation-style or pre-paired bridges).
 
     A common idiom is to define `INTERVENTION = DoEffect(...)`
     once at the top of the bridge file and reference it as
@@ -674,13 +657,46 @@ def claim_bridge(
     return _decorator
 
 
+def _stamp_value_contrast(
+    bridge: Bridge,
+    filtered_cells: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Select and label rows for an explicitly declared value effect.
+
+    `DoEffect.from_values` owns the declared values and their
+    orientation. A row belongs to an arm only when EVERY declared
+    column matches that arm's value (`classify_row`); matching rows
+    receive the stable symbolic identities `baseline` and
+    `treatment`, and all other rows are outside this estimand and
+    are ignored. Arm identity never passes through a lossy display
+    formatter and never depends on observed support. The caller's
+    mappings are already copied at the evaluation boundary, so
+    transient labels cannot mutate its evidence."""
+    effect = bridge.source
+    if not isinstance(effect, DoEffect) or not effect.is_value_based:
+        raise TypeError('_stamp_value_contrast requires a value DoEffect')
+    selected: list[dict[str, object]] = []
+    for cell in filtered_cells:
+        if CONTRAST_ARM_FIELD in cell:
+            raise ValueError(
+                f'evaluate({bridge.name!r}): cells already carry '
+                f'the reserved column {CONTRAST_ARM_FIELD!r}',
+            )
+        role = effect.classify_row(cell)
+        if role is None:
+            continue
+        cell[CONTRAST_ARM_FIELD] = role.value
+        selected.append(cell)
+    return selected
+
+
 def evaluate(
     bridge: Bridge,
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: 'pl.DataFrame | Iterable[Mapping[str, object]] | Panel',
     *,
     claim: Claim[..., object] | None = None,
     module_scope: pl.Expr | None = None,
-    recorded_contrast: RecordedContrastBinding | None = None,
+    leaves: frozenset[str] | None = None,
 ) -> BridgeEvaluation:
     """Run a bridge against a cell-set: apply `bridge.scope`
     as a polars filter, resolve each fixture (a `holds_when` parameter
@@ -702,14 +718,11 @@ def evaluate(
     as a string or a `Measurable` instance.
 
     `claim` (kw-only) is the substrate's outermost @claim — the
-    structural source of truth for endogeneity gating
-    (`exogenous_source`, `exogenous_scope`). When None, those
-    gates short-circuit with `gate-doesn't-apply` semantics; the
-    framework remains usable in tests and synthetic-corpus
-    contexts that have no substrate composition. Substrate
-    runners (cell_runner, scripts/run_hypothesis.py) thread
-    `claim=dqn` (or the substrate-level entry-point claim) so
-    the gates fire.
+    structural source of truth for native endogeneity gating
+    (`exogenous_source`, `exogenous_scope`). A plain string source
+    cannot self-authorise an external `Tier.INTERVENTIONAL` bridge
+    when `claim` is absent; external interventions instead declare
+    their fixed estimand with `DoEffect.from_values(...)`.
 
     `module_scope` (kw-only) is the hypothesis-module-level scope
     filter (e.g., "every cross-env bridge in this file excludes
@@ -722,16 +735,28 @@ def evaluate(
     Bridges that intentionally violate the module-level filter
     must move to a different hypothesis module.
 
-    `recorded_contrast` binds an externally executed, verified
-    two-arm contrast at evaluation time.  The bridge still declares
-    the data-independent edge (for example ``gamma -> return_mean``);
-    the binding supplies the producer-specific arm keys and verifies
-    its intervention path, arm values, and sealed bundle digest against
-    the cells.
-    Analyses then consume ``bridge.target`` as their measured source,
-    exactly as they do for an executable ``DoEffect``.  Supplying both
-    forms is an error: a recorded contrast is evidence about an action
-    performed elsewhere, not an operation Corroborate can re-apply.
+    `cells` may also be a `Panel` — the typed carrier run readers
+    return — in which case its `cells` frame and its `leaves`
+    registry are used together and nothing else needs passing:
+    `evaluate(claim, load_runs(dir))`.
+
+    `leaves` (kw-only) is the external record's configuration
+    registry: the set of column names the producer's record says
+    were configured. Panels carry it already; the kwarg serves
+    frames built another way (derive it via
+    `corroborate.data.config_columns` /
+    `corroborate_rl.sb3.sb3_config_columns`, or list it by hand
+    for artifact-less data), and when both are present the
+    explicit kwarg wins. It is authoritative about knob-ness,
+    and the gates use it both ways: a value-based DoEffect whose
+    declared columns are NOT registered configuration is blocked
+    (a measurement cannot be the assigned parameter), and a
+    registered leaf that moves with the contrast inside a pairing
+    unit is blocked as a confound. It is never a source of arm
+    membership (the declaration owns that) and never attests
+    assignment or randomisation — nothing external can. Omitting
+    it downgrades those checks to warnings/unassessed notes on
+    the record.
 
     Raises `TypeError` if the Bridge has no `holds_when` body —
     `@claim_bridge` always populates it; this guard catches direct
@@ -742,78 +767,16 @@ def evaluate(
             f'body — @claim_bridge always populates it; constructing '
             f'a Bridge directly with holds_when=None is unsupported.',
         )
+    # A Panel is cells + facts: unwrap the frame and adopt its
+    # registry unless the caller passed one explicitly.
+    if isinstance(cells, Panel):
+        if leaves is None:
+            leaves = cells.leaves
+        cells = cells.cells
     # One-shot iterables must survive both deferred-scope resolution and
     # the eventual analysis pass. Materialise them once at the boundary.
     if not isinstance(cells, pl.DataFrame):
         cells = [dict(cell) for cell in cells]
-    recorded_arm_keys: tuple[str, str] | None = None
-    if recorded_contrast is not None:
-        if isinstance(bridge.source, DoEffect):
-            raise ValueError(
-                f'evaluate({bridge.name!r}): cannot combine an executable '
-                'DoEffect source with recorded_contrast',
-            )
-        if not isinstance(bridge.source, str):
-            raise ValueError(
-                f'evaluate({bridge.name!r}): recorded_contrast requires '
-                'a string source naming its parameter path',
-            )
-        if bridge.source_name != recorded_contrast.parameter_path:
-            raise ValueError(
-                f'evaluate({bridge.name!r}): bridge source '
-                f'{bridge.source_name!r} does not match recorded contrast '
-                f'parameter path {recorded_contrast.parameter_path!r}',
-            )
-        recorded_arm_keys = (
-            recorded_contrast.baseline_key,
-            recorded_contrast.treatment_key,
-        )
-        if recorded_arm_keys[0] == recorded_arm_keys[1]:
-            raise ValueError(
-                f'evaluate({bridge.name!r}): recorded contrast arm '
-                f'keys must be distinct; got {recorded_arm_keys[0]!r}',
-            )
-        recorded_rows = (
-            cast(list[dict[str, object]], cells.to_dicts())
-            if isinstance(cells, pl.DataFrame)
-            else cells
-        )
-        expected_values = {
-            recorded_contrast.baseline_key: recorded_contrast.baseline_value,
-            recorded_contrast.treatment_key: recorded_contrast.treatment_value,
-        }
-        seen_arms: set[str] = set()
-        for cell in recorded_rows:
-            cell_digest = cell.get('bundle_digest')
-            if cell_digest != recorded_contrast.bundle_digest:
-                raise ValueError(
-                    f'evaluate({bridge.name!r}): recorded contrast digest '
-                    f'{recorded_contrast.bundle_digest!r} does not match '
-                    f'cell bundle digest {cell_digest!r}',
-                )
-            arm = cell.get('arm_key')
-            if not isinstance(arm, str) or arm not in expected_values:
-                continue
-            seen_arms.add(arm)
-            source_value = cell.get(recorded_contrast.parameter_path)
-            expected_value = expected_values[arm]
-            if (
-                isinstance(source_value, bool)
-                or not isinstance(source_value, (int, float))
-                or not math.isfinite(float(source_value))
-                or float(source_value) != expected_value
-            ):
-                raise ValueError(
-                    f'evaluate({bridge.name!r}): arm {arm!r} records '
-                    f'{recorded_contrast.parameter_path}={source_value!r}; '
-                    f'contrast binds it to {expected_value!r}',
-                )
-        missing_arms = set(recorded_arm_keys).difference(seen_arms)
-        if missing_arms:
-            raise ValueError(
-                f'evaluate({bridge.name!r}): recorded contrast arm(s) '
-                f'{sorted(missing_arms)!r} are absent from the cells',
-            )
     # Effective scope = bridge.scope ∧ module_scope (either may
     # be None). Polars' `&` is the framework-honest composition.
     #
@@ -870,11 +833,23 @@ def evaluate(
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []
         )
+    # Keep the pre-selection rows solely for `resolved_source`: once
+    # unmatched value rows are removed, an entirely absent source
+    # column is otherwise indistinguishable from a present column
+    # containing no declared values. Every other gate and the analyses
+    # receive only rows belonging to this explicit effect.
+    scoped_cells_for_source_gate = filtered_cells
+    contrast_labels: tuple[str, ...] | None = None
+    if value_contrast_active(bridge):
+        if not isinstance(bridge.source, DoEffect):
+            raise AssertionError('active value contrast is not a DoEffect')
+        filtered_cells = _stamp_value_contrast(bridge, filtered_cells)
+        contrast_labels = bridge.source.arm_keys()
     n_cells_in_scope = len(filtered_cells)
-    # extent_hash: process-portable identity of the bridge's admitted
-    # cell-set on the current cache. Set semantics mean two bridges
-    # with identical admitted IDs get identical values irrespective of
-    # row order. Empty extent maps to one deterministic constant.
+    # extent_hash: process-portable grouping key over admitted string
+    # IDs. Set semantics ignore row order and duplicates. Row values,
+    # multiplicity, provenance, and chronology do not participate; the
+    # key is diagnostic metadata and never an admission/verdict input.
     admitted_ids: list[str] = []
     for c in filtered_cells:
         cid = c.get('id')
@@ -888,19 +863,14 @@ def evaluate(
     # WARN/INFO results accumulate on `BridgeEvaluation.warnings`.
     all_gates: tuple[AdmissionGate, ...] = AUTO_GATES + bridge.gates
     warnings: list[GateResult] = []
+    gate_ctx = GateContext(claim=claim, leaves=leaves)
     for gate in all_gates:
-        # A recorded intervention repeats one condition value across
-        # experimental units by construction, just like a DoEffect's arm
-        # indicator. ``pair_by`` — not the parameter's value cardinality —
-        # determines the independent units for its paired analysis. It is
-        # also evidence of an executed contrast, so the native-substrate
-        # exogenous-source gate does not reinterpret its parameter path as
-        # an unexecuted author-controlled leaf.
-        if recorded_contrast is not None and gate in (
-            distinct_units, exogenous_source,
-        ):
-            continue
-        result = gate(bridge, filtered_cells, claim=claim)
+        gate_cells = (
+            scoped_cells_for_source_gate
+            if contrast_labels is not None and gate is resolved_source
+            else filtered_cells
+        )
+        result = gate(bridge, gate_cells, gate_ctx)
         if result is None or result.passed:
             continue
         if result.level is GateLevel.BLOCK:
@@ -914,33 +884,29 @@ def evaluate(
                 source_name=bridge.source_name,
                 target_name=bridge.target_name,
                 extent_hash=extent_hash,
-                evidence_digest=(
-                    recorded_contrast.bundle_digest
-                    if recorded_contrast is not None else None
-                ),
             )
         warnings.append(result)
     # Contrast resolution:
     #   - `source = DoEffect(...)` → contrast = the DoEffect, and
     #     the analysis's `source` slot maps to bridge.target_name
     #     (the measurement column).
-    #   - `recorded_contrast=...` → bind the verified external arm
-    #     labels without putting bundle-specific data in the bridge;
-    #     the analysis source maps to bridge.target_name.
-    #   - `source = str | Measurable` → no contrast; the name flows
-    #     directly as the analysis's source. Correlational bridges,
-    #     or bridges where the author wants paired_g to compute on
-    #     a non-outcome measurable.
-    contrast: DoEffect | RecordedContrastBinding | None
+    #   - value DoEffect → the exact declared values were mapped to
+    #     symbolic baseline/treatment labels above, and the analysis
+    #     source maps to bridge.target_name.
+    #   - `source = str | Measurable` otherwise → no contrast; the
+    #     name flows directly as the analysis's source.
+    #     Correlational bridges, or bridges where the author wants
+    #     paired_g to compute on a non-outcome measurable.
+    arm_keys: tuple[str, ...] | None
     source_for_analysis: str
     if isinstance(bridge.source, DoEffect):
-        contrast = bridge.source
-        source_for_analysis = bridge.target_name
-    elif recorded_contrast is not None:
-        contrast = recorded_contrast
+        # Covers value contrasts too: a non-None `contrast_labels`
+        # implies a DoEffect source, so this branch is the single
+        # arm-shaped path.
+        arm_keys = bridge.source.arm_keys()
         source_for_analysis = bridge.target_name
     else:
-        contrast = None
+        arm_keys = None
         source_for_analysis = bridge.source_name
     bridge_params: dict[str, object] = {
         'source': source_for_analysis,
@@ -951,11 +917,11 @@ def evaluate(
         'pair_by': bridge.pair_by,
         **dict(bridge.params),
     }
-    if contrast is not None:
-        if isinstance(contrast, DoEffect):
-            arm_keys = contrast.arm_keys()
-        else:
-            arm_keys = (contrast.baseline_key, contrast.treatment_key)
+    if contrast_labels is not None:
+        # Arm-shaped analyses read the transient symbolic identity,
+        # never a formatted value or producer-stamped arm name.
+        bridge_params['arm_field'] = CONTRAST_ARM_FIELD
+    if arm_keys is not None:
         bridge_params['arm_keys'] = arm_keys
         # Binary compat: when N=2, inject treatment_arm /
         # baseline_arm so existing bridges with default kwargs
@@ -1022,10 +988,6 @@ def evaluate(
         source_name=bridge.source_name,
         target_name=bridge.target_name,
         extent_hash=extent_hash,
-        evidence_digest=(
-            recorded_contrast.bundle_digest
-            if recorded_contrast is not None else None
-        ),
     )
 
 
@@ -1082,7 +1044,10 @@ def measurable_names_for_bridges(
       `Measurable` instance passed by value (auto-registered at
       `@claim_bridge` decode time). Both shapes normalise to a
       column-name string via `bridge.source_name` /
-      `bridge.target_name`.
+      `bridge.target_name`. For a value-based DoEffect the graph
+      source is a do-node, so its declared data-side columns
+      (`value_source_names`) are included as measurable
+      dependencies.
     - `bridge.params[*]` may carry measurable names too — bridges
       authored with extra defaulted-string kwargs (`predictor_name`,
       `mediator`) that downstream analyses route through the registry.
@@ -1109,6 +1074,11 @@ def measurable_names_for_bridges(
     out: set[str] = set()
     for b in bridges:
         candidates: list[str] = [b.source_name, b.target_name]
+        if isinstance(b.source, DoEffect) and b.source.is_value_based:
+            # `source_name` is the do-node used by the graph. The
+            # underlying data columns remain measurable dependencies
+            # and must be materialised before exact value matching.
+            candidates.extend(b.source.value_source_names or ())
         for v in b.params.values():
             if isinstance(v, str):
                 candidates.append(v)
@@ -1163,7 +1133,6 @@ __all__ = [
     'BridgeEndpoint',
     'BridgeEvaluation',
     'Direction',
-    'RecordedContrastBinding',
     'Tier',
     'claim_bridge',
     'endpoint_name',

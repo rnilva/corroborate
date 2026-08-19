@@ -555,10 +555,11 @@ def run(
     serializes a JSON report at `report_path` (or
     `experiments/findings/<short>.run.json` if None) capturing
     per-bridge verdict + every typed analysis result + admission
-    gates + provenance (timestamp, git commit, measurable
-    signatures). The report is the load-bearing audit artifact —
-    small, diffable, deterministic, committed alongside the
-    bridges that produced it. See `corroborate.runner.report`.
+    gates + execution metadata (timestamp, git commit, measurable
+    signatures). The report is a small, diffable decision record that
+    may be committed alongside the bridges that produced it. It carries
+    no external-evidence identity, provenance attestation, or chronology
+    proof. See `corroborate.runner.report`.
 
     `data` may be:
     - `None`: run on whatever's already in the cache.
@@ -662,12 +663,26 @@ def run(
     # alone determines the filter.
     module_scope = getattr(h, 'MODULE_SCOPE', None)
 
+    # The cache's configuration registry — same derivation as
+    # `Panel.from_cache` — so a value-based DoEffect bridge gets
+    # identical knob-aware gating through this entry point as
+    # through `evaluate(bridge, Panel.from_cache(...))`. Native
+    # structural bridges are unaffected (their registry is the
+    # claim's leaf walk, threaded via `claim`). Lazy import: keep
+    # the data subpackage off the runner's import critical path.
+    from corroborate.data.panel import cache_leaves
+    leaves = (
+        cache_leaves(cells, resolved_cache)
+        if resolved_cache is not None else None
+    )
+
     out: dict[str, BridgeEvaluation] = {}
     errors: dict[str, BaseException] = {}
     for b in bridges:
         try:
             out[b.name] = evaluate(
                 b, cells, claim=claim, module_scope=module_scope,
+                leaves=leaves,
             )
         except Exception as e:  # noqa: BLE001
             # An authoring bug in a bridge's `holds_when` body

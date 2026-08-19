@@ -1,4 +1,4 @@
-"""Process-portable identity for evaluated graph extents."""
+"""Process-portable grouping key for evaluated graph extents."""
 from __future__ import annotations
 
 import hashlib
@@ -6,18 +6,20 @@ from collections.abc import Iterable
 
 
 def stable_extent_hash(cell_ids: Iterable[str]) -> int:
-    """Return a deterministic identity for an admitted cell set.
+    """Return a compact grouping key for string cell identifiers.
 
     Python's built-in hash of strings is intentionally salted per
     interpreter process, so ``hash(frozenset(cell_ids))`` cannot be
-    compared across saved reports. This function preserves set semantics
-    while using a domain-separated BLAKE2b digest. Each UTF-8 identifier
-    is length-prefixed, avoiding delimiter ambiguities, and duplicates do
-    not alter the result.
+    compared across processes. This function preserves set semantics
+    with a domain-separated BLAKE2b digest. Each UTF-8 identifier is
+    length-prefixed, avoiding delimiter ambiguities, and duplicates do
+    not alter the key.
 
-    The integer return type retains the existing report and cluster-key
-    surface. It is an identity token, not a security attestation; file
-    provenance continues to use the corpus SHA-256 manifests.
+    Only the de-duplicated identifier strings participate: row values,
+    row multiplicity, missing identifiers, and identifier namespaces do
+    not. Equality is therefore useful only as a compact, dataset-relative
+    graph-grouping hint. It is not evidence identity, provenance,
+    chronology, an integrity attestation, or an admission criterion.
     """
     digest = hashlib.blake2b(
         digest_size=16,
