@@ -28,7 +28,7 @@ from stable_baselines3 import DQN
 from corroborate.analyses.paired.paired_directional import (
     PairedDirectionalResult,
 )
-from corroborate.bridge.bridge import evaluate
+from corroborate.bridge import evaluate
 from corroborate_rl.sb3 import load_sb3_runs
 from sb3_claim import higher_gamma_improves_return
 

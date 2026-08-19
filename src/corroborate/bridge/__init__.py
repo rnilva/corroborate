@@ -47,6 +47,8 @@ from corroborate.bridge.analysis import (
 from corroborate.bridge.bridge import (
     Bridge,
     BridgeEvaluation,
+    Direction,
+    Tier,
     claim_bridge,
     evaluate,
 )
@@ -70,10 +72,12 @@ __all__ = [
     'Analysis',
     'Bridge',
     'BridgeEvaluation',
+    'Direction',
     'GateContext',
     'GateLevel',
     'GateResult',
     'RefutationClass',
+    'Tier',
     'Verdict',
     'analysis',
     'claim_bridge',

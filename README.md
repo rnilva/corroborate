@@ -60,9 +60,8 @@ column names predate them and are kept for compatibility:
 ```python
 from functools import partial
 from corroborate import claim_bridge
-from corroborate.bridge.bridge import Direction, Tier
-from corroborate.bridge.verdict import Verdict
-from corroborate.core.intervention import DoEffect, Intervention
+from corroborate.bridge import Direction, Tier, Verdict
+from corroborate.core import DoEffect, Intervention
 
 # The mechanism as a unit of intervention: swap greedification,
 # leave everything else unchanged.

@@ -15,9 +15,14 @@ from corroborate.analyses.paired.paired_directional import (
     PairedDirectionalResult,
     paired_directional_verdict,
 )
-from corroborate.bridge.bridge import Direction, Tier, claim_bridge
-from corroborate.bridge.verdict import RefutationClass, Verdict
-from corroborate.core.intervention import DoEffect
+from corroborate.bridge import (
+    Direction,
+    RefutationClass,
+    Tier,
+    Verdict,
+    claim_bridge,
+)
+from corroborate.core import DoEffect
 
 
 GAMMA_EFFECT = DoEffect.from_values(
