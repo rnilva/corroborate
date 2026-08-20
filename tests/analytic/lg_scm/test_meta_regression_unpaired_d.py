@@ -39,6 +39,7 @@ from corroborate.analyses.panel.meta_regression_unpaired_d import (
     meta_regression_unpaired_d,
 )
 from corroborate.corpus.schema import RunRow
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
@@ -106,7 +107,7 @@ def test_meta_regression_unpaired_d_recovers_closed_form_slope_on_mu_x() -> None
         f'env_mu_{mu:g}': {'mu_x': mu} for mu in _MU_X_GRID
     }
     result = meta_regression_unpaired_d.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',
@@ -184,7 +185,7 @@ def test_meta_regression_unpaired_d_nan_fallback_when_underpowered() -> None:
         envs=single_env_pair, seeds=range(_N_PAIRS),
     ))
     result = meta_regression_unpaired_d.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',
@@ -233,7 +234,7 @@ def test_meta_regression_unpaired_d_rejects_invalid_covariate_key_field() -> Non
     }
     with pytest.raises(ValueError, match='covariate_key_field'):
         _ = meta_regression_unpaired_d.fn(
-            cells,
+            cells_to_dataframe(cells),
             treatment_arm='treatment',
             baseline_arm='baseline',
             source='y_mean',
@@ -256,7 +257,7 @@ def test_meta_regression_unpaired_d_honours_custom_arm_field() -> None:
         row['contrast_arm'] = row.pop('arm_key')
         cells.append(row)
     result = meta_regression_unpaired_d.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         arm_field='contrast_arm',

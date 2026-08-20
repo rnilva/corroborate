@@ -50,7 +50,7 @@ should check `n_envs_above >= 1 AND n_envs_below >= 1` and
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -58,7 +58,8 @@ import numpy.typing as npt
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
+from corroborate.data.kernel import cells_to_dataframe
 from corroborate.analyses.dowhy import (
     BackdoorResult,
     RefutationResult,
@@ -273,7 +274,7 @@ def _nan_refutation(t: str, o: str, m: str, name: str) -> RefutationResult:
 
 @analysis
 def stratum_link_moderation_dowhy(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -310,10 +311,8 @@ def stratum_link_moderation_dowhy(
     strata) yields NaN-everywhere. Bridges should check
     `n_strata > p_covariates` and `n_envs_above ≥ 1 AND
     n_envs_below ≥ 1` for identification."""
-    cells = as_rows(cells)
-    cells_list = list(cells)
     rows, dag, t_col, o_col, n_above, n_below = _build_panel(
-        cells_list,
+        list(to_dicts(cells)),
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         link_predictor=link_predictor,
@@ -344,17 +343,18 @@ def stratum_link_moderation_dowhy(
             outcome_col=o_col,
         )
 
+    panel_df = cells_to_dataframe(rows)
     backdoor = backdoor_ate.fn(
-        rows, treatment=t_col, outcome=o_col,
+        panel_df, treatment=t_col, outcome=o_col,
         dag=dag, method_name=method_name,
     )
     placebo = placebo_refutation.fn(
-        rows, treatment=t_col, outcome=o_col,
+        panel_df, treatment=t_col, outcome=o_col,
         dag=dag, method_name=method_name,
         random_state=random_state,
     )
     rcc = random_common_cause_refutation.fn(
-        rows, treatment=t_col, outcome=o_col,
+        panel_df, treatment=t_col, outcome=o_col,
         dag=dag, method_name=method_name,
         random_state=random_state,
     )

@@ -32,7 +32,7 @@ contract.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -40,7 +40,7 @@ import numpy.typing as npt
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses._cell_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables import Measurable
@@ -123,7 +123,7 @@ def _cohen_d_indep_samples(
 
 @analysis
 def stratum_effect_panel_per_burst(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -162,13 +162,13 @@ def stratum_effect_panel_per_burst(
     (matches `paired_g_per_burst`'s multi-regime walk: cells with
     shorter trajectories naturally drop out of the higher-index
     burst strata)."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     del pair_by  # unused: independent-samples pooling doesn't pair seeds
 
     by_env_arm: dict[
         tuple[str, str], list[npt.NDArray[np.floating]],
     ] = {}
-    for cell in cells:
+    for cell in rows:
         env = cell.get('env_name')
         arm = cell.get(arm_field)
         if not isinstance(env, str) or not isinstance(arm, str):

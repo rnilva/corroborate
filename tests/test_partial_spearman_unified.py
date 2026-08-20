@@ -36,6 +36,7 @@ from corroborate.graph.discovery import (
     stratified_spearman_rho,
 )
 from corroborate.measurables import Measurable
+from corroborate.data import cells_to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -152,7 +153,7 @@ def test_unified_k0_dispatches_to_marginal_path() -> None:
         cells, x='x_col', y='y_col', conditioning=(),
     )
     ref_rho, ref_p = stratified_spearman_rho(x_np, y_np, strata)
-    unified = partial_spearman.fn(cells, x='x_col', y='y_col')
+    unified = partial_spearman.fn(cells_to_dataframe(cells), x='x_col', y='y_col')
     assert unified.rho_pooled == ref_rho
     assert unified.p_value == ref_p
     assert unified.granularity == 'per_cell'
@@ -179,7 +180,7 @@ def test_unified_k1_dispatches_to_closed_form_single_z() -> None:
         x_np, y_np, z_np[:, 0], strata,
     )
     unified = partial_spearman.fn(
-        cells, x='x_col', y='y_col', conditioning=('z_col_0',),
+        cells_to_dataframe(cells), x='x_col', y='y_col', conditioning=('z_col_0',),
     )
     assert unified.rho_pooled == ref_rho
     assert unified.p_value == ref_p
@@ -199,7 +200,7 @@ def test_unified_k2_dispatches_to_multi_z_path() -> None:
         x_np, y_np, z_np, strata,
     )
     unified = partial_spearman.fn(
-        cells, x='x_col', y='y_col',
+        cells_to_dataframe(cells), x='x_col', y='y_col',
         conditioning=('z_col_0', 'z_col_1'),
     )
     assert unified.rho_pooled == ref_rho
@@ -218,7 +219,7 @@ def test_per_burst_unfolds_cells_then_pools() -> None:
     )
     x_m = _per_burst_measurable('x_col')
     y_m = _per_burst_measurable('y_col')
-    unified = partial_spearman.fn(cells, x=x_m, y=y_m)
+    unified = partial_spearman.fn(cells_to_dataframe(cells), x=x_m, y=y_m)
     assert unified.granularity == 'per_burst'
     # 3 envs × 30 seeds × 5 bursts = 450 observations
     assert unified.n_obs_total == 450
@@ -253,7 +254,7 @@ def test_mixed_str_measurable_raises_typeerror() -> None:
     cells = _build_per_cell_cells(with_z=0)
     y_m = _per_burst_measurable('y_col')
     with pytest.raises(TypeError, match='must all be str.*OR all Measurable'):
-        partial_spearman.fn(cells, x='x_col', y=y_m)
+        partial_spearman.fn(cells_to_dataframe(cells), x='x_col', y=y_m)
 
 
 def test_mixed_conditioning_raises_typeerror() -> None:
@@ -264,7 +265,7 @@ def test_mixed_conditioning_raises_typeerror() -> None:
     cells = _build_per_burst_cells(with_z=1)
     with pytest.raises(TypeError, match='must all be str.*OR all Measurable'):
         partial_spearman.fn(
-            cells, x=y_m, y=y_m, conditioning=('z_col_0', z_m),
+            cells_to_dataframe(cells), x=y_m, y=y_m, conditioning=('z_col_0', z_m),
         )
 
 
@@ -272,7 +273,7 @@ def test_empty_cells_returns_nan_result() -> None:
     """No cells → NaN ρ/p, zero n_obs/n_strata. Should not raise.
     The contract holds across granularities and conditioning
     shapes."""
-    result = partial_spearman.fn([], x='x_col', y='y_col')
+    result = partial_spearman.fn(cells_to_dataframe([]), x='x_col', y='y_col')
     assert math.isnan(result.rho_pooled)
     assert math.isnan(result.p_value)
     assert result.n_obs_total == 0

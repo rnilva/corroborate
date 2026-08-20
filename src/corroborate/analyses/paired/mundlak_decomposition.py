@@ -34,7 +34,6 @@ about, rather than mixing aggregations and getting Simpson
 artifacts."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -43,7 +42,7 @@ import scipy.stats as ss
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 
 
@@ -95,7 +94,7 @@ class MundlakResult:
 
 @analysis
 def mundlak_decomposition(
-    panel: pl.DataFrame | Iterable[Mapping[str, object]],
+    panel: pl.DataFrame,
     *,
     stratum_key: str = 'stratum_id',
     x_key: str = 'x',
@@ -126,10 +125,10 @@ def mundlak_decomposition(
     panel-data target where the predictor has both env-level and
     within-env variation. Forces an explicit choice of which
     level is being claimed about."""
-    panel = as_rows(panel)
-    panel_list = [dict(p) for p in panel]
+    rows = to_dicts(panel)
+    panel_list = [dict(p) for p in rows]
     if not panel_list:
-        raise ValueError('panel must contain at least one observation')
+        raise ValueError('rows must contain at least one observation')
 
     # Extract typed columns
     strata: list[object] = []
@@ -193,7 +192,7 @@ def mundlak_decomposition(
         raise ValueError(
             f'Mundlak design matrix is rank-deficient '
             f'(rank={rank}, expected {design.shape[1]}); the '
-            f'panel may have zero within-env variance in `x` '
+            f'rows may have zero within-env variance in `x` '
             f'(every stratum has exactly one observation, or x '
             f'is constant within stratum). Use a non-stratified '
             f'analysis when x is purely env-level.',
@@ -219,7 +218,7 @@ def mundlak_decomposition(
 
     if cluster_robust:
         # Liang-Zeger CR1 sandwich. Group rows by stratum_id (the
-        # natural cluster for panel data); within each cluster
+        # natural cluster for rows data); within each cluster
         # accumulate (Xᵀ W u)(Xᵀ W u)ᵀ. Final variance is
         # `bread @ meat @ bread` with the standard small-sample
         # correction `G/(G−1) · (n−1)/(n−p)`.

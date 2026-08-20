@@ -16,6 +16,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING
 
+from corroborate.data.kernel import cells_to_dataframe
+
 if TYPE_CHECKING:
     import networkx as nx
     import pandas as pd
@@ -109,7 +111,7 @@ def _record_keys_for(graph: DAGLike) -> list[str]:
     return list(nx_graph.nodes)
 
 
-def cells_to_dataframe(
+def cells_to_pandas(
     cells: Iterable[Mapping[str, object]],
     keys: list[str],
 ) -> 'pd.DataFrame':
@@ -155,7 +157,7 @@ def backdoor_estimate(
     """Build DataFrame + CausalModel + run identification +
     (when identified) estimation. Helper shared by all DoWhy-
     consuming analyses so model construction is consistent."""
-    df = cells_to_dataframe(cells, _record_keys_for(dag))
+    df = cells_to_pandas(cells, _record_keys_for(dag))
     model = build_causal_model(df, treatment, outcome, dag)
     identified = model.identify_effect(
         proceed_when_unidentifiable=False,
@@ -198,17 +200,18 @@ def backdoor_with_refutations(
         random_common_cause_refutation,
     )
     cells_list = list(cells)
+    cells_df = cells_to_dataframe(cells_list)
     backdoor = backdoor_ate.fn(
-        cells_list, treatment=treatment, outcome=outcome,
+        cells_df, treatment=treatment, outcome=outcome,
         dag=dag, method_name=method_name,
     )
     placebo = placebo_refutation.fn(
-        cells_list, treatment=treatment, outcome=outcome,
+        cells_df, treatment=treatment, outcome=outcome,
         dag=dag, method_name=method_name,
         random_state=random_state,
     )
     rcc = random_common_cause_refutation.fn(
-        cells_list, treatment=treatment, outcome=outcome,
+        cells_df, treatment=treatment, outcome=outcome,
         dag=dag, method_name=method_name,
         random_state=random_state,
     )
@@ -225,7 +228,7 @@ __all__ = [
     'DAGLike',
     'backdoor_estimate',
     'build_causal_model',
-    'cells_to_dataframe',
+    'cells_to_pandas',
     '_record_keys_for',
     'refuter_effect',
     '_to_networkx',

@@ -53,6 +53,7 @@ from corroborate.analyses.paired.paired_g_per_burst import (
     paired_g_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 
 _GAMMA_A = 0.95     # slow contraction (treatment)
@@ -156,7 +157,7 @@ def test_per_burst_panel_build_and_shape_invariants() -> None:
     """
     cells = _generate_contraction_panel_cells()
     result = paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='slow',
         baseline_arm='fast',
         pair_by=('seed',),

@@ -28,14 +28,14 @@ broadcasts the env-level vector across all bursts in that env).
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 import numpy.typing as npt
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses.paired.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE,
     paired_g_per_burst,
@@ -51,7 +51,7 @@ from corroborate.corpus.schema import StratumG
 
 @analysis
 def meta_regression_per_burst(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -90,10 +90,8 @@ def meta_regression_per_burst(
 
     Strata with NaN g/SE or zero variance are dropped from the
     panel."""
-    cells = as_rows(cells)
-    cells_list = [dict(c) for c in cells]
     per_burst = paired_g_per_burst.fn(
-        cells_list,
+        cells,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         arm_field=arm_field,
@@ -103,12 +101,13 @@ def meta_regression_per_burst(
     )
     # Resolve per-env covariates from either the explicit
     # `covariates_per_env` mapping or by averaging the named
-    # `covariates` columns across cells.
+    # `covariates` columns across rows.
     if covariates_per_env is not None:
         env_covariates: Mapping[str, Mapping[str, float]] = (
             covariates_per_env
         )
     elif covariates:
+        cells_list = [dict(c) for c in to_dicts(cells)]
         env_covariates = _env_means_from_cells(cells_list, covariates)
     else:
         env_covariates = {}

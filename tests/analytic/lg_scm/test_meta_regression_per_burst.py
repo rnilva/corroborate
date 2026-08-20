@@ -29,6 +29,7 @@ from corroborate.analyses.panel.meta_regression_per_burst import (
     meta_regression_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -103,7 +104,7 @@ def test_per_burst_meta_regression_recovers_closed_form_slope() -> None:
         f'env_mu_{mu:g}': {'mu_x': mu} for mu in _MU_X_GRID
     }
     result = meta_regression_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -148,7 +149,7 @@ def test_per_burst_meta_regression_resolves_covariates_from_cells() -> None:
     """
     cells = _build_phased_panel()
     result = meta_regression_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -176,7 +177,7 @@ def test_per_burst_meta_regression_honours_custom_arm_field() -> None:
         row['contrast_arm'] = row.pop('arm_key')
         cells.append(row)
     result = meta_regression_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         arm_field='contrast_arm',

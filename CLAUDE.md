@@ -796,7 +796,10 @@ rules, in order of importance:
    structural g is 28 is a 35× slack — no.
 
 2. **Substrate-grounded over synthetic-input**. Cells flow through
-   `RunRow.as_dict()` → analysis (the production data path). The
+   `RunRow.as_dict()` → `cells_to_dataframe` → analysis (the
+   production data path; analyses take a plain `pl.DataFrame`,
+   and the boundary conversion is the same one `evaluate`
+   performs). The
    `tests/analytic/lg_scm/` substrate (Linear-Gaussian SCM with
    `@claim` Free Claims + frozen-dataclass config bundles) and
    `src/corroborate_rl/tests/analytic/deadly_triad/` (FQI / Q-

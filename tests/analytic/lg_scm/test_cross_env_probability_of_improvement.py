@@ -43,6 +43,7 @@ from corroborate.analyses.panel.cross_env_probability_of_improvement import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
+from corroborate.data import cells_to_dataframe
 
 
 _MU_X = 1.0
@@ -87,7 +88,7 @@ def test_p_xy_all_positive_supported_by_permutation() -> None:
     flip yields perm_dev ≥ +5.0, so p ≈ 1/1024."""
     cells = _build_cells(_ALL_POSITIVE_ENVS)
     result = cross_env_probability_of_improvement.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -122,7 +123,7 @@ def test_p_xy_mixed_direction_null() -> None:
     from the perm_dev = 0 cases since we use ≥)."""
     cells = _build_cells(_MIXED_ENVS)
     result = cross_env_probability_of_improvement.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -170,7 +171,7 @@ def test_p_xy_saturated_stratum_contributes_neutrally() -> None:
             'seed': seed, 'y': v,
         })
     result = cross_env_probability_of_improvement.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -228,7 +229,7 @@ def test_p_xy_exact_enumeration_hand_checked() -> None:
             'seed': seed, 'y': float(seed),
         })
     result = cross_env_probability_of_improvement.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -270,7 +271,7 @@ def test_p_xy_min_seeds_filter_drops_stratum() -> None:
             'seed': seed, 'y': 1.0,
         })
     result = cross_env_probability_of_improvement.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -298,7 +299,7 @@ def test_p_xy_mc_fallback_above_cap() -> None:
                 'seed': seed, 'y': 100.0 + float(seed),
             })
     result = cross_env_probability_of_improvement.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y',
         treatment_arm='treatment',
         baseline_arm='baseline',

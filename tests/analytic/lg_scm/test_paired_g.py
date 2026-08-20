@@ -28,6 +28,7 @@ from collections.abc import Mapping, Sequence
 
 from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.corpus.schema import RunRow
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_paired_arms
@@ -126,7 +127,7 @@ def test_mean_diff_recovers_closed_form_under_paired_intervention() -> None:
     cells = _as_dicts(rows)
 
     result = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -169,7 +170,7 @@ def test_hedges_g_recovers_closed_form() -> None:
         baseline_arm='baseline',
     )
     result = paired_g.fn(
-        _as_dicts(rows),
+        cells_to_dataframe(_as_dicts(rows)),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -204,7 +205,7 @@ def test_null_contrast_returns_indistinguishable_mean_diff() -> None:
         baseline_arm='baseline',
     )
     result = paired_g.fn(
-        _as_dicts(rows),
+        cells_to_dataframe(_as_dicts(rows)),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),

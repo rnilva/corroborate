@@ -61,6 +61,7 @@ import pytest
 from corroborate.analyses.spearman.partial_spearman import partial_spearman
 from corroborate.measurables import Measurable
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -180,7 +181,7 @@ def _add_independent_noise_column(
 def test_marginal_rho_recovers_closed_form() -> None:
     cells = _build_cells()
     result = partial_spearman.fn(
-        cells, x='x_mean', y='y_mean', conditioning=(),
+        cells_to_dataframe(cells), x='x_mean', y='y_mean', conditioning=(),
         stratify_by='env_name',
     )
     expected = _expected_pooled_rho()
@@ -209,7 +210,7 @@ def test_partial_rho_conditional_on_mediator_is_null() -> None:
     """Z fully mediates X → Y; ρ(X, Y | Z) = 0 in population."""
     cells = _build_cells()
     result = partial_spearman.fn(
-        cells, x='x_mean', y='y_mean', conditioning=('z_mean',),
+        cells_to_dataframe(cells), x='x_mean', y='y_mean', conditioning=('z_mean',),
         stratify_by='env_name',
     )
     # Fisher-z pooled SE on partial Spearman at k=3 strata, n=120
@@ -235,7 +236,7 @@ def test_multi_z_partial_rho_dispatch() -> None:
     still d-separates X from Y."""
     cells = _add_independent_noise_column(_build_cells())
     result = partial_spearman.fn(
-        cells, x='x_mean', y='y_mean',
+        cells_to_dataframe(cells), x='x_mean', y='y_mean',
         conditioning=('z_mean', 'noise_indep'),
         stratify_by='env_name',
     )
@@ -254,7 +255,7 @@ def test_multi_z_partial_rho_dispatch() -> None:
 
 def test_empty_cells_returns_nan_zero_strata() -> None:
     result = partial_spearman.fn(
-        [], x='x_mean', y='y_mean', conditioning=(),
+        cells_to_dataframe([]), x='x_mean', y='y_mean', conditioning=(),
         stratify_by='env_name',
     )
     assert math.isnan(result.rho_pooled)
@@ -357,7 +358,7 @@ def test_marginal_rho_recovers_closed_form_per_burst() -> None:
     Same 0.10 bound as the per-cell test (2.5× sampling slack)."""
     cells = _build_phased_cells()
     result = partial_spearman.fn(
-        cells,
+        cells_to_dataframe(cells),
         x=_PER_BURST_X_MEAN, y=_PER_BURST_Y_MEAN, conditioning=(),
         stratify_by='env_name',
     )
@@ -387,7 +388,7 @@ def test_partial_rho_conditional_on_mediator_is_null_per_burst() -> None:
     k=3 strata of 120 obs each lands at ≈ 0.093."""
     cells = _build_phased_cells()
     result = partial_spearman.fn(
-        cells,
+        cells_to_dataframe(cells),
         x=_PER_BURST_X_MEAN, y=_PER_BURST_Y_MEAN,
         conditioning=(_PER_BURST_Z_MEAN,),
         stratify_by='env_name',
@@ -410,7 +411,7 @@ def test_multi_z_partial_rho_dispatch_per_burst() -> None:
         _build_phased_cells(),
     )
     result = partial_spearman.fn(
-        cells,
+        cells_to_dataframe(cells),
         x=_PER_BURST_X_MEAN, y=_PER_BURST_Y_MEAN,
         conditioning=(_PER_BURST_Z_MEAN, noise_measurable),
         stratify_by='env_name',
@@ -431,7 +432,7 @@ def test_mixed_str_and_measurable_inputs_raises() -> None:
     cells = _build_phased_cells()
     with pytest.raises(TypeError, match='must all be str.*OR all Measurable'):
         partial_spearman.fn(
-            cells,
+            cells_to_dataframe(cells),
             x='x_mean', y=_PER_BURST_Y_MEAN, conditioning=(),
             stratify_by='env_name',
         )
@@ -452,7 +453,7 @@ def test_partial_spearman_dataframe_input_identical_to_cells() -> None:
         cells_in: pl.DataFrame | list[Mapping[str, object]],
     ):
         return partial_spearman.fn(
-            cells_in,
+            cells_to_dataframe(cells_in),
             x='x_mean',
             y='y_mean',
             conditioning=('z_mean',),

@@ -73,6 +73,7 @@ from corroborate.analyses.paired.mundlak_paired_g_per_burst import (
     mundlak_paired_g_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -200,7 +201,7 @@ def test_mundlak_between_coefficient_recovers_mean_t_K() -> None:
     """
     cells = _generate_mundlak_panel_cells()
     result = mundlak_paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='slow',
         baseline_arm='fast',
         pair_by=('seed',),
@@ -233,7 +234,7 @@ def test_mundlak_within_coefficient_near_zero_via_z_score() -> None:
     """
     cells = _generate_mundlak_panel_cells()
     result = mundlak_paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='slow',
         baseline_arm='fast',
         pair_by=('seed',),
@@ -265,7 +266,7 @@ def test_mundlak_intercept_recovers_predictor_offset() -> None:
     """
     cells = _generate_mundlak_panel_cells()
     result = mundlak_paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='slow',
         baseline_arm='fast',
         pair_by=('seed',),
@@ -295,7 +296,7 @@ def test_mundlak_panel_structure_matches_5_envs_x_12_bursts() -> None:
     """
     cells = _generate_mundlak_panel_cells()
     result = mundlak_paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='slow',
         baseline_arm='fast',
         pair_by=('seed',),
@@ -326,7 +327,7 @@ def test_mundlak_hausman_p_distinguishes_between_from_within() -> None:
     """
     cells = _generate_mundlak_panel_cells()
     result = mundlak_paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='slow',
         baseline_arm='fast',
         pair_by=('seed',),

@@ -28,7 +28,7 @@ strata, not seed-pairs."""
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -36,7 +36,7 @@ import numpy.typing as npt
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses._dowhy_internal import backdoor_with_refutations
 from corroborate.analyses.dowhy import (
     BackdoorResult,
@@ -214,7 +214,7 @@ def _nan_refutation(
 
 @analysis
 def stratum_delta_link_dowhy(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -241,8 +241,8 @@ def stratum_delta_link_dowhy(
 
     Empty panel (no env survives filter, no paired strata, or all
     strata fail mech filter) yields a NaN-everywhere result."""
-    cells = as_rows(cells)
-    cells_list = list(cells)
+    rows = to_dicts(cells)
+    cells_list = list(rows)
     rows, dag, treatment_col, outcome_col = _build_stratum_panel(
         cells_list,
         treatment_arm=treatment_arm,

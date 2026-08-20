@@ -65,6 +65,7 @@ import zlib
 import numpy as np
 
 from corroborate.analyses.paired.mundlak_decomposition import mundlak_decomposition
+from corroborate.data import cells_to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -125,8 +126,8 @@ def test_cr1_inflates_between_se_under_clustered_residuals() -> None:
     - SE_CR1 / SE_naive ≈ 1.12× (only the small-sample correction
       is being applied, the meat term is broken)"""
     panel = _generate_clustered_panel(sigma_alpha=1.0, sigma_eps=0.1)
-    naive = mundlak_decomposition.fn(panel, cluster_robust=False)
-    cr1 = mundlak_decomposition.fn(panel, cluster_robust=True)
+    naive = mundlak_decomposition.fn(cells_to_dataframe(panel), cluster_robust=False)
+    cr1 = mundlak_decomposition.fn(cells_to_dataframe(panel), cluster_robust=True)
     ratio = cr1.between.se / naive.between.se
     assert ratio > 2.5, (
         f'SE_CR1(β_b) = {cr1.between.se:.4f}, SE_naive(β_b) = '
@@ -161,8 +162,8 @@ def test_cr1_adjustment_is_asymmetric_between_vs_within() -> None:
     CR1's actual asymmetry magnitude — which requires the
     sandwich machinery."""
     panel = _generate_clustered_panel(sigma_alpha=1.0, sigma_eps=0.1)
-    naive = mundlak_decomposition.fn(panel, cluster_robust=False)
-    cr1 = mundlak_decomposition.fn(panel, cluster_robust=True)
+    naive = mundlak_decomposition.fn(cells_to_dataframe(panel), cluster_robust=False)
+    cr1 = mundlak_decomposition.fn(cells_to_dataframe(panel), cluster_robust=True)
     ratio_b = cr1.between.se / naive.between.se
     ratio_w = cr1.within.se / naive.within.se
     asym = ratio_b / ratio_w
@@ -185,8 +186,8 @@ def test_cr1_does_not_change_coefficient_estimates() -> None:
     under cluster_robust=True (e.g., as a weighted-by-cluster
     estimator instead of the standard sandwich)."""
     panel = _generate_clustered_panel(sigma_alpha=1.0, sigma_eps=0.1)
-    naive = mundlak_decomposition.fn(panel, cluster_robust=False)
-    cr1 = mundlak_decomposition.fn(panel, cluster_robust=True)
+    naive = mundlak_decomposition.fn(cells_to_dataframe(panel), cluster_robust=False)
+    cr1 = mundlak_decomposition.fn(cells_to_dataframe(panel), cluster_robust=True)
     # Tight tolerance — coefficient estimates should be
     # bit-for-bit equal up to numerical precision.
     assert math.isclose(
@@ -235,8 +236,8 @@ def test_cr1_negative_control_iid_residuals() -> None:
         clustering → no β_b vs β_w distinction). Empirical 1.17.
     """
     panel = _generate_clustered_panel(sigma_alpha=0.0, sigma_eps=1.0)
-    naive = mundlak_decomposition.fn(panel, cluster_robust=False)
-    cr1 = mundlak_decomposition.fn(panel, cluster_robust=True)
+    naive = mundlak_decomposition.fn(cells_to_dataframe(panel), cluster_robust=False)
+    cr1 = mundlak_decomposition.fn(cells_to_dataframe(panel), cluster_robust=True)
     ratio_b = cr1.between.se / naive.between.se
     ratio_w = cr1.within.se / naive.within.se
     asym = ratio_b / ratio_w

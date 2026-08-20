@@ -20,6 +20,7 @@ import math
 from collections.abc import Mapping
 
 from corroborate.analyses.paired.paired_comparison import paired_comparison
+from corroborate.data import cells_to_dataframe
 
 
 def _cell(
@@ -60,7 +61,7 @@ def test_single_group_paired_hedges_g() -> None:
             outcome=1.0 + i * 0.1,
         ))
     result = paired_comparison.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='ddqn', baseline_arm='vanilla',
         outcome_path='outcome.value',
         pair_by=('seed',),
@@ -86,7 +87,7 @@ def test_single_group_no_pairs_returns_empty_stats() -> None:
         _cell(arm_key='vanilla', seed=1, env='X', outcome=0.5),
     ]
     result = paired_comparison.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='ddqn', baseline_arm='vanilla',
         outcome_path='outcome.value', pair_by=('seed',),
     )
@@ -116,7 +117,7 @@ def test_stratified_per_group_plus_pooled() -> None:
                 outcome=1.0 + s * 0.1,
             ))
     result = paired_comparison.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='ddqn', baseline_arm='vanilla',
         outcome_path='outcome.value',
         pair_by=('seed',),
@@ -148,7 +149,7 @@ def test_stratified_drops_groups_with_one_arm() -> None:
         arm_key='t', seed=0, env='C', outcome=2.0,
     ))
     result = paired_comparison.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='t', baseline_arm='b',
         outcome_path='outcome.value',
         pair_by=('seed',),
@@ -170,7 +171,7 @@ def test_raises_on_duplicate_pair_by_in_treatment() -> None:
     ]
     try:
         paired_comparison.fn(
-            cells,
+            cells_to_dataframe(cells),
             treatment_arm='ddqn', baseline_arm='vanilla',
             outcome_path='outcome.value', pair_by=('seed',),
         )
@@ -191,7 +192,7 @@ def test_raises_on_same_arm() -> None:
     ]
     try:
         paired_comparison.fn(
-            cells,
+            cells_to_dataframe(cells),
             treatment_arm='x', baseline_arm='x',
             outcome_path='outcome.value', pair_by=('seed',),
         )

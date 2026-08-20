@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 from corroborate.analyses._dowhy_internal import (
     DAGLike,
@@ -95,7 +95,7 @@ class RefutationResult:
 
 @analysis
 def backdoor_ate(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment: str,
     outcome: str,
@@ -105,8 +105,8 @@ def backdoor_ate(
     """Identify + estimate the ATE of `treatment` on `outcome`
     under `dag`. Returns identified=False when the DAG admits
     no admissible adjustment."""
-    cells = as_rows(cells)
-    cells_list = list(cells)
+    rows = to_dicts(cells)
+    cells_list = list(rows)
     df, identified, estimate = backdoor_estimate(
         cells_list, treatment, outcome, dag, method_name,
     )
@@ -195,7 +195,7 @@ def _run_refuter(
 
 @analysis
 def placebo_refutation(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment: str,
     outcome: str,
@@ -221,9 +221,9 @@ def placebo_refutation(
     variation for cross-session reproducibility; pass an
     explicit different seed to probe sensitivity to the
     synthetic-confounder draw."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     return _run_refuter(
-        cells, treatment, outcome, dag, method_name,
+        rows, treatment, outcome, dag, method_name,
         refuter_method='placebo_treatment_refuter',
         random_state=random_state,
     )
@@ -231,7 +231,7 @@ def placebo_refutation(
 
 @analysis
 def random_common_cause_refutation(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment: str,
     outcome: str,
@@ -252,9 +252,9 @@ def random_common_cause_refutation(
     were partially-stable-by-accident under that scheme.
     Deterministic seed 0 locks the synthetic-confounder draw;
     pass a different int to probe sensitivity."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     return _run_refuter(
-        cells, treatment, outcome, dag, method_name,
+        rows, treatment, outcome, dag, method_name,
         refuter_method='random_common_cause',
         random_state=random_state,
     )

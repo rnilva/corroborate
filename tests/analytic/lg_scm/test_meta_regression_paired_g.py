@@ -39,6 +39,7 @@ from corroborate.analyses.panel.meta_regression_paired_g import (
     meta_regression_paired_g,
 )
 from corroborate.corpus.schema import RunRow
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
@@ -120,7 +121,7 @@ def test_meta_regression_recovers_closed_form_slope_on_mu_x() -> None:
         f'env_mu_{mu:g}': {'mu_x': mu} for mu in _MU_X_GRID
     }
     result = meta_regression_paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -205,7 +206,7 @@ def test_meta_regression_returns_near_zero_slope_on_irrelevant_covariate() -> No
         for i, mu in enumerate(_MU_X_GRID)
     }
     result = meta_regression_paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -260,7 +261,7 @@ def test_meta_regression_paired_g_honours_custom_arm_field() -> None:
         f'env_mu_{mu:g}': {'mu_x': mu} for mu in _MU_X_GRID
     }
     result = meta_regression_paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         arm_field='contrast_arm',
