@@ -31,6 +31,7 @@ from corroborate.analyses.link.cross_stratum_property_slope import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
+from corroborate.data import cells_to_dataframe
 
 
 _SIGMA_X = 0.5
@@ -91,7 +92,7 @@ def test_cross_stratum_property_slope_monotone_in_mu_x() -> None:
         for env, mu_x in _ENV_MU_X.items()
     }
     result = cross_stratum_property_slope.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',
@@ -141,7 +142,7 @@ def test_cross_stratum_property_slope_below_min_strata_returns_nan() -> None:
         for env, mu_x in _ENV_MU_X.items()
     }
     result = cross_stratum_property_slope.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',
@@ -169,7 +170,7 @@ def test_cross_stratum_property_slope_missing_covariates_dropped() -> None:
         for env, mu_x in list(_ENV_MU_X.items())[:5]
     }
     result = cross_stratum_property_slope.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',
@@ -206,7 +207,7 @@ def test_cross_stratum_property_slope_dataframe_input_identical_to_cells() -> No
         cells_in: pl.DataFrame | list[Mapping[str, object]],
     ):
         return cross_stratum_property_slope.fn(
-            cells_in,
+            cells_to_dataframe(cells_in),
             treatment_arm='treatment',
             baseline_arm='baseline',
             source='y_mean',
@@ -237,7 +238,7 @@ def test_cross_stratum_property_slope_honours_custom_arm_field() -> None:
         row['contrast_arm'] = row.pop('arm_key')
         cells.append(row)
     result = cross_stratum_property_slope.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         arm_field='contrast_arm',

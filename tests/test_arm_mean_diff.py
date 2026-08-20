@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 
 from corroborate.analyses.paired.arm_mean_diff import arm_mean_diff
+from corroborate.data import cells_to_dataframe
 
 
 def test_empty_pair_by_disables_pairing_diagnostic() -> None:
@@ -15,7 +16,7 @@ def test_empty_pair_by_disables_pairing_diagnostic() -> None:
         {'arm_key': 'baseline', 'seed': 2, 'score': 1.5},
     ]
     result = arm_mean_diff.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='score',
         treatment_arm='treatment',
         baseline_arm='baseline',

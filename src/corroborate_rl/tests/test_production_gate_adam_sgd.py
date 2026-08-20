@@ -44,6 +44,7 @@ from corroborate_rl.dqn.claims.optimizer import adam, sgd
 from corroborate_rl.dqn.dqn import dqn
 from corroborate_rl.dqn.measurables import dqn_default_measurables
 from corroborate_rl.env_catalogue import get
+from corroborate.data import cells_to_dataframe
 
 
 _N_SEEDS: int = 5
@@ -108,7 +109,7 @@ def test_adam_dominates_sgd_on_cartpole() -> None:
     # `eval_best_burst_mean` is a registered measurable; paired_g
     # resolves it through the registry to read each cell's scalar.
     result = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='eval_best_burst_mean',
         treatment_arm='adam',
         baseline_arm='sgd',

@@ -59,6 +59,7 @@ from corroborate.stats.effect_size import (
     I2_THRESHOLD,
     random_effects_summary,
 )
+from corroborate.data import cells_to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -106,7 +107,7 @@ def _per_env_g_se_pairs() -> list[tuple[float, float]]:
         env_name = f'het_mu_{mu:+g}'
         env_cells = [c for c in all_cells if c['env_name'] == env_name]
         result = paired_g.fn(
-            env_cells,
+            cells_to_dataframe(env_cells),
             treatment_arm='treatment',
             baseline_arm='baseline',
             pair_by=('seed',),
@@ -281,7 +282,7 @@ def test_zero_heterogeneity_negative_control_gives_tau_squared_zero() -> None:
         env_name = f'no_het_env_{env_idx}'
         env_cells = [c for c in cells if c['env_name'] == env_name]
         result = paired_g.fn(
-            env_cells,
+            cells_to_dataframe(env_cells),
             treatment_arm='treatment',
             baseline_arm='baseline',
             pair_by=('seed',),

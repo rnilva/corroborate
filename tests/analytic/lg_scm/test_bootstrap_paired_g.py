@@ -22,6 +22,7 @@ import numpy as np
 
 from corroborate.analyses.paired.bootstrap_paired_g import bootstrap_paired_g
 from corroborate.analyses.paired.paired_g import paired_g
+from corroborate.data import cells_to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -45,12 +46,12 @@ def test_bootstrap_g_matches_paired_g_g_exactly() -> None:
     deltas = rng.normal(1.0, 2.0, 30).tolist()
     cells = _make_paired_cells(deltas)
     pg = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
     boot = bootstrap_paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
         b_replicates=200,
@@ -82,7 +83,7 @@ def test_bootstrap_ci_covers_structural_g_under_normal() -> None:
         deltas = rng.normal(1.0, 2.0, 30).tolist()
         cells = _make_paired_cells(deltas)
         boot = bootstrap_paired_g.fn(
-            cells,
+            cells_to_dataframe(cells),
             treatment_arm='T', baseline_arm='B',
             pair_by=('seed',), source='value',
             b_replicates=400,
@@ -131,7 +132,7 @@ def test_bootstrap_se_modestly_better_than_analytical_under_lognormal_n_50() -> 
         deltas = rng.lognormal(0.0, 0.7, n).tolist()
         cells = _make_paired_cells(deltas)
         boot = bootstrap_paired_g.fn(
-            cells,
+            cells_to_dataframe(cells),
             treatment_arm='T', baseline_arm='B',
             pair_by=('seed',), source='value',
             b_replicates=300,
@@ -159,7 +160,7 @@ def test_bootstrap_ci_excludes_zero_under_strong_effect() -> None:
     rng = np.random.default_rng(_det_seed('boot_strong', 100))
     deltas = rng.normal(1.0, 2.0, 100).tolist()
     boot = bootstrap_paired_g.fn(
-        _make_paired_cells(deltas),
+        cells_to_dataframe(_make_paired_cells(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
         b_replicates=500,
@@ -177,7 +178,7 @@ def test_bootstrap_b_replicates_validation() -> None:
     import pytest
     with pytest.raises(ValueError, match='b_replicates'):
         bootstrap_paired_g.fn(
-            _make_paired_cells([1.0, 2.0, 3.0]),
+            cells_to_dataframe(_make_paired_cells([1.0, 2.0, 3.0])),
             treatment_arm='T', baseline_arm='B',
             pair_by=('seed',), source='value',
             b_replicates=50,
@@ -187,7 +188,7 @@ def test_bootstrap_b_replicates_validation() -> None:
 def test_bootstrap_n_pairs_below_two_returns_nan() -> None:
     """0 paired cells → NaN g, NaN CI."""
     boot = bootstrap_paired_g.fn(
-        [],
+        cells_to_dataframe([]),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
         b_replicates=200,

@@ -35,6 +35,7 @@ from corroborate.analyses.dowhy.stratum_baseline_predictor_link_dowhy import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
+from corroborate.data import cells_to_dataframe
 
 
 _SIGMA_X = 0.5
@@ -103,7 +104,7 @@ def test_stratum_baseline_predictor_link_recovers_structural_slope() -> None:
     env one-hot adjustment, OLS slope recovers 2.0."""
     cells = _build_cells()
     result = stratum_baseline_predictor_link_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -132,7 +133,7 @@ def test_stratum_baseline_predictor_link_placebo_drift() -> None:
     broken → refuted ATE ≈ 0, drift ≈ structural slope."""
     cells = _build_cells()
     result = stratum_baseline_predictor_link_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -162,7 +163,7 @@ def test_stratum_baseline_predictor_link_rcc_drift_small() -> None:
     to the random column → drift ≈ 0."""
     cells = _build_cells()
     result = stratum_baseline_predictor_link_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -189,7 +190,7 @@ def test_stratum_baseline_predictor_link_min_baseline_floor_drops_strata() -> No
     strata (4 envs × 1 level = 4 strata)."""
     cells = _build_cells()
     result = stratum_baseline_predictor_link_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',

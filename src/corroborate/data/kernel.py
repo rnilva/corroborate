@@ -105,18 +105,14 @@ def per_stratum_aggregate(
 def cells_to_dataframe(
     cells: pl.DataFrame | Iterable[Mapping[str, object]],
 ) -> pl.DataFrame:
-    """Normalise an analysis primitive's `cells` input to a polars
-    DataFrame. Canonical input shape is `pl.DataFrame` — pass that
-    through unchanged. Legacy `Iterable[Mapping[str, object]]`
-    (synthetic test fixtures, ad-hoc dict lists) materialises to
-    DataFrame here.
+    """Materialise rows into the polars DataFrame every @analysis
+    primitive takes. A DataFrame passes through unchanged.
 
-    This is the single conversion boundary for the framework's
-    @analysis primitives — each primitive calls
-    `cells_to_dataframe(cells)` once at entry and the body
-    operates on `pl.DataFrame` throughout. Replaces the earlier
-    polymorphic-Panel-shim pattern (which was the wrong layer —
-    Panel-recognition; the right layer is DataFrame-canonical).
+    This is the ENTRY-BOUNDARY conversion, called once by whoever
+    holds rows — the bridge evaluator (its gate rows), tests built
+    from `RunRow.as_dict()`, ad-hoc dict lists — never inside the
+    primitives themselves: analyses are plain-DataFrame functions
+    a polars user can call with no framework context.
 
     The two-arm input type IS the polymorphic boundary CLAUDE.md's
     "no `object` parameters" rule permits — the body narrows
@@ -125,7 +121,7 @@ def cells_to_dataframe(
     fully-typed shape through.
 
     Uses `pl.from_dicts(..., infer_schema_length=None)` for the
-    Iterable[Mapping] fallback — scans the full input for type
+    Iterable[Mapping] branch — scans the full input for type
     inference. `pl.DataFrame(cells)` blows up on real-world
     heterogeneous schemas where row N introduces a column type
     the first few rows didn't carry (cache cells from diagonal-

@@ -23,6 +23,7 @@ import pytest
 from corroborate.analyses.dowhy.mediation_dowhy import (
     LinearityStatus, _classify_linearity, mediation_dowhy,
 )
+from corroborate.data import cells_to_dataframe
 
 
 # ============ Classifier branches ============
@@ -212,7 +213,7 @@ def test_full_pipeline_reliable_under_clean_linear_dgp() -> None:
         ('treatment', 'outcome'),
     ]
     result = mediation_dowhy.fn(
-        cells, treatment='treatment', outcome='outcome',
+        cells_to_dataframe(cells), treatment='treatment', outcome='outcome',
         mediators=('mediator',), dag=dag,
     )
     assert result.identified
@@ -278,7 +279,7 @@ def test_full_pipeline_sign_flipped_under_high_multicollinearity() -> None:
         ('mediator_b', 'outcome'),
     ]
     result = mediation_dowhy.fn(
-        cells, treatment='treatment', outcome='outcome',
+        cells_to_dataframe(cells), treatment='treatment', outcome='outcome',
         mediators=('mediator_a', 'mediator_b'), dag=dag,
     )
     assert result.identified
@@ -313,7 +314,7 @@ def test_empty_mediators_raises() -> None:
     rather than degenerate."""
     with pytest.raises(ValueError, match='non-empty tuple'):
         mediation_dowhy.fn(
-            [], treatment='t', outcome='y', mediators=(),
+            cells_to_dataframe([]), treatment='t', outcome='y', mediators=(),
             dag=[('t', 'y')],
         )
 

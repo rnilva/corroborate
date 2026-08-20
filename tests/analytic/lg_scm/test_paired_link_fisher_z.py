@@ -26,6 +26,7 @@ from corroborate.analyses.link.paired_link_per_burst import (
     paired_link_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 
 # Construction parameters chosen so closed-form |r| sits at ~0.577
@@ -154,7 +155,7 @@ def test_fisher_z_path_recovers_closed_form_r_and_p() -> None:
     predictor = reduce_axis(from_key('z_per_episode'), axis=-1, op='mean')
 
     result = paired_link_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm=_TREATMENT,
         baseline_arm=_BASELINE,
         target=target,
@@ -247,7 +248,7 @@ def test_n_below_three_short_circuits_to_nan() -> None:
     target = reduce_axis(from_key('y_per_episode'), axis=-1, op='mean')
     predictor = reduce_axis(from_key('z_per_episode'), axis=-1, op='mean')
     result = paired_link_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm=_TREATMENT, baseline_arm=_BASELINE,
         target=target, predictor=predictor,
     )

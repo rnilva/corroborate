@@ -27,12 +27,12 @@ Consumed two ways:
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.corpus.schema import MeasurementLeaf
@@ -247,7 +247,7 @@ def _per_group_stats(
 
 @analysis(reads=())
 def paired_comparison(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -282,7 +282,7 @@ def paired_comparison(
     - `KeyError` when a cell is missing the `group_by` value.
     - `TypeError` when a cell is missing/non-scalar at `pair_by`
       keys or `outcome_path`."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     if treatment_arm == baseline_arm:
         raise ValueError(
             f'paired_comparison: treatment_arm and baseline_arm '
@@ -296,7 +296,7 @@ def paired_comparison(
 
     treatment_cells: list[Mapping[str, object]] = []
     baseline_cells: list[Mapping[str, object]] = []
-    for c in cells:
+    for c in rows:
         arm = c.get(arm_field)
         if arm == treatment_arm:
             treatment_cells.append(c)
@@ -305,12 +305,12 @@ def paired_comparison(
 
     if not treatment_cells:
         raise ValueError(
-            f'paired_comparison: no cells with '
+            f'paired_comparison: no rows with '
             f'{arm_field}={treatment_arm!r}',
         )
     if not baseline_cells:
         raise ValueError(
-            f'paired_comparison: no cells with '
+            f'paired_comparison: no rows with '
             f'{arm_field}={baseline_arm!r}',
         )
 

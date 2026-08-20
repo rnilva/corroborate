@@ -41,6 +41,7 @@ from corroborate.corpus.persistence import (
 )
 from corroborate.corpus.schema import RunRow, TraceRow
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -126,7 +127,7 @@ def test_paired_g_recovers_closed_form_after_runrow_round_trip(
 
     cells: list[Mapping[str, object]] = [r.as_dict() for r in rows_out]
     result = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -203,7 +204,7 @@ def test_per_burst_recovers_closed_form_after_tracerow_round_trip(
         from_key(PER_BURST_Y_KEY), axis=-1, op='mean',
     )
     result = paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=per_burst_y_mean,
@@ -271,7 +272,7 @@ def test_round_trip_preserves_arm_key_distinct_from_baseline_default(
     # And paired_g still pairs them correctly.
     cells: list[Mapping[str, object]] = [r.as_dict() for r in rows_out]
     result = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -343,7 +344,7 @@ def test_paired_g_survives_heterogeneous_measurement_keys(
     # And the closed-form analysis still recovers Δ.
     cells: list[Mapping[str, object]] = [r.as_dict() for r in rows_out]
     result = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),

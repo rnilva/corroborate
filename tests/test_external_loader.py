@@ -30,7 +30,7 @@ from corroborate.analyses.paired.arm_mean_diff import (
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge, evaluate
 from corroborate.bridge.verdict import Verdict
 from corroborate.core.intervention import DoEffect
-from corroborate.data import config_columns, load_runs
+from corroborate.data import cells_to_dataframe, config_columns, load_runs
 
 _BASELINE_ENT = 0.0
 _TREATMENT_ENT = 0.01
@@ -632,14 +632,14 @@ def test_loaded_frame_agrees_with_dict_rows_through_an_analysis(
         .alias('arm_key'),
     )
     from_frame = arm_mean_diff(
-        labelled,
+        cells_to_dataframe(labelled),
         source='return_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('training.seed',),
     )
     from_rows = arm_mean_diff(
-        labelled.to_dicts(),
+        cells_to_dataframe(labelled.to_dicts()),
         source='return_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',

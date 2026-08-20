@@ -40,6 +40,7 @@ from corroborate.analyses.panel.stratum_effect_panel_per_burst import (
     stratum_effect_panel_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -147,7 +148,7 @@ def test_per_burst_d_recovers_closed_form_under_constant_phase() -> None:
     )
 
     result = stratum_effect_panel_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,
@@ -203,7 +204,7 @@ def test_per_burst_d_unmasks_phase_flip() -> None:
     )
 
     result = stratum_effect_panel_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,
@@ -266,7 +267,7 @@ def test_per_burst_d_returns_nan_when_arm_too_small() -> None:
     )
 
     result = stratum_effect_panel_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,

@@ -31,11 +31,11 @@ naturally fall through to POW_INSUF."""
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     stratified_arm_diff_pooled,
 )
@@ -47,7 +47,7 @@ from corroborate.stats.meta_regression import Pool
 
 @analysis
 def meta_regression_unpaired_d(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -107,7 +107,7 @@ def meta_regression_unpaired_d(
     coefficients tuple, intercept=NaN). Bridges should check
     `coef is None` or `math.isnan(coef.coefficient)` for graceful
     POW_INSUF fallthrough."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     if covariates_per_key is None and continuous_covariate is None:
         raise ValueError(
             "meta_regression_unpaired_d: provide either "
@@ -129,9 +129,9 @@ def meta_regression_unpaired_d(
         key_position = stratify_by.index(covariate_key_field)
     else:
         key_position = -1  # unused in continuous mode
-    cells_list = list(cells)
+    cells_list = list(rows)
     pooled = stratified_arm_diff_pooled.fn(
-        cells_list,
+        cells,
         source=source,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
@@ -142,7 +142,7 @@ def meta_regression_unpaired_d(
         min_seeds_per_arm=min_seeds_per_arm,
     )
     # In continuous mode, aggregate the per-cell column to per-stratum
-    # baseline mean. NaN-skipping; strata with no valid arm cells are
+    # baseline mean. NaN-skipping; strata with no valid arm rows are
     # dropped from the panel.
     cc_per_stratum: dict[tuple[object, ...], float] = {}
     if continuous_covariate is not None:

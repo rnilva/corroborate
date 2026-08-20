@@ -19,6 +19,7 @@ from corroborate.analyses.paired.paired_g import (
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.core.hypothesis import PredictedDirection
+from corroborate.data import cells_to_dataframe
 
 
 def _cells(deltas: np.ndarray) -> list[dict[str, object]]:
@@ -50,7 +51,7 @@ def _run(
     sesoi_dz: float = 0.35,
 ):
     return paired_directional.fn(
-        _cells(deltas),
+        cells_to_dataframe(_cells(deltas)),
         source='metric',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -164,7 +165,7 @@ def _invalid_run(
     minimum_pairs: int = 52,
 ) -> object:
     return paired_directional.fn(
-        _cells(np.asarray([0.1, 0.2])),
+        cells_to_dataframe(_cells(np.asarray([0.1, 0.2]))),
         source='metric',
         treatment_arm='treatment',
         baseline_arm='baseline',

@@ -30,12 +30,13 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
+from corroborate.data.kernel import cells_to_dataframe
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
     backdoor_ate as _backdoor_ate_fn,
@@ -154,7 +155,7 @@ def _nan_refutation(
 
 @analysis
 def paired_continuous_do_dowhy(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -187,10 +188,8 @@ def paired_continuous_do_dowhy(
     `backdoor.identified`, `backdoor.ate` against a sign-thresh,
     and `placebo.refuted_ate ≈ 0` / `random_common_cause.drift`
     small for the refutation gates."""
-    cells = as_rows(cells)
-    cells_list = list(cells)
     rows = _pair_and_extract(
-        cells_list,
+        list(to_dicts(cells)),
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         treatment_var=treatment_var,
@@ -215,15 +214,16 @@ def paired_continuous_do_dowhy(
         )
 
     dag: list[tuple[str, str]] = [(treatment_var, 'delta_outcome')]
+    pair_df = cells_to_dataframe(rows)
     backdoor = _backdoor_ate_fn.fn(
-        rows,
+        pair_df,
         treatment=treatment_var,
         outcome='delta_outcome',
         dag=dag,
         method_name=method_name,
     )
     placebo = _placebo_fn.fn(
-        rows,
+        pair_df,
         treatment=treatment_var,
         outcome='delta_outcome',
         dag=dag,
@@ -231,7 +231,7 @@ def paired_continuous_do_dowhy(
         random_state=random_state,
     )
     rcc = _rcc_fn.fn(
-        rows,
+        pair_df,
         treatment=treatment_var,
         outcome='delta_outcome',
         dag=dag,

@@ -27,14 +27,15 @@ sees the cells. Analyses pair, never scope.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses._cell_value import key_tuple, resolve_value
 from corroborate.analyses.panel import per_stratum_panel
+from corroborate.data.kernel import cells_to_dataframe
 from corroborate.bridge.analysis import analysis
 from corroborate.corpus.schema import StratumG
 
@@ -110,7 +111,7 @@ class PairedGResult:
 
 @analysis
 def paired_g(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -181,7 +182,7 @@ def paired_g(
     `cliff_delta_paired` (when available) on small-n skewed-Δ
     corpora. `result.assumption_violations` flags inputs that
     cross the empirically-derived skew/kurtosis thresholds."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):
@@ -190,10 +191,10 @@ def paired_g(
             f'expected "raise" or "mean"',
         )
 
-    # Collect cells alongside values so duplicate-bucket inspection
-    # can call `distinguishing_columns` on the actual cells (not
+    # Collect rows alongside values so duplicate-bucket inspection
+    # can call `distinguishing_columns` on the actual rows (not
     # just values). Under `dedupe_strategy='raise'`, a duplicate
-    # bucket whose cells differ ONLY on framework-provenance tags
+    # bucket whose rows differ ONLY on framework-provenance tags
     # / None-vs-explicit-default columns is a TRUE replicate — the
     # raise would be a false positive. Defer the check to the
     # post-collection pass below; pre-fix this fired on the bucket-
@@ -208,7 +209,7 @@ def paired_g(
     baseline_buckets: dict[
         tuple[object, ...], list[tuple[Mapping[str, object], float]],
     ] = {}
-    for cell in cells:
+    for cell in rows:
         arm = cell.get(arm_field)
         if arm == treatment_arm:
             key = key_tuple(cell, pair_by)
@@ -242,7 +243,7 @@ def paired_g(
                 # drift) — silently fall through to mean below.
                 continue
             raise ValueError(
-                f'paired_g: duplicate cells for {arm!r} at '
+                f'paired_g: duplicate rows for {arm!r} at '
                 f'pair_by={pair_by} key={key} are not replicates — '
                 f'they differ on: {format_diff(diff)}. Tighten '
                 f'`pair_by` to a discriminating tuple, scope the '
@@ -272,7 +273,7 @@ def paired_g(
     }
 
     paired_keys = sorted(set(treatment) & set(baseline))
-    # NaN-skip pairs where either side is missing (e.g. cells from
+    # NaN-skip pairs where either side is missing (e.g. rows from
     # corpora that didn't carry the source column, surfacing as
     # NaN through `resolve_value`'s present-but-None path). The
     # statistics primitives reject NaN-containing inputs; better
@@ -412,8 +413,10 @@ def per_env_paired_g_panel(
     )
 
     def _analyze(subset: Sequence[Mapping[str, object]]) -> PairedGResult:
+        # Re-entry at a stratum subset: the analysis takes a
+        # DataFrame, so the subset rows materialise here.
         return paired_g.fn(
-            subset,
+            cells_to_dataframe(subset),
             treatment_arm=treatment_arm,
             baseline_arm=baseline_arm,
             pair_by=pair_by,

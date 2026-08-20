@@ -42,6 +42,7 @@ from corroborate.analyses.link.paired_link_per_burst import (
     phase_link_consistency,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -114,7 +115,7 @@ def test_link_recovers_perfect_anticorrelation_under_shared_noise() -> None:
     )
 
     result = paired_link_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target=_PER_BURST_Y_MEAN,
@@ -188,7 +189,7 @@ def test_phase_link_consistency_reports_dormant_bursts_honestly() -> None:
     )
 
     result = paired_link_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target=_PER_BURST_Y_MEAN,

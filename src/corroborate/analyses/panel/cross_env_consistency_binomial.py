@@ -47,7 +47,6 @@ Distinct from:
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -55,7 +54,6 @@ from scipy.stats import binomtest as _binomtest  # type: ignore[attr-defined]
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
 from corroborate.analyses.panel.stratified_arm_diff_pooled import (
     stratified_arm_diff_pooled,
 )
@@ -92,7 +90,7 @@ class CrossEnvConsistencyBinomialResult:
 
 @analysis
 def cross_env_consistency_binomial(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -125,10 +123,8 @@ def cross_env_consistency_binomial(
     (delegates to the same panel build the DL meta-analysis uses).
     Strata where Cohen's d is NaN (saturated outcome, n<2 in an
     arm, etc.) are dropped before counting."""
-    cells = as_rows(cells)
-    cells_list = list(cells)
     pooled = stratified_arm_diff_pooled.fn(
-        cells_list,
+        cells,
         source=source,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,

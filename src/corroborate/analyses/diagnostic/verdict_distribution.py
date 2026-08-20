@@ -13,12 +13,12 @@ column what we predicted from theory". Both are evidence
 generators for typed Bridge verdicts."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 
 
@@ -79,7 +79,7 @@ def _dominant(
 
 @analysis
 def verdict_distribution_per_env(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     arm_filter: str,
     arm_field: str = 'arm_key',
@@ -90,9 +90,9 @@ def verdict_distribution_per_env(
     case-folded to lowercase before matching the four canonical
     buckets — the persisted column uses the lowercased
     `Verdict.value` enum strings."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     per_env_counts: dict[str, list[int]] = {}
-    for cell in cells:
+    for cell in rows:
         env_v = cell.get('env_name')
         arm_v = cell.get(arm_field)
         if not isinstance(env_v, str) or arm_v != arm_filter:

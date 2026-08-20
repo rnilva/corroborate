@@ -24,6 +24,7 @@ from corroborate.analyses.diagnostic.verdict_distribution import (
 )
 from corroborate.bridge.verdict import Verdict
 from corroborate.corpus.schema import MeasurementLeaf, RunRow
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
@@ -99,7 +100,7 @@ def test_dominant_returns_power_insufficient_string_when_dominant() -> None:
     rows = _stamp(rows, [pi] * 24 + [held] * 6)
     cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     assert result.per_env['env_pi_dominant'].dominant == 'power_insufficient'
 
@@ -118,7 +119,7 @@ def test_dominant_returns_label_when_top_count_is_one() -> None:
     rows = _stamp(rows, [held])
     cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     counts = result.for_env('env_single_cell')
     assert counts is not None
@@ -136,7 +137,7 @@ def test_dominant_returns_other_string_when_other_bucket_wins() -> None:
     rows = _stamp(rows, ['unknown_verdict'] * 24 + [Verdict.HELD.value] * 6)
     cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     assert result.per_env['env_other_dominant'].dominant == 'other'
 
@@ -153,7 +154,7 @@ def test_dominant_resolves_strict_majority_tie_and_unanimous() -> None:
     return whichever bucket appeared first, masking the tie."""
     cells = _build_dominance_corpus()
     result = verdict_distribution_per_env.fn(
-        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     by_env = result.per_env
     assert by_env['env_strict_majority'].dominant == Verdict.HELD.value
@@ -188,7 +189,7 @@ def test_unknown_verdict_strings_route_to_other_bucket() -> None:
     rows = _stamp(rows, plan)
     cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     counts = result.for_env('env_mixed')
     assert counts is not None
@@ -223,7 +224,7 @@ def test_arm_filter_excludes_other_arms() -> None:
     ))
     cells = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     counts = result.for_env('env_x')
     assert counts is not None
@@ -249,7 +250,7 @@ def test_empty_env_returns_no_per_env_entry() -> None:
     )
     cells = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells, arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     assert result.per_env == {}, (
         f'per_env = {dict(result.per_env)!r}; arm_filter=single '

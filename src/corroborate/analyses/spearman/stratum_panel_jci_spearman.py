@@ -30,7 +30,7 @@ helpers — bridges author null-form or signed claims directly."""
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -38,7 +38,7 @@ from scipy.stats import spearmanr
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 from corroborate.graph.discovery import (
     stratified_partial_spearman_rho,
@@ -185,7 +185,7 @@ def _nan_result(
 
 @analysis
 def stratum_panel_jci_spearman(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -210,8 +210,8 @@ def stratum_panel_jci_spearman(
     (JCI + partial) is the strongest empirical falsification
     surface — it controls for both env (scale confound) and
     baseline arm's outcome (config-quality confound)."""
-    cells = as_rows(cells)
-    cells_list = list(cells)
+    rows = to_dicts(cells)
+    cells_list = list(rows)
     x_arr, dy_arr, vy_arr, envs = _build_panel_arrays(
         cells_list,
         treatment_arm=treatment_arm,

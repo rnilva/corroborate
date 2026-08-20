@@ -21,14 +21,15 @@ controls which measurable is decomposed."""
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 import numpy.typing as npt
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
+from corroborate.data.kernel import cells_to_dataframe
 from corroborate.analyses.paired.mundlak_decomposition import (
     MundlakResult, mundlak_decomposition,
 )
@@ -72,7 +73,7 @@ def _per_env_burst_predictor_mean(
 
 @analysis
 def mundlak_paired_g_per_burst(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -118,10 +119,9 @@ def mundlak_paired_g_per_burst(
     defaults to `'mean'` (per-cell aggregation within each
     `(env, arm, pair_by)` bucket); pass `'raise'` to error on
     duplicates."""
-    cells = as_rows(cells)
-    cells_list = [dict(c) for c in cells]
+    cells_list = [dict(c) for c in to_dicts(cells)]
     per_burst_g = paired_g_per_burst.fn(
-        cells_list, treatment_arm=treatment_arm,
+        cells, treatment_arm=treatment_arm,
         baseline_arm=baseline_arm, pair_by=pair_by,
         source=source,
         arm_field=arm_field,
@@ -157,7 +157,7 @@ def mundlak_paired_g_per_burst(
         # is absent from the schema entirely (legacy corpora,
         # fresh @measurable not yet seen by any prior cache build).
         # Heterogeneous universal-merge corpora often have the
-        # column with None for cells from sources without traces;
+        # column with None for rows from sources without traces;
         # NaN-skip those rather than re-trigger the same KeyError
         # by evaluating the measurable on a leaf-less cell.
         if predictor_name in c:
@@ -200,7 +200,8 @@ def mundlak_paired_g_per_burst(
         )
 
     return mundlak_decomposition.fn(
-        panel, alpha=alpha, cluster_robust=cluster_robust,
+        cells_to_dataframe(panel),
+        alpha=alpha, cluster_robust=cluster_robust,
     )
 
 

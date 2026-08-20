@@ -40,6 +40,7 @@ from corroborate.analyses.dowhy.paired_continuous_do_dowhy import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_paired_arms
+from corroborate.data import cells_to_dataframe
 
 
 _MU_X = 1.0
@@ -93,7 +94,7 @@ def test_paired_continuous_do_recovers_attenuated_slope() -> None:
     slope ≈ 1.992 (vs structural 2.000)."""
     cells = _build_cells()
     result = paired_continuous_do_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         treatment_var='z_mean',
@@ -122,7 +123,7 @@ def test_paired_continuous_do_placebo_destroys_signal() -> None:
     drift ≈ expected slope."""
     cells = _build_cells()
     result = paired_continuous_do_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         treatment_var='z_mean',
@@ -146,7 +147,7 @@ def test_paired_continuous_do_rcc_drift_small() -> None:
     expectation to z_b preserves the slope on z_b. Drift ≈ 0."""
     cells = _build_cells()
     result = paired_continuous_do_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         treatment_var='z_mean',

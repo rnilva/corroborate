@@ -22,6 +22,7 @@ import pytest
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.diagnostic.tautology_audit import tautology_audit
+from corroborate.data import cells_to_dataframe
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -58,7 +59,7 @@ def test_jensen_gap_jaccard_matches_findings_revision_5(
     The number is structural (independent of corpus); this smoke
     just confirms the analysis computes it."""
     result = tautology_audit.fn(
-        action_dim_cells,
+        cells_to_dataframe(action_dim_cells),
         measurables=[
             {
                 'name': 'jensen_gap',

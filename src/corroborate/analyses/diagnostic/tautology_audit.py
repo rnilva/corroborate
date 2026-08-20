@@ -27,12 +27,12 @@ analysis converts the cell collection to `RunRow` objects at
 the boundary; the existing audit is preserved unchanged."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables.redundancy_check import (
     TautologyReport, audit_mediator_panel,
@@ -73,7 +73,7 @@ class AuditResult:
 
 @analysis
 def tautology_audit(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     measurables: Sequence[Mapping[str, object]],
     outcome_path: str,
@@ -110,7 +110,7 @@ def tautology_audit(
     explicit map so the audit reads them without forcing the
     caller to rename keys. Forwarded verbatim to
     `audit_mediator_panel`."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     spec_list: list[_MeasurableSpec] = []
     for m in measurables:
         name_v = m.get('name')
@@ -130,7 +130,7 @@ def tautology_audit(
         spec_list.append(_MeasurableSpec(name=name_v, reads=reads_v))
 
     runs: list[RunRow] = []
-    for cell in cells:
+    for cell in rows:
         if arm_filter is not None and cell.get(arm_field) != arm_filter:
             continue
         runs.append(RunRow.from_row_dict(cell))

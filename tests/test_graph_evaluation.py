@@ -14,7 +14,6 @@ Covers the framework primitives promoted from
   per-member levels into a cluster-level label."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 
 import polars as pl
 
@@ -36,7 +35,7 @@ from corroborate.graph.causal import (
 
 @analysis
 def _stub_analysis(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
 ) -> object:
     """No-op fixture so the bridges below can be evaluated."""
     del cells

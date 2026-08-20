@@ -34,7 +34,7 @@ consume it unchanged.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -201,7 +201,7 @@ def _collect_per_burst(
 
 @analysis
 def partial_spearman(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     x: _ScalarOrPerBurst,
     y: _ScalarOrPerBurst,
@@ -225,17 +225,8 @@ def partial_spearman(
 
     Returns NaN ρ/p when no stratum survives the size + df
     floors."""
-    # Canonical input is `pl.DataFrame`; Iterable[Mapping]
-    # accepted as back-compat.
     from corroborate._internals.polars import to_dicts as _to_dicts
-    from corroborate.data.kernel import cells_to_dataframe
-    cells_list: list[Mapping[str, object]]
-    if isinstance(cells, pl.DataFrame):
-        cells_list = list(_to_dicts(cells))
-    else:
-        # Synthetic test fixtures / ad-hoc dict lists.
-        cells_df = cells_to_dataframe(cells)
-        cells_list = list(_to_dicts(cells_df))
+    cells_list: list[Mapping[str, object]] = list(_to_dicts(cells))
     granularity = _detect_granularity(x, y, conditioning)
     if granularity == 'per_cell':
         # Type narrowing for pyright — _detect_granularity guarantees

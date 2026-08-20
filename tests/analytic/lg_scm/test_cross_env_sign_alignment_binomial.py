@@ -27,6 +27,7 @@ from corroborate.analyses.panel.cross_env_sign_alignment_binomial import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
+from corroborate.data import cells_to_dataframe
 
 
 _MU_X = 1.0
@@ -71,7 +72,7 @@ def test_sign_alignment_same_direction_at_every_env() -> None:
     → one-tailed binomial p = 0.5**10 = 0.000977. SUPPORTED."""
     cells = _build_cells(_SAME_DIRECTION_ENVS)
     result = cross_env_sign_alignment_binomial.fn(
-        cells,
+        cells_to_dataframe(cells),
         source_x='z_mean',
         source_y='y_mean',
         treatment_arm='treatment',
@@ -105,7 +106,7 @@ def test_sign_alignment_opposite_direction_rejects() -> None:
     question)."""
     cells = _build_cells(_SAME_DIRECTION_ENVS)
     result = cross_env_sign_alignment_binomial.fn(
-        cells,
+        cells_to_dataframe(cells),
         source_x='z_mean',
         source_y='y_mean',
         treatment_arm='treatment',
@@ -134,7 +135,7 @@ def test_sign_alignment_mixed_direction_same_at_every_env() -> None:
     Δβ direction). SAME alignment HELDs at 10/10."""
     cells = _build_cells(_MIXED_SIGN_ENVS)
     result = cross_env_sign_alignment_binomial.fn(
-        cells,
+        cells_to_dataframe(cells),
         source_x='z_mean',
         source_y='y_mean',
         treatment_arm='treatment',
@@ -155,7 +156,7 @@ def test_sign_alignment_null_floor_drops_small_d() -> None:
     → n_total = 0 → p = NaN."""
     cells = _build_cells(_SAME_DIRECTION_ENVS)
     result = cross_env_sign_alignment_binomial.fn(
-        cells,
+        cells_to_dataframe(cells),
         source_x='z_mean',
         source_y='y_mean',
         treatment_arm='treatment',

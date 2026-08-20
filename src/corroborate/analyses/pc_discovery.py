@@ -40,7 +40,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 from corroborate.graph.discovery import (
     DiscoveredAdjacency,
@@ -183,7 +183,7 @@ def _cells_to_polars(
 
 @analysis
 def pc_discovery(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     nodes: tuple[str, ...],
     alpha: float = 0.05,
@@ -224,9 +224,9 @@ def pc_discovery(
 
     Returns `PCDiscoveryResult` carrying the skeleton, oriented
     CPDAG, and cell count post-finite-filtering."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     df = _cells_to_polars(
-        cells, nodes, stratify_by=stratify_by, indicators=indicators,
+        rows, nodes, stratify_by=stratify_by, indicators=indicators,
     )
     skeleton = discover_adjacency(
         df,

@@ -37,6 +37,7 @@ reader live in `corroborate.data.derive`.
 See `corroborate/data/panel.py` for the load-bearing types."""
 from __future__ import annotations
 
+from corroborate.data.kernel import cells_to_dataframe
 from corroborate.data.loader import config_columns, load_runs
 from corroborate.data.panel import (
     CorpusSource,
@@ -53,6 +54,7 @@ __all__ = [
     'MeasurableAvailability',
     'Panel',
     'PanelDiagnostics',
+    'cells_to_dataframe',
     'concat_panels',
     'config_columns',
     'load_runs',

@@ -54,6 +54,7 @@ from corroborate.analyses.link.paired_link_per_burst import (
     phase_link_consistency,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -180,7 +181,7 @@ def test_phase_link_consistency_recovers_active_phase_fraction() -> None:
     """
     cells = _generate_link_panel_cells()
     result = paired_link_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='fast',
         baseline_arm='slow',
         target=_TARG_SOURCE,
@@ -218,7 +219,7 @@ def test_phase_link_consistency_with_wrong_sign_returns_zero() -> None:
     """
     cells = _generate_link_panel_cells()
     result = paired_link_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='fast',
         baseline_arm='slow',
         target=_TARG_SOURCE,
@@ -244,7 +245,7 @@ def test_per_burst_link_n_pairs_propagates() -> None:
     """
     cells = _generate_link_panel_cells()
     result = paired_link_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='fast',
         baseline_arm='slow',
         target=_TARG_SOURCE,

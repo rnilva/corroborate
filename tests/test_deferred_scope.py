@@ -5,7 +5,7 @@ from collections.abc import Iterable, Mapping
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses.panel.stratum_panel import StratumPanel
 from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import claim_bridge, evaluate
@@ -52,9 +52,9 @@ def test_static_scope_is_applied_before_panel_and_in_final_expr() -> None:
 
     @analysis
     def _row_consuming_panel(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+        cells: pl.DataFrame,
     ) -> StratumPanel:
-        rows = list(as_rows(cells))
+        rows = list(to_dicts(cells))
         panel_inputs.append(rows)
         return _empty_panel(rows)
 
@@ -86,7 +86,7 @@ def test_panel_analysis_receives_prefiltered_dataframe() -> None:
 
     @analysis
     def _dataframe_panel(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+        cells: pl.DataFrame,
     ) -> StratumPanel:
         seen.append(type(cells))
         assert isinstance(cells, pl.DataFrame)
@@ -102,20 +102,18 @@ def test_panel_analysis_receives_prefiltered_dataframe() -> None:
     assert seen == [pl.DataFrame]
 
 
-def test_rows_pass_through_untouched_without_static_scope() -> None:
-    """Without a static scope there is nothing to filter, so the
-    caller's rows reach the panel analysis as the SAME object — no
-    rows → DataFrame → rows round trip for row-consuming panel
-    builders (regression guard for the conversion the canonical
-    union made tempting)."""
+def test_panel_builder_receives_a_dataframe_without_static_scope() -> None:
+    """The panel builder takes a plain DataFrame in BOTH branches:
+    with no static scope the caller's rows are materialised once,
+    unfiltered — the builder never sees raw row objects."""
     received: list[object] = []
 
     @analysis
     def _identity_probe_panel(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+        cells: pl.DataFrame,
     ) -> StratumPanel:
         received.append(cells)
-        return _empty_panel(as_rows(cells))
+        return _empty_panel(to_dicts(cells))
 
     scope = scope_from_panel(
         panel_analysis=_identity_probe_panel,
@@ -124,8 +122,10 @@ def test_rows_pass_through_untouched_without_static_scope() -> None:
     )
     rows: list[dict[str, object]] = [{'env_name': 'A'}]
     _ = scope.resolve(rows)
-    assert received == [rows]
-    assert received[0] is rows
+    assert len(received) == 1
+    frame = received[0]
+    assert isinstance(frame, pl.DataFrame)
+    assert frame.to_dicts() == rows
 
 
 def test_missing_static_column_is_null_padded_before_panel() -> None:
@@ -133,9 +133,9 @@ def test_missing_static_column_is_null_padded_before_panel() -> None:
 
     @analysis
     def _missing_column_panel(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+        cells: pl.DataFrame,
     ) -> StratumPanel:
-        rows = list(as_rows(cells))
+        rows = list(to_dicts(cells))
         panel_inputs.append(rows)
         return _empty_panel(rows)
 
@@ -152,15 +152,15 @@ def test_missing_static_column_is_null_padded_before_panel() -> None:
 def test_generator_cells_survive_deferred_scope_and_analysis() -> None:
     @analysis
     def _count_deferred_cells(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+        cells: pl.DataFrame,
     ) -> int:
-        return len(list(as_rows(cells)))
+        return len(list(to_dicts(cells)))
 
     @analysis
     def _all_strata_panel(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+        cells: pl.DataFrame,
     ) -> StratumPanel:
-        return _empty_panel(as_rows(cells))
+        return _empty_panel(to_dicts(cells))
 
     scope = scope_from_panel(
         panel_analysis=_all_strata_panel,
