@@ -60,14 +60,13 @@ When NOT to use:
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses._cell_value import key_tuple, resolve_value
 from corroborate.bridge.analysis import analysis
 
@@ -128,7 +127,7 @@ def _hedges_g_paired_inline(deltas: np.ndarray) -> float:
 
 @analysis
 def bootstrap_paired_g(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -158,7 +157,7 @@ def bootstrap_paired_g(
     before bootstrap); pass `'raise'` to error on duplicates.
 
     See module docstring for when to use vs paired_g."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
             f'bootstrap_paired_g: unknown dedupe_strategy '
@@ -176,7 +175,7 @@ def bootstrap_paired_g(
 
     treatment_buckets: dict[tuple[object, ...], list[float]] = {}
     baseline_buckets: dict[tuple[object, ...], list[float]] = {}
-    for cell in cells:
+    for cell in rows:
         arm = cell.get(arm_field)
         if arm == treatment_arm:
             key = key_tuple(cell, pair_by)

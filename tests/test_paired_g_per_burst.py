@@ -24,6 +24,7 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from corroborate.analyses.paired.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE, panel_for_env, paired_g_per_burst,
 )
+from corroborate.data import cells_to_dataframe
 
 
 def test_analysis_registered_with_bridge_required_signature() -> None:
@@ -104,7 +105,7 @@ def test_real_corpus_catch_bsuite_zero_across_bursts(
     Per-burst panel should show g ≈ 0 across every burst on Catch.
     """
     result = paired_g_per_burst.fn(
-        expectile_3way_cells,
+        cells_to_dataframe(expectile_3way_cells),
         treatment_arm=_DDQN_ARM,
         baseline_arm=_VANILLA_ARM,
         pair_by=('seed',),
@@ -129,7 +130,7 @@ def test_real_corpus_fourrooms_positive_across_bursts(
     Per-burst panel should show positive g across every burst on
     FourRooms (DDQN improves outcome relative to vanilla)."""
     result = paired_g_per_burst.fn(
-        expectile_3way_cells,
+        cells_to_dataframe(expectile_3way_cells),
         treatment_arm=_DDQN_ARM,
         baseline_arm=_VANILLA_ARM,
         pair_by=('seed',),

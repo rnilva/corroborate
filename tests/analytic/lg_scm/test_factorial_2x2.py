@@ -43,6 +43,7 @@ from corroborate.analyses.paired.factorial_2x2 import (
     factorial_2x2_interaction,
 )
 from corroborate.corpus.schema import RunRow
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
@@ -181,7 +182,7 @@ def test_factorial_recovers_closed_form_interaction_sign_and_magnitude() -> None
     (and even a 30% scale error would clear the bound below)."""
     cells = _build_2x2_corpus()
     result = factorial_2x2_interaction.fn(
-        cells,
+        cells_to_dataframe(cells),
         arm_a='arm_a', arm_b='arm_b', arm_c='arm_c', arm_d='arm_d',
         source='y_mean',
         pair_by=('seed',),
@@ -218,7 +219,7 @@ def test_factorial_corner_contrasts_recover_closed_form_per_corner() -> None:
     structural g of ~22-28 clears with a 30× margin)."""
     cells = _build_2x2_corpus()
     result = factorial_2x2_interaction.fn(
-        cells,
+        cells_to_dataframe(cells),
         arm_a='arm_a', arm_b='arm_b', arm_c='arm_c', arm_d='arm_d',
         source='y_mean',
         pair_by=('seed',),
@@ -302,7 +303,7 @@ def test_factorial_interaction_is_null_when_axes_have_no_joint_effect() -> None:
     cells: Sequence[Mapping[str, object]] = [r.as_dict() for r in rows]
 
     result = factorial_2x2_interaction.fn(
-        cells,
+        cells_to_dataframe(cells),
         arm_a='arm_a', arm_b='arm_b', arm_c='arm_c', arm_d='arm_d',
         source='y_mean',
         pair_by=('seed',),

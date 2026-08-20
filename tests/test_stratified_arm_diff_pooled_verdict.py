@@ -22,6 +22,7 @@ from corroborate.analyses.panel.stratified_arm_diff_pooled import (
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.core.hypothesis import PredictedDirection
+from corroborate.data import cells_to_dataframe
 
 
 _TREATMENT = 'treatment_arm'
@@ -68,7 +69,7 @@ def _run(
     in every cell so the stratum-level scope filter never
     excludes any strata."""
     result = stratified_arm_diff_pooled.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='outcome',
         treatment_arm=_TREATMENT,
         baseline_arm=_BASELINE,
@@ -171,7 +172,7 @@ def test_stratified_arm_diff_pooled_dataframe_input_identical_to_cells() -> None
     result_cells = _run(cells, predicted_direction='a_gt_b')
 
     result_panel = stratified_arm_diff_pooled.fn(
-        pl.DataFrame(cells),
+        cells_to_dataframe(pl.DataFrame(cells)),
         source='outcome',
         treatment_arm=_TREATMENT,
         baseline_arm=_BASELINE,

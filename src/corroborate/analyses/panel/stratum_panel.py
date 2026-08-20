@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -225,7 +225,7 @@ def _stratum_std(values: list[float]) -> float:
 
 @analysis
 def stratum_panel(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     measurables: tuple[str, ...],
     treatment_arm: str,
@@ -259,17 +259,11 @@ def stratum_panel(
     `aggregator='median'` gives median Δ — sibling for outlier-
     robust analyses; affects `means_*` slots, std slots stay as
     arithmetic sample SD."""
-    # Canonical: pl.DataFrame in, per-cell-loop algorithm.
-    # Iterable[Mapping] fallback for back-compat with synthetic
-    # tests + non-Panel ad-hoc callers.
-    from corroborate.data.kernel import cells_to_dataframe
-    if not isinstance(cells, pl.DataFrame):
-        cells = cells_to_dataframe(cells)
-    cells = cells.iter_rows(named=True)
+    # A plain DataFrame in; the algorithm is a per-cell loop.
     per_arm_stratum: dict[
         tuple[str, tuple[object, ...]], list[Mapping[str, object]],
     ] = defaultdict(list)
-    for c in cells:
+    for c in cells.iter_rows(named=True):
         arm = c.get(arm_field)
         if not isinstance(arm, str):
             continue

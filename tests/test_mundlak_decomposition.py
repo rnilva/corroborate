@@ -23,6 +23,7 @@ from corroborate.analyses.paired.mundlak_decomposition import (
     MundlakResult,
     mundlak_decomposition,
 )
+from corroborate.data import cells_to_dataframe
 
 
 def _panel(
@@ -56,7 +57,7 @@ def test_pure_between_effect() -> None:
         within_devs=[[-0.5, 0.0, 0.5]] * 5,
         beta_b=0.7, beta_w=0.0,
     )
-    res = mundlak_decomposition.fn(panel)
+    res = mundlak_decomposition.fn(cells_to_dataframe(panel))
     assert isinstance(res, MundlakResult)
     assert res.n_strata == 5
     assert res.between.coefficient == pytest.approx(0.7, abs=0.05)
@@ -75,7 +76,7 @@ def test_pure_within_effect() -> None:
         within_devs=[[-1.0, 0.0, 1.0]] * 5,
         beta_b=0.0, beta_w=0.5, noise=0.02, seed=0,
     )
-    res = mundlak_decomposition.fn(panel)
+    res = mundlak_decomposition.fn(cells_to_dataframe(panel))
     assert res.within.coefficient == pytest.approx(0.5, abs=0.05)
     assert res.within.p_value < 0.05
 
@@ -87,7 +88,7 @@ def test_both_effects_with_hausman_rejection() -> None:
         within_devs=[[-0.5, 0.0, 0.5, 1.0]] * 5,
         beta_b=0.6, beta_w=-0.3, noise=0.05, seed=42,
     )
-    res = mundlak_decomposition.fn(panel)
+    res = mundlak_decomposition.fn(cells_to_dataframe(panel))
     assert res.between.coefficient == pytest.approx(0.6, abs=0.1)
     assert res.within.coefficient == pytest.approx(-0.3, abs=0.1)
     assert res.between.p_value < 0.05
@@ -102,7 +103,7 @@ def test_equal_effects_hausman_no_rejection() -> None:
         within_devs=[[-0.5, 0.0, 0.5]] * 5,
         beta_b=0.4, beta_w=0.4, noise=0.02, seed=0,
     )
-    res = mundlak_decomposition.fn(panel)
+    res = mundlak_decomposition.fn(cells_to_dataframe(panel))
     assert res.between.coefficient == pytest.approx(0.4, abs=0.05)
     assert res.within.coefficient == pytest.approx(0.4, abs=0.05)
     assert res.hausman_p > 0.05  # equality not rejected
@@ -118,7 +119,7 @@ def test_constant_x_within_stratum_raises() -> None:
         for e in range(5)
     ]
     with pytest.raises(ValueError, match='rank-deficient'):
-        mundlak_decomposition.fn(panel)
+        mundlak_decomposition.fn(cells_to_dataframe(panel))
 
 
 def test_singleton_strata_treated_as_zero_deviation() -> None:
@@ -135,7 +136,7 @@ def test_singleton_strata_treated_as_zero_deviation() -> None:
         + [{'stratum_id': 'env_singleton', 'x': 0.5, 'y': 0.0,
             'se': 0.1}]
     )
-    res = mundlak_decomposition.fn(panel)
+    res = mundlak_decomposition.fn(cells_to_dataframe(panel))
     assert res.n_strata == 4
     # Singleton's within-deviation is 0 → contributes only to β_b
     assert res.between.coefficient == pytest.approx(0.5, abs=0.15)
@@ -167,8 +168,8 @@ def test_cluster_robust_se_inflates_on_autocorrelated_panel() -> None:
                 'stratum_id': f'env_{e}',
                 'x': x, 'y': y, 'se': 0.1,
             })
-    res_ols = mundlak_decomposition.fn(rows, cluster_robust=False)
-    res_cr1 = mundlak_decomposition.fn(rows, cluster_robust=True)
+    res_ols = mundlak_decomposition.fn(cells_to_dataframe(rows), cluster_robust=False)
+    res_cr1 = mundlak_decomposition.fn(cells_to_dataframe(rows), cluster_robust=True)
     # CR1 SEs should be larger on both coefficients
     assert res_cr1.between.se > res_ols.between.se
     assert res_cr1.within.se > res_ols.within.se
@@ -195,7 +196,7 @@ def test_cluster_robust_requires_multiple_clusters() -> None:
     rows_two = rows + [{'stratum_id': 'second', 'x': 5.0, 'y': 0.0,
                          'se': 0.1}]
     # cluster_robust=True with 2 strata should still work.
-    _ = mundlak_decomposition.fn(rows_two, cluster_robust=True)
+    _ = mundlak_decomposition.fn(cells_to_dataframe(rows_two), cluster_robust=True)
 
 
 def test_orthogonality_of_decomposition() -> None:

@@ -42,6 +42,7 @@ import math
 from collections.abc import Mapping
 
 from corroborate.analyses.panel.stratum_panel import stratum_panel
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm._closed_form import y_mean_arm_sd
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
@@ -113,7 +114,7 @@ def _expected_y_arm_sd(beta_xz: float) -> float:
 
 def test_stratum_panel_strata_indexing_and_counts() -> None:
     panel = stratum_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         measurables=('x_mean', 'z_mean', 'y_mean'),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -133,7 +134,7 @@ def test_stratum_panel_strata_indexing_and_counts() -> None:
 
 def test_stratum_panel_per_arm_means_recover_closed_form() -> None:
     panel = stratum_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -162,7 +163,7 @@ def test_stratum_panel_per_arm_means_recover_closed_form() -> None:
 
 def test_stratum_panel_deltas_recover_structural_contrast() -> None:
     panel = stratum_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -193,7 +194,7 @@ def test_stratum_panel_deltas_recover_structural_contrast() -> None:
 
 def test_stratum_panel_within_stratum_spearman_recovers_closed_form() -> None:
     panel = stratum_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         measurables=('x_mean', 'y_mean'),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -237,13 +238,13 @@ def test_stratum_panel_dataframe_input_identical_to_iterable_input() -> None:
 
     cells = _build_cells()
     panel_via_cells = stratum_panel.fn(
-        cells,
+        cells_to_dataframe(cells),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',
     )
     panel_via_panel = stratum_panel.fn(
-        pl.DataFrame(cells),
+        cells_to_dataframe(pl.DataFrame(cells)),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -282,7 +283,7 @@ def test_stratum_panel_default_stratify_by_is_env_name() -> None:
 
     cells = _build_cells()
     result = stratum_panel.fn(
-        pl.DataFrame(cells),
+        cells_to_dataframe(pl.DataFrame(cells)),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',

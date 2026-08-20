@@ -29,6 +29,7 @@ from corroborate.analyses.panel.stratum_effect_panel import (
 from tests.analytic.lg_scm._closed_form import y_mean_arm_sd
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
+from corroborate.data import cells_to_dataframe
 
 
 _MU_X = 1.0
@@ -88,7 +89,7 @@ def _expected_shared_seed_delta_se(env: str) -> float:
 
 def test_stratum_effect_panel_mean_recovers_structural_delta() -> None:
     panel = stratum_effect_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         treatment_arm='treatment',
         baseline_arm='baseline',
         measurables=('y_mean',),
@@ -133,7 +134,7 @@ def test_stratum_effect_panel_median_recovers_structural_delta() -> None:
     detects any sign / scale / pooling regression by orders of
     magnitude."""
     panel = stratum_effect_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         treatment_arm='treatment',
         baseline_arm='baseline',
         measurables=('y_mean',),
@@ -174,14 +175,14 @@ def test_stratum_effect_panel_mean_vs_median_agree_under_gaussian() -> None:
     SD is smaller)."""
     cells = _build_cells()
     mean_panel = stratum_effect_panel.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         measurables=('y_mean',),
         aggregator='mean',
     )
     median_panel = stratum_effect_panel.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         measurables=('y_mean',),

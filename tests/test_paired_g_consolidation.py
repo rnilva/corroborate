@@ -19,6 +19,7 @@ from __future__ import annotations
 from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.stats import meta_regress_panel
 from corroborate.corpus.schema import StratumG
+from corroborate.data import cells_to_dataframe
 
 
 # ============ paired_g empty-input contract ============
@@ -27,7 +28,7 @@ def test_paired_g_on_empty_subset() -> None:
     """An empty cell-set yields n_pairs == 0 (NaN g/se). Bridges
     that scope into an empty subset rely on this contract."""
     result = paired_g.fn(
-        [],
+        cells_to_dataframe([]),
         treatment_arm='ddqn',
         baseline_arm='vanilla_dqn',
         pair_by=('seed',),

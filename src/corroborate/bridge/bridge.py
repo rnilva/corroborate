@@ -62,6 +62,7 @@ from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.core.claim import Claim
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import ArmRole, DoEffect
+from corroborate.data.kernel import cells_to_dataframe
 from corroborate.data.panel import Panel
 from corroborate.measurables import Measurable, register
 from corroborate.graph._extent import stable_extent_hash
@@ -708,9 +709,11 @@ def evaluate(
     Cell input may be either a `pl.DataFrame` (the canonical cache
     shape — fast, vectorised filter) or an `Iterable[Mapping]`
     (synthetic test cells, ad-hoc). Iterables are materialised
-    into a DataFrame before filtering. Analyses receive the
-    filtered cells as `list[dict]` after a single `to_dicts()`
-    conversion — they don't see `pl.DataFrame` directly.
+    into a DataFrame before filtering. The admission gates read
+    per-row mappings; the analyses take a plain `pl.DataFrame`,
+    materialised ONCE from the final (filtered, contrast-stamped)
+    rows at this boundary — the registry-wide single conversion
+    point.
 
     `source` and `target` are normalised via `endpoint_name`
     before reaching analyses — analyses always see the column-name
@@ -949,8 +952,13 @@ def evaluate(
                     arm_keys[1] if v is ArmRole.TREATMENT
                     else arm_keys[0]
                 )
+    # Analyses take a plain DataFrame; the gate rows materialise
+    # into one HERE, once per evaluation — the single conversion
+    # boundary for the whole registry (previously each analysis
+    # re-materialised its own frame from the same rows).
     analysis_results = resolve_for_holds_when(
-        bridge.holds_when, filtered_cells, bridge_params,
+        bridge.holds_when, cells_to_dataframe(filtered_cells),
+        bridge_params,
     )
     holds_result = bridge.holds_when(**analysis_results)
     # Bridges may return either bare `Verdict` (legacy) or

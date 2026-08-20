@@ -60,6 +60,7 @@ from corroborate.analyses.dowhy.stratum_delta_link_dowhy import (
     stratum_delta_link_dowhy,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -149,7 +150,7 @@ def test_stratum_delta_link_recovers_structural_slope() -> None:
     cells = _build_phased_cells()
 
     result = stratum_delta_link_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,
@@ -181,7 +182,7 @@ def test_stratum_delta_link_placebo_destroys_signal() -> None:
     − refuted = β_zy exactly."""
     cells = _build_phased_cells()
     result = stratum_delta_link_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,
@@ -208,7 +209,7 @@ def test_stratum_delta_link_random_common_cause_preserves_signal() -> None:
     Δ_z coefficient exactly → refuted ATE = β_zy → drift = 0."""
     cells = _build_phased_cells()
     result = stratum_delta_link_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,
@@ -245,7 +246,7 @@ def test_stratum_delta_link_null_contrast_yields_nan_or_zero() -> None:
         beta_xz_b=_BETA_XZ_BASELINE,
     )
     result = stratum_delta_link_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,

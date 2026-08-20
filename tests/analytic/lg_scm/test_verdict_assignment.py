@@ -27,6 +27,7 @@ from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.corpus.schema import RunRow
 from corroborate.stats.effect_size import verdict_from_paired_stats
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_paired_arms
@@ -70,7 +71,7 @@ def test_underpowered_real_cells_resolve_to_power_insufficient_not_no_effect() -
         seeds=range(5),
     )
     result = paired_g.fn(
-        _as_dicts(rows),
+        cells_to_dataframe(_as_dicts(rows)),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),

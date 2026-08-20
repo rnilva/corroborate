@@ -15,7 +15,7 @@ These tests pin the contract:
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 
 import polars as pl
@@ -1364,11 +1364,11 @@ from corroborate.graph.causal import Direction as _Direction, Tier as _Tier   # 
 
 @_cli_analysis
 def _xy_minus_analysis(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     _xy_minus: object,   # noqa: ARG001
 ) -> int:
-    from corroborate._internals.polars import as_rows
-    return len(list(as_rows(cells)))
+    from corroborate._internals.polars import to_dicts
+    return len(list(to_dicts(cells)))
 
 
 @_claim_bridge(

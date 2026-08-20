@@ -33,6 +33,7 @@ from corroborate.analyses.dowhy import (
     random_common_cause_refutation,
 )
 from corroborate.corpus.schema import RunRow
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
@@ -132,7 +133,7 @@ def test_backdoor_ate_returns_unidentified_when_no_directed_path() -> None:
         for i in range(20)
     ]
     result = backdoor_ate.fn(
-        cells, treatment='x_mean', outcome='y_mean',
+        cells_to_dataframe(cells), treatment='x_mean', outcome='y_mean',
         dag=[('z', 'x_mean'), ('z', 'y_mean')],    # no x→y path
     )
     assert result.identified is False
@@ -152,7 +153,7 @@ def test_backdoor_ate_recovers_structural_total_effect() -> None:
     outcome, or missed the linear-regression dispatch would fail
     by orders of magnitude."""
     result = backdoor_ate.fn(
-        _cells(),
+        cells_to_dataframe(_cells()),
         treatment='x_mean',
         outcome='y_mean',
         dag=_DAG,
@@ -193,7 +194,7 @@ def test_placebo_refutation_destroys_structural_estimate() -> None:
     treatment column) would leave refuted_ate ≈ real_ate ≈ 0.75
     and breach the SE bound by orders of magnitude."""
     result = placebo_refutation.fn(
-        _cells(),
+        cells_to_dataframe(_cells()),
         treatment='x_mean',
         outcome='y_mean',
         dag=_DAG,
@@ -247,7 +248,7 @@ def test_random_common_cause_preserves_structural_estimate() -> None:
     A refuter that mishandled the synthetic node (e.g., correlated
     it with treatment by accident) would inflate the drift."""
     result = random_common_cause_refutation.fn(
-        _cells(),
+        cells_to_dataframe(_cells()),
         treatment='x_mean',
         outcome='y_mean',
         dag=_DAG,
@@ -300,7 +301,7 @@ def test_placebo_refutation_returns_nan_when_unidentified() -> None:
         for i in range(20)
     ]
     result = placebo_refutation.fn(
-        cells, treatment='x_mean', outcome='y_mean',
+        cells_to_dataframe(cells), treatment='x_mean', outcome='y_mean',
         dag=[('z', 'x_mean'), ('z', 'y_mean')],
     )
     assert math.isnan(result.real_ate), (
@@ -331,7 +332,7 @@ def test_random_common_cause_returns_nan_when_unidentified() -> None:
         for i in range(20)
     ]
     result = random_common_cause_refutation.fn(
-        cells, treatment='x_mean', outcome='y_mean',
+        cells_to_dataframe(cells), treatment='x_mean', outcome='y_mean',
         dag=[('z', 'x_mean'), ('z', 'y_mean')],
     )
     assert math.isnan(result.real_ate)

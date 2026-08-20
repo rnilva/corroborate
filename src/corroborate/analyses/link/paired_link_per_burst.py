@@ -21,7 +21,7 @@ the temporal structure typed and corroborable.
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -30,7 +30,7 @@ import scipy.stats as _stats
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses._cell_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables import Measurable
@@ -97,7 +97,7 @@ def _pearson_r_p_slope(
 
 @analysis
 def paired_link_per_burst(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -142,7 +142,7 @@ def paired_link_per_burst(
       tightens scope or opts into aggregation;
     - `'mean'` averages the per-burst (target, predictor) vectors
       element-wise within each duplicate bucket."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
             f'paired_link_per_burst: unknown dedupe_strategy '
@@ -159,7 +159,7 @@ def paired_link_per_burst(
         tuple[object, ...],
         list[tuple[Mapping[str, object], np.ndarray, np.ndarray]],
     ]] = {}
-    for cell in cells:
+    for cell in rows:
         env = cell.get('env_name')
         arm = cell.get(arm_field)
         if not isinstance(env, str) or not isinstance(arm, str):
@@ -185,14 +185,14 @@ def paired_link_per_burst(
             )
             if not diff:
                 raise ValueError(
-                    f'paired_link_per_burst: replicate cells at '
+                    f'paired_link_per_burst: replicate rows at '
                     f'(env={env!r}, arm={arm!r}, '
                     f'{tuple(pair_by)}={key}) differ only on '
                     f'provenance tags. Pass '
                     f'dedupe_strategy="mean" to aggregate them.',
                 )
             raise ValueError(
-                f'paired_link_per_burst: cells at (env={env!r}, '
+                f'paired_link_per_burst: rows at (env={env!r}, '
                 f'arm={arm!r}, {tuple(pair_by)}={key}) are not '
                 f'replicates — they differ on: {format_diff(diff)}. '
                 f'Add the regime-defining column(s) to pair_by so '
@@ -228,10 +228,10 @@ def paired_link_per_burst(
                 )
                 raise ValueError(
                     f'paired_link_per_burst: cannot mean-aggregate '
-                    f'cells at (env={env_arm[0]!r}, '
+                    f'rows at (env={env_arm[0]!r}, '
                     f'arm={env_arm[1]!r}, {tuple(pair_by)}={k}) — '
                     f'per-burst array shapes differ ({sorted(shapes)}). '
-                    f'The cells are not replicates; they differ on: '
+                    f'The rows are not replicates; they differ on: '
                     f'{format_diff(diff)}. Add these to pair_by.',
                 )
             ts = np.mean(np.stack(target_arrays, axis=0), axis=0)
@@ -251,7 +251,7 @@ def paired_link_per_burst(
         # Per-key arm-shape match — the real invariant. Cross-key
         # uniformity is NOT required: multi-regime corpora can
         # legitimately have different burst counts at different
-        # `pair_by` keys (e.g. cells from total_steps=200k vs 1M).
+        # `pair_by` keys (e.g. rows from total_steps=200k vs 1M).
         for k in paired_keys:
             if (
                 treat[k][0].shape[0] != base[k][0].shape[0]

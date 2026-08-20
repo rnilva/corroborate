@@ -25,17 +25,27 @@ within a sample-rank tolerance.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 
 from corroborate.analyses.link.cross_stratum_arm_diff_partial_spearman import (
+    CrossStratumArmDiffPartialSpearmanResult,
     cross_stratum_arm_diff_partial_spearman,
 )
 
 
-# Resolve the bare callable through the @analysis decorator.
-_fn = cross_stratum_arm_diff_partial_spearman.fn
+from corroborate.data import cells_to_dataframe
+
+
+def _fn(
+    cells: 'Sequence[Mapping[str, object]]', **kwargs: object,
+) -> CrossStratumArmDiffPartialSpearmanResult:
+    """Route the fixture rows through the entry boundary once —
+    the analysis itself takes a plain DataFrame."""
+    return cross_stratum_arm_diff_partial_spearman.fn(
+        cells_to_dataframe(cells), **kwargs,
+    )
 
 
 def _cells(

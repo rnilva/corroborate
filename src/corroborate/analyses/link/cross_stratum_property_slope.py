@@ -41,7 +41,7 @@ Distinct from:
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -202,7 +202,7 @@ def _derive_per_stratum_covariate(
 
 @analysis
 def cross_stratum_property_slope(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -248,14 +248,6 @@ def cross_stratum_property_slope(
     dropped. Spearman over the surviving (covariate, d) pairs.
 
     Returns NaN ρ/p when `n_strata < min_strata`."""
-    # Canonical input is `pl.DataFrame`; Iterable[Mapping]
-    # accepted as back-compat. Normalise at entry then stream
-    # row-dicts through the existing per-cell loop.
-    from corroborate.data.kernel import cells_to_dataframe
-    cells_df: pl.DataFrame = (
-        cells if isinstance(cells, pl.DataFrame)
-        else cells_to_dataframe(cells)
-    )
     if not stratify_by or covariate_key_field not in stratify_by:
         raise ValueError(
             f'cross_stratum_property_slope: covariate_key_field '
@@ -270,14 +262,12 @@ def cross_stratum_property_slope(
             f'derived_covariate={derived_covariate is not None}',
         )
     key_position = stratify_by.index(covariate_key_field)
-    # Downstream `_derive_per_stratum_covariate` + `stratified_
-    # arm_diff_pooled.fn` accept either DataFrame or
-    # Iterable[Mapping]; materialise once to list[dict] here so
-    # both consumers iterate without re-conversion. `to_dicts()`
-    # returns `list[dict[str, Any]]`; widen to `Mapping[str, object]`
-    # via the framework's covariant boundary helper.
+    # The covariate-derivation helper streams row dicts;
+    # materialise them once. `to_dicts()` returns
+    # `list[dict[str, Any]]`; widen to `Mapping[str, object]` via
+    # the framework's covariant boundary helper.
     from corroborate._internals.polars import to_dicts as _to_dicts
-    cells_list: list[Mapping[str, object]] = list(_to_dicts(cells_df))
+    cells_list: list[Mapping[str, object]] = list(_to_dicts(cells))
     # Build covariates_per_key from cells if a derived spec is given.
     if derived_covariate is not None:
         derived_map = _derive_per_stratum_covariate(
@@ -296,7 +286,7 @@ def cross_stratum_property_slope(
         assert covariates_per_key is not None  # narrowed by check above
         effective_covariates = covariates_per_key
     pooled = stratified_arm_diff_pooled.fn(
-        cells_list,
+        cells,
         source=source,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,

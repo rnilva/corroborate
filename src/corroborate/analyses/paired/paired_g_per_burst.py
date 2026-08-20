@@ -24,7 +24,7 @@ doesn't assume any particular spacing.
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -32,7 +32,7 @@ import numpy.typing as npt
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses._cell_value import (
     evaluate_per_burst_source, key_tuple,
 )
@@ -78,7 +78,7 @@ class PerBurstResult:
 
 @analysis
 def paired_g_per_burst(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -121,7 +121,7 @@ def paired_g_per_burst(
     - `'raise'` errors loudly on duplicates AND reports which
       columns differ between them so the bridge author tightens
       scope (extend `pair_by`) or explicitly opts into `'mean'`."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):
@@ -134,7 +134,7 @@ def paired_g_per_burst(
         distinguishing_columns, format_diff,
     )
 
-    # Group cells by (env_name, arm), key on pair_by. Carry the
+    # Group rows by (env_name, arm), key on pair_by. Carry the
     # source cell mapping alongside the per-burst array so duplicate
     # detection can introspect which cell-level columns distinguish
     # the duplicates (regime mismatch report — see
@@ -142,7 +142,7 @@ def paired_g_per_burst(
     by_env_arm: dict[tuple[str, str], dict[
         tuple[object, ...], list[tuple[Mapping[str, object], np.ndarray]],
     ]] = {}
-    for cell in cells:
+    for cell in rows:
         env = cell.get('env_name')
         arm = cell.get(arm_field)
         if not isinstance(env, str) or not isinstance(arm, str):
@@ -165,7 +165,7 @@ def paired_g_per_burst(
             )
             if diff:
                 raise ValueError(
-                    f'paired_g_per_burst: cells at (env={env!r}, '
+                    f'paired_g_per_burst: rows at (env={env!r}, '
                     f'arm={arm!r}, {tuple(pair_by)}={key}) are not '
                     f'replicates — they differ on: {format_diff(diff)}. '
                     f'Add the regime-defining column(s) to pair_by so '
@@ -183,7 +183,7 @@ def paired_g_per_burst(
     # Collapse list[(cell, ndarray)] → ndarray via element-wise mean.
     # Single-element buckets are unchanged. Multi-element buckets
     # only land here under dedupe_strategy='mean'; if their per-burst
-    # shapes don't line up, the cells aren't replicates and we raise
+    # shapes don't line up, the rows aren't replicates and we raise
     # with a regime-mismatch report rather than a numpy stack error.
     collapsed: dict[tuple[str, str], dict[
         tuple[object, ...], np.ndarray,
@@ -204,9 +204,9 @@ def paired_g_per_burst(
                 )
                 raise ValueError(
                     f'paired_g_per_burst: cannot mean-aggregate '
-                    f'cells at (env={env_arm[0]!r}, arm={env_arm[1]!r}, '
+                    f'rows at (env={env_arm[0]!r}, arm={env_arm[1]!r}, '
                     f'{tuple(pair_by)}={k}) — per-burst array shapes '
-                    f'differ ({sorted(shapes)}). The cells are not '
+                    f'differ ({sorted(shapes)}). The rows are not '
                     f'replicates; they differ on: {format_diff(diff)}. '
                     f'Add these to pair_by so each regime is its '
                     f'own stratum.',
@@ -236,7 +236,7 @@ def paired_g_per_burst(
                 )
         # Walk the union of burst indices. At each burst, only
         # keys whose arrays extend that far contribute. Multi-
-        # regime corpora (e.g. cells from total_steps=200k AND
+        # regime corpora (e.g. rows from total_steps=200k AND
         # 1M sharing one (env, arm) bucket) are accommodated:
         # the 200k keys contribute to bursts 0..9, the 1M keys
         # contribute to bursts 0..49. `n_pairs` per stratum

@@ -25,7 +25,6 @@ synthetic SCM tests.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal, cast
 
@@ -34,7 +33,6 @@ from scipy.stats import nct, t
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
 from corroborate.analyses.paired.paired_g import PairedGResult, paired_g
 from corroborate.bridge.analysis import analysis
 from corroborate.bridge.verdict import RefutationClass, Verdict
@@ -173,7 +171,7 @@ def _ncp_confidence_interval(
 
 @analysis
 def paired_directional(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -213,7 +211,6 @@ def paired_directional(
     function of the observed effect. A caller may set it to the
     power-derived minimum completed independent pairs.
     """
-    cells = as_rows(cells)
     direction = _validate_test_configuration(
         predicted_direction, alpha, sesoi_dz, minimum_pairs,
     )

@@ -54,6 +54,7 @@ from corroborate.analyses.paired.mundlak_paired_g_per_burst import (
     mundlak_paired_g_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -176,7 +177,7 @@ def test_mundlak_recovers_between_slope_and_zero_within() -> None:
     within (which is independent of the constant within-env y)."""
     cells = _build_phased_panel()
     result = mundlak_paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -260,7 +261,7 @@ def test_mundlak_intercept_absorbs_predictor_offset() -> None:
     """
     cells = _build_phased_panel()
     result = mundlak_paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -293,7 +294,7 @@ def test_mundlak_honours_custom_arm_field() -> None:
         row['contrast_arm'] = row.pop('arm_key')
         cells.append(row)
     result = mundlak_paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         arm_field='contrast_arm',

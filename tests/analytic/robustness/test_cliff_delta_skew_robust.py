@@ -24,6 +24,7 @@ import numpy as np
 
 from corroborate.analyses.paired.cliff_delta_paired import cliff_delta_paired
 from corroborate.analyses.paired.paired_g import paired_g
+from corroborate.data import cells_to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -75,12 +76,12 @@ def test_cliff_delta_unbiased_under_lognormal_where_paired_g_inflates() -> None:
         deltas = rng.lognormal(0.0, 0.7, n).tolist()
         cells = _make_paired_cells(deltas)
         pg_result = paired_g.fn(
-            cells,
+            cells_to_dataframe(cells),
             treatment_arm='T', baseline_arm='B',
             pair_by=('seed',), source='value',
         )
         cd_result = cliff_delta_paired.fn(
-            cells,
+            cells_to_dataframe(cells),
             treatment_arm='T', baseline_arm='B',
             pair_by=('seed',), source='value',
         )
@@ -140,12 +141,12 @@ def test_cliff_delta_and_paired_g_agree_on_sign_under_normal() -> None:
     deltas = rng.normal(1.0, 2.0, n).tolist()
     cells = _make_paired_cells(deltas)
     pg = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
     cd = cliff_delta_paired.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )

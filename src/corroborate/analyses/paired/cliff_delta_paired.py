@@ -40,12 +40,11 @@ in ROBUSTNESS.md.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses._cell_value import key_tuple, resolve_value
 from corroborate.bridge.analysis import analysis
 
@@ -88,7 +87,7 @@ class CliffDeltaResult:
 
 @analysis
 def cliff_delta_paired(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -107,7 +106,7 @@ def cliff_delta_paired(
     translation.
 
     See module docstring for when to use Cliff's δ vs paired_g."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
             f'cliff_delta_paired: unknown dedupe_strategy '
@@ -115,7 +114,7 @@ def cliff_delta_paired(
         )
     treatment_buckets: dict[tuple[object, ...], list[float]] = {}
     baseline_buckets: dict[tuple[object, ...], list[float]] = {}
-    for cell in cells:
+    for cell in rows:
         arm = cell.get(arm_field)
         if arm == treatment_arm:
             key = key_tuple(cell, pair_by)

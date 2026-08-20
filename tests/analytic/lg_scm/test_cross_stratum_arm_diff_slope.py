@@ -31,6 +31,7 @@ from corroborate.analyses.link.cross_stratum_arm_diff_slope import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
+from corroborate.data import cells_to_dataframe
 
 
 _MU_X = 1.0
@@ -96,7 +97,7 @@ def test_cross_stratum_arm_diff_slope_recovers_monotone_rho() -> None:
     one rank tie; remaining 5 strata are strictly monotone)."""
     cells = _build_cells()
     result = cross_stratum_arm_diff_slope.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target='y_mean',
@@ -143,7 +144,7 @@ def test_cross_stratum_arm_diff_slope_min_strata_floor_returns_nan() -> None:
     cells = _build_cells()
     # Set min_strata higher than n_envs to force NaN
     result = cross_stratum_arm_diff_slope.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target='y_mean',
@@ -168,7 +169,7 @@ def test_cross_stratum_arm_diff_slope_constant_target_returns_nan() -> None:
     """
     cells = _build_cells()
     result = cross_stratum_arm_diff_slope.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target='x_mean',

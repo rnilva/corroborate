@@ -33,6 +33,7 @@ from corroborate.bridge.bridge import (
 )
 from corroborate.core.claim import claim
 from corroborate.core.intervention import DoEffect, Intervention
+from corroborate.data import cells_to_dataframe
 from corroborate.bridge.verdict import Verdict
 
 
@@ -102,7 +103,7 @@ def test_paired_g_analysis_runs_directly() -> None:
         if c.get('env_name') == 'TestEnv'
     ]
     result = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm=_TREATMENT_KEY,
         baseline_arm=_BASELINE_KEY,
         pair_by=('seed',),
@@ -857,7 +858,7 @@ def test_evaluate_forwards_predicted_direction_to_analyses() -> None:
 
     @analysis
     def _captures_pd(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+        cells: pl.DataFrame,
         *,
         predicted_direction: object,
         source: str = 'A',
@@ -1070,21 +1071,21 @@ def test_analysis_wrapper_is_directly_callable() -> None:
 
     Closed form: mean of {1, 2, 3, 4} scaled by 10 = 25.0 exactly
     (exact rational arithmetic — no sampling bound applies)."""
-    from corroborate._internals.polars import as_rows
+    from corroborate._internals.polars import to_dicts
     from corroborate.bridge.analysis import analysis
 
     @analysis
     def _scaled_mean(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
+        cells: pl.DataFrame,
         *,
         scale: float = 1.0,
     ) -> float:
-        vals = [float(cast(float, c['v'])) for c in as_rows(cells)]
+        vals = [float(cast(float, c['v'])) for c in to_dicts(cells)]
         return scale * sum(vals) / len(vals)
 
-    cells: list[Mapping[str, object]] = [
-        {'v': 1.0}, {'v': 2.0}, {'v': 3.0}, {'v': 4.0},
-    ]
+    cells = cells_to_dataframe(
+        [{'v': 1.0}, {'v': 2.0}, {'v': 3.0}, {'v': 4.0}],
+    )
     assert _scaled_mean(cells, scale=10.0) == 25.0
     # With `Analysis[C, O, **P]` the mismatched kwarg is a STATIC
     # error at the call site; the ignore keeps the runtime
@@ -1096,45 +1097,33 @@ def test_analysis_wrapper_is_directly_callable() -> None:
 
 def test_analysis_call_passes_cells_through_unchanged() -> None:
     """`Analysis.__call__` is pure delegation — no hidden
-    conversion, no registration-time signature reflection. Every
-    analysis accepts the canonical cells union and normalises at
-    its own entry, so the probe receives exactly the object shape
-    the caller passed, in both directions."""
-    from corroborate._internals.polars import as_rows
+    conversion, no registration-time signature reflection. The
+    analysis takes a plain DataFrame; the probe receives exactly
+    the frame the caller passed, and a rows-holding caller reaches
+    the same result through the one entry boundary
+    (`cells_to_dataframe`)."""
     from corroborate.bridge.analysis import Analysis, analysis
 
     @analysis
-    def _union_probe(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
-    ) -> tuple[str, int]:
-        if isinstance(cells, pl.DataFrame):
-            return ('dataframe', cells.height)
-        return ('rows', len(list(cells)))
-
-    @analysis
-    def _normalising_probe(
-        cells: pl.DataFrame | Iterable[Mapping[str, object]],
-    ) -> int:
-        return len(list(as_rows(cells)))
+    def _frame_probe(
+        cells: pl.DataFrame,
+    ) -> tuple[int, int]:
+        return (cells.height, cells.width)
 
     df = pl.DataFrame({'a': [1, 2, 3]})
-    assert _union_probe(df) == ('dataframe', 3)
-    assert _union_probe([{'a': 1}]) == ('rows', 1)
+    assert _frame_probe(df) == (3, 1)
     # `.fn` preserves the wrapped function's positional-or-keyword
     # first parameter instead of falsely exposing it as positional-only.
-    assert _union_probe.fn(cells=df) == ('dataframe', 3)
-    # The entry normalisation makes both shapes equivalent for a
-    # row-consuming body — the convention the registry-wide guard
+    assert _frame_probe.fn(cells=df) == (3, 1)
+    # A rows-holding caller converts once at the boundary and gets
+    # the identical answer — the shape the registry-wide guard
     # below pins for every production analysis.
-    assert _normalising_probe(df) == 3
-    assert _normalising_probe(df.to_dicts()) == 3
+    assert _frame_probe(cells_to_dataframe(df.to_dicts())) == (3, 1)
 
-    # Backward-compatible public annotation: the original two
-    # arguments remain cells/result; ParamSpec is optional third.
-    legacy: Analysis[
-        pl.DataFrame | Iterable[Mapping[str, object]], tuple[str, int]
-    ] = _union_probe
-    assert legacy(df) == ('dataframe', 3)
+    # Public annotation spelling: cells/result generic arguments,
+    # ParamSpec optional third.
+    typed: Analysis[pl.DataFrame, tuple[int, int]] = _frame_probe
+    assert typed(df) == (3, 1)
 
 
 def test_analysis_call_preserves_wrapped_signature_statically() -> None:
@@ -1155,7 +1144,7 @@ def test_analysis_call_preserves_wrapped_signature_statically() -> None:
         if c.get('env_name') == 'TestEnv'
     ]
     result = paired_g(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm=_TREATMENT_KEY,
         baseline_arm=_BASELINE_KEY,
         pair_by=('seed',),
@@ -1167,13 +1156,14 @@ def test_analysis_call_preserves_wrapped_signature_statically() -> None:
 
 def test_analysis_registration_rejects_noncanonical_cells() -> None:
     """`@analysis` is the enforcement point for the canonical cells
-    contract: a first parameter that does not spell the union fails
-    registration with an instructive TypeError — at import time,
-    never as a silent mis-shape at call time. Missing annotations
-    fail the same way."""
+    contract: the first parameter must be a plain `pl.DataFrame` —
+    a rows annotation, the retired union spelling, and a missing
+    annotation all fail registration with an instructive
+    TypeError at import time, never as a silent mis-shape at call
+    time; the plain-DataFrame spelling registers."""
     from corroborate.bridge.analysis import analysis
 
-    with pytest.raises(TypeError, match='canonical union'):
+    with pytest.raises(TypeError, match='spelled literally'):
 
         @analysis
         def _rows_only_probe(
@@ -1181,13 +1171,16 @@ def test_analysis_registration_rejects_noncanonical_cells() -> None:
         ) -> int:
             return len(list(cells))
 
-    with pytest.raises(TypeError, match='canonical union'):
+    with pytest.raises(TypeError, match='spelled literally'):
 
         @analysis
-        def _frame_only_probe(cells: pl.DataFrame) -> int:
-            return cells.height
+        def _union_probe(
+            cells: pl.DataFrame | Iterable[Mapping[str, object]],
+        ) -> int:
+            del cells
+            return 0
 
-    with pytest.raises(TypeError, match='canonical union'):
+    with pytest.raises(TypeError, match='spelled literally'):
 
         @analysis
         def _unannotated_probe(cells) -> int:  # pyright: ignore[reportMissingParameterType]
@@ -1195,7 +1188,7 @@ def test_analysis_registration_rejects_noncanonical_cells() -> None:
             return 0
 
 
-def test_every_registered_analysis_accepts_the_cells_union() -> None:
+def test_every_registered_analysis_takes_a_plain_dataframe() -> None:
     """Registry-wide proof that the shipped analysis surface passed
     the registration gate: every `corroborate.analyses` submodule is
     imported EXPLICITLY here (pkgutil walk), so the check does not
@@ -1232,11 +1225,14 @@ def test_every_registered_analysis_accepts_the_cells_union() -> None:
         )
         # Name-agnostic: the cells argument is positional-first by
         # contract but may be semantically named (`panel`, …).
-        if 'pl.DataFrame | ' not in str(first_param):
+        # `from __future__ import annotations` keeps the
+        # annotation a string, so its repr carries quotes.
+        annotation = str(first_param).split(': ', 1)[-1].strip("'\"")
+        if annotation != 'pl.DataFrame':
             offenders.append(f'{name}: {first_param}')
     assert not offenders, (
-        'analyses whose cells parameter does not declare the '
-        f'canonical union: {offenders}'
+        'analyses whose cells parameter is not a plain '
+        f'pl.DataFrame: {offenders}'
     )
 
 

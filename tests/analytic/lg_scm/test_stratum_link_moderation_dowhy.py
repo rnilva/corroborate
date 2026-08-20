@@ -35,6 +35,7 @@ from corroborate.analyses.link.stratum_link_moderation_dowhy import (
     stratum_link_moderation_dowhy,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -117,7 +118,7 @@ def test_stratum_link_moderation_recovers_interaction_coefficient() -> None:
     mean_seeds(X_avg) noise, ~1e-3), but recovery is precise."""
     cells = _build_cells()
     result = stratum_link_moderation_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,
@@ -156,7 +157,7 @@ def test_stratum_link_moderation_no_moderation_under_homogeneous_link() -> None:
     interaction's contribution to outcome variance is null."""
     rows = _build_cells(beta_zy_below=1.5, beta_zy_above=1.5)
     result = stratum_link_moderation_dowhy.fn(
-        rows,
+        cells_to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,
@@ -182,7 +183,7 @@ def test_stratum_link_moderation_all_envs_below_threshold_returns_empty() -> Non
     # All envs have mu_x < 100 → all below the threshold.
     cells = _build_cells()
     result = stratum_link_moderation_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,
@@ -201,7 +202,7 @@ def test_stratum_link_moderation_placebo_destroys_signal() -> None:
     interaction → 0 → refuted ATE near 0, drift ≈ structural."""
     cells = _build_cells()
     result = stratum_link_moderation_dowhy.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,

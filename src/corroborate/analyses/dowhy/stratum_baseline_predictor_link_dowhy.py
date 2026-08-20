@@ -35,12 +35,11 @@ verdict helpers (`dowhy_backdoor_verdict`, `dowhy_placebo_verdict`,
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
 from corroborate.analyses._dowhy_internal import backdoor_with_refutations
 from corroborate.analyses.dowhy import (
     BackdoorResult,
@@ -101,7 +100,7 @@ def _nan_refutation(
 
 @analysis
 def stratum_baseline_predictor_link_dowhy(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -137,8 +136,6 @@ def stratum_baseline_predictor_link_dowhy(
 
     Empty panel (no stratum survives filters) yields a
     NaN-everywhere result."""
-    cells = as_rows(cells)
-    cells_list = list(cells)
     treatment_col = 'v_pred'
     outcome_col = 'd_out'
     measurables_for_panel: tuple[str, ...] = (
@@ -146,7 +143,7 @@ def stratum_baseline_predictor_link_dowhy(
         else (predictor_col, target_col)
     )
     panel = stratum_panel.fn(
-        cells_list,
+        cells,
         measurables=measurables_for_panel,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
@@ -162,7 +159,7 @@ def stratum_baseline_predictor_link_dowhy(
         env_idx = None
     for i, stratum_id in enumerate(panel.strata):
         # Match legacy semantics: require ≥ `min_seeds_per_arm`
-        # FINITE-VALUE cells for predictor (on baseline) and
+        # FINITE-VALUE rows for predictor (on baseline) and
         # target (on both arms) before computing means.
         n_b_pred = panel.n_baseline_per_measurable[predictor_col][i]
         n_t_target = panel.n_treatment_per_measurable[target_col][i]

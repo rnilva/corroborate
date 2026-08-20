@@ -51,6 +51,7 @@ from corroborate_rl.tabular import (
     hasselt_n2_max_bias,
     max_greedify_tabular,
 )
+from corroborate.data import cells_to_dataframe
 
 
 def _generate_hasselt_paired_cells(
@@ -143,7 +144,7 @@ def test_verdict_held_when_ddqn_predicted_to_reduce_gap_at_adequate_power() -> N
         n_pairs=n_pairs, sigma=sigma, n_actions=2,
     )
     result = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='ddqn',
         baseline_arm='vanilla',
         pair_by=('seed',),
@@ -184,7 +185,7 @@ def test_verdict_power_insufficient_when_effect_is_below_mde() -> None:
         n_pairs=n_pairs, sigma=sigma, n_actions=2,
     )
     result = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='ddqn',
         baseline_arm='vanilla',
         pair_by=('seed',),
@@ -219,7 +220,7 @@ def test_verdict_sign_flip_on_wrong_direction_prediction() -> None:
         n_pairs=n_pairs, sigma=sigma, n_actions=2,
     )
     result = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='ddqn',
         baseline_arm='vanilla',
         pair_by=('seed',),
