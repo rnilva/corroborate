@@ -16,7 +16,7 @@ dependencies = [
     "jax>=0.4.30; sys_platform != 'linux'",
     "jaxlib>=0.4.30",
     "optax>=0.2.0",
-    "gymnax>=0.0.8",
+    "gymnax>=0.0.8,<1.0",
     "pgx>=2.0.0",           # MinAtar Seaquest backend (Seaquest absent from gymnax MinAtar)
     "pyyaml>=6.0",          # `dqn.yaml_sweep` + framework `load_hypothesis`
 ]
