@@ -160,8 +160,8 @@ class GateContext:
 
     `leaves` — the external record's registered configuration
     columns (derive from the record's own config artifacts, e.g.
-    `corroborate.data.config_columns` /
-    `corroborate_rl.sb3.sb3_config_columns`). The registry is
+    `corroborate.data.config_columns`, or the `config/*` keys a
+    Logger-style record carries). The registry is
     authoritative about WHAT WAS CONFIGURED: a value effect must
     source on registered columns, and a registered column that
     moves with the contrast is a confound. It does not attest

@@ -105,15 +105,17 @@ uv run corroborate hypothesis experiments.findings.<name> --render evidence.svg
 Training runs produced by other codebases evaluate without
 modifying the training code, and without any corroborate-specific
 files on the producer's side. For stable-baselines3,
-`corroborate_rl.sb3.load_sb3_runs` reads the artifacts SB3
-already writes — `model.save()` checkpoint zips plus
-`EvalCallback` `evaluations.npz` — into a `Panel`: one row per
-run in `panel.cells` (configuration flattened to dotted-path
-columns, per-checkpoint outcome aggregates derived), plus the
-two facts a bare frame cannot carry — the configuration registry
-(`leaves`) and provenance (`sources`). For runs logged in your
-own format, `corroborate.data.load_runs` reads a directory of
-plain JSON records into the same shape. Both are readers, not
+`corroborate_rl.sb3_logger.load_sb3_logger_runs` reads the
+output SB3's own `Logger` writes (`progress.json` /
+`progress.csv`) into a `Panel`: one row per log in
+`panel.cells` — `config/*` keys the producer recorded become
+scalar columns and the configuration registry (`leaves`), every
+other key stays a record: an array column with one slot per
+Logger dump, aligned by `time/total_timesteps` — plus provenance
+(`sources`). Keys are kept verbatim; nothing is renamed, reduced,
+or classified at load time. For runs logged in your own format,
+`corroborate.data.load_runs` reads a directory of plain JSON
+records into the same Panel shape. Both are readers, not
 gatekeepers.
 
 The claim is an ordinary, data-independent `@claim_bridge`
@@ -124,29 +126,32 @@ occur in a particular DataFrame:
 
 ```python
 GAMMA_EFFECT = DoEffect.from_values(
-    source='gamma',
+    source='config/gamma',
     reference=0.80,
     treatment=0.99,
 )
 
 @claim_bridge(
     source=GAMMA_EFFECT,
-    target='return_mean',
+    target='eval_reward_at_25k',   # a claim-registered @measurable
     tier=Tier.INTERVENTIONAL,
-    pair_by=('seed',),
-    scope=pl.col('env_id') == 'CartPole-v1',
+    pair_by=('config/seed',),
+    scope=pl.col('config/env_id') == 'CartPole-v1',
     predicted_direction='a_gt_b',
     ...
 )
 def higher_gamma_improves_return(...) -> ...: ...
 
-panel = load_runs('path/to/runs')
+panel = load_sb3_logger_runs('path/to/runs')
 result = evaluate(higher_gamma_improves_return, panel)
 ```
 
 The declared reference and treatment values map to the symbolic
 arm identities `baseline` and `treatment`; their order is never
-inferred from observed support or formatted value labels. Other
+inferred from observed support or formatted value labels. The
+target names a measurable the claim module registers — the
+horizon is the claim's declaration, computed per run from the
+record arrays, never a column the reader pre-baked. Other
 values of `gamma` remain valid rows in the growing record but are
 outside this particular contrast, so the same Panel can
 accumulate additional conditions — and other claims — over one
@@ -182,12 +187,13 @@ both facts for repeated use.)
 
 [`examples/sb3_demo/`](examples/sb3_demo/) walks through this
 with stable-baselines3 DQN: a tutorial-shaped training script
-with zero recording code, loading of SB3's own artifacts,
-descriptive exploration in plain polars, and evaluation of an
-executable claim module through the same bridge path used by
-native studies. It runs on CPU in a few minutes, and artifacts
-from a real run are committed so the analysis half can be run
-without training.
+whose one line of contact with the analysis is a `config/*`
+record loop, loading of the Logger's own files, descriptive
+exploration in plain polars, and evaluation of an executable
+claim module through the same bridge path used by native
+studies. It runs on CPU in a few minutes, and logs from a real
+run are committed so the analysis half can be run without
+training.
 
 ## Repository layout
 

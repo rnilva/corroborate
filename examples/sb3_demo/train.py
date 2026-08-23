@@ -5,19 +5,20 @@
 #   "gymnasium>=0.29",
 # ]
 # ///
-"""Ordinary SB3 training — nothing else.
+"""Ordinary SB3 training, logged through SB3's own Logger.
 
-This script is the *user's* side of the boundary, and it is
-exactly what an SB3 tutorial writes: construct DQN, train with an
-`EvalCallback`, save the model. No corroborate imports, no
-recording code, no extra files. What lands on disk is SB3's own
-output:
+This script is the *producer's* side of the boundary: construct
+DQN, point its Logger at a folder, train with an `EvalCallback`.
+The one line of contact with the analysis side is the loop that
+records the constructor arguments under ``config/`` — the
+producer stating what was configured, next to the records SB3
+already logs (``rollout/*``, ``train/*``, ``eval/*``,
+``time/*``). What lands on disk is the Logger's own output:
 
     runs/
-      <run>/model.zip           model.save()
-      <run>/evaluations.npz     EvalCallback's evaluation log
+      <run>/progress.json     one record per Logger dump()
 
-corroborate's side (`analyze.py`) reads those artifacts directly.
+corroborate's side (`analyze.py`) reads those files directly.
 
 Run (uv resolves the SB3 deps from the header, ~1 min/run on CPU):
 
@@ -31,10 +32,10 @@ from pathlib import Path
 import gymnasium as gym
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.logger import configure
 from stable_baselines3.common.monitor import Monitor
 
 GAMMAS = (0.99, 0.80)
-ENV_ID = 'CartPole-v1'
 OUT = Path(__file__).parent / 'runs'
 
 
@@ -47,33 +48,35 @@ def main() -> None:
     for gamma in GAMMAS:
         for seed in range(args.seeds):
             run_dir = OUT / f'gamma{gamma * 100:03.0f}-s{seed}'
-            run_dir.mkdir(parents=True, exist_ok=True)
-
-            eval_env = Monitor(gym.make(ENV_ID))
-            eval_env.reset(seed=1_000 + seed)
-
-            print(f'training {run_dir.name} (gamma={gamma}) ...',
-                  flush=True)
-            model = DQN(
-                'MlpPolicy', ENV_ID, verbose=0,
-                gamma=gamma, seed=seed,
+            config = dict(
+                env_id='CartPole-v1', gamma=gamma, seed=seed,
                 learning_rate=1e-3, buffer_size=50_000,
                 learning_starts=1_000, train_freq=4,
                 target_update_interval=500,
                 exploration_fraction=0.2,
             )
+
+            print(f'training {run_dir.name} (gamma={gamma}) ...',
+                  flush=True)
+            env_id = config.pop('env_id')
+            model = DQN('MlpPolicy', env_id, verbose=0, **config)
+            model.set_logger(configure(str(run_dir), ['json']))
+            model.logger.record('config/env_id', env_id)
+            for key, value in config.items():
+                model.logger.record(f'config/{key}', value)
+
+            eval_env = Monitor(gym.make(env_id))
+            eval_env.reset(seed=1_000 + seed)
             model.learn(
                 total_timesteps=args.steps,
                 callback=EvalCallback(
                     eval_env,
-                    log_path=str(run_dir),
                     eval_freq=args.steps // 5,
                     n_eval_episodes=5,
                     deterministic=True,
                     verbose=0,
                 ),
             )
-            model.save(run_dir / 'model')
     print(f'runs written to {OUT}')
 
 
