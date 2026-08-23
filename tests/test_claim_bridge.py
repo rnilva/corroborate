@@ -582,6 +582,25 @@ def test_contrast_isolation_warns_on_an_unregistered_rider() -> None:
     assert 'return_mean' not in rider.message
 
 
+def test_contrast_isolation_sees_a_per_dump_logged_rider() -> None:
+    """A knob logged once per Logger dump (a record array)
+    normalises to its distinct-value set, so constant arrays of
+    different lengths read as one value and the rider scan sees
+    the knob move with the contrast; a genuine trajectory varies
+    within each arm and drops out like any scalar outcome."""
+    cells = _contrast_cells()
+    for i, cell in enumerate(cells):
+        knob = 5e-4 if cell['gamma'] == 0.99 else 1e-3
+        cell['train/learning_rate'] = [knob] * (3 + i)
+        cell['train/loss'] = [float(i), float(i) + 0.5]
+    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    rider = next(
+        w for w in out.warnings if w.gate_name == 'contrast_isolation'
+    )
+    assert 'train/learning_rate' in rider.message
+    assert 'train/loss' not in rider.message
+
+
 def test_contrast_isolation_balances_registered_leaves_per_pair() -> None:
     """A setting may vary between seeds provided each matched pair
     shares it."""

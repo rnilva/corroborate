@@ -9,8 +9,9 @@ records, all columns — so this reader is mechanical:
 
 - **One log → one row.** A progress file is one producer log;
   it becomes one cell. Time lives *inside* the row: every record
-  key becomes an array column with one slot per dump (null where
-  the key wasn't recorded at that dump), aligned by the
+  key becomes an array column with one slot per dump (NaN for
+  numeric keys, null otherwise, where the key wasn't recorded
+  at that dump), aligned by the
   `time/total_timesteps` column — the same wide shape the native
   trace store uses (`TraceRow` array leaves + index arrays).
 - **Keys are kept verbatim.** The reader renames nothing and
@@ -37,6 +38,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -59,20 +61,26 @@ type CellValue = (
 )
 
 
+_INT_TEXT = re.compile(r'-?\d+')
+_FLOAT_TEXT = re.compile(r'-?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?')
+
+
 def _parse_csv_value(text: str) -> MeasurementLeaf | None:
-    """CSV erased the types; recover them mechanically. Empty
-    string is how the CSV writer renders a key absent from that
-    dump — read it back as absence, not as a value."""
+    """CSV erased the types; recover them mechanically — and
+    narrowly. Empty string is how the CSV writer renders a key
+    absent from that dump: read it back as absence, not a value.
+    Only unambiguous decimal literals become numbers; 'nan',
+    'inf', '1_000', 'True' stay the strings the file carries
+    (int()/float() would silently retype them, and a NaN smuggled
+    into a config value would defeat the agreement check's
+    NaN-tolerance)."""
     if text == '':
         return None
-    try:
+    if _INT_TEXT.fullmatch(text):
         return int(text)
-    except ValueError:
-        pass
-    try:
+    if _FLOAT_TEXT.fullmatch(text):
         return float(text)
-    except ValueError:
-        return text
+    return text
 
 
 def read_progress(path: Path | str) -> list[dict[str, MeasurementLeaf]]:
@@ -109,7 +117,16 @@ def read_progress(path: Path | str) -> list[dict[str, MeasurementLeaf]]:
             dumps.append(dump)
     else:
         with file.open(newline='') as handle:
-            for row in csv.DictReader(handle):
+            for n, row in enumerate(csv.DictReader(handle), start=2):
+                if None in row:
+                    # DictReader parks a long row's extra fields
+                    # under the None restkey — a truncated or
+                    # hand-edited file; diagnose, don't crash on
+                    # an int(list) deep in the parse.
+                    raise ValueError(
+                        f'sb3_logger: {file}:{n} has more fields '
+                        f'than the header — ragged csv row',
+                    )
                 dumps.append({
                     key: parsed
                     for key, text in row.items()
@@ -145,15 +162,29 @@ def _config_scalar(
 def _record_array(
     key: str, dumps: Sequence[Mapping[str, MeasurementLeaf]], where: str,
 ) -> CellValue:
-    """One record key → one array slot per dump, null where the
-    key wasn't recorded. Mixed int/float promotes to float
-    (lossless); any other type mixture is a producer bug and
-    raises rather than silently stringifying."""
+    """One record key → one array slot per dump. Mixed int/float
+    promotes to float (lossless); any other type mixture is a
+    producer bug and raises rather than silently stringifying.
+
+    Padding for absent dumps: numeric arrays pad with NaN, so
+    they stay numpy-consumable end-to-end (the reductions layer's
+    `from_key` does a bare `np.asarray`; a None would force
+    object dtype and break every reduction). NaN already IS the
+    framework's "no real value here" reading for floats
+    (`compute_missing_columns` treats null and NaN alike). An
+    all-present int array stays int; bool/str arrays pad with
+    null — no numeric missing-marker exists for them."""
     values = [dump.get(key) for dump in dumps]
     present = [v for v in values if v is not None]
     kinds = {type(v) for v in present}
-    if kinds == {int, float}:
-        return [None if v is None else float(v) for v in values]
+    if kinds <= {int, float}:
+        if kinds == {int} and len(present) == len(values):
+            return [v for v in values if isinstance(v, int)]
+        floats: list[float | None] = [
+            float(v) if isinstance(v, (int, float)) else float('nan')
+            for v in values
+        ]
+        return floats
     if len(kinds) > 1:
         raise ValueError(
             f'sb3_logger: {where}: record key {key!r} mixes types '
@@ -161,10 +192,6 @@ def _record_array(
         )
     if kinds == {bool}:
         return [v if isinstance(v, bool) else None for v in values]
-    if kinds == {int}:
-        return [v if isinstance(v, int) else None for v in values]
-    if kinds == {float}:
-        return [v if isinstance(v, float) else None for v in values]
     return [v if isinstance(v, str) else None for v in values]
 
 
@@ -199,6 +226,28 @@ def progress_columns(
         else:
             columns[key] = _record_array(key, dumps, where)
     return columns, frozenset(registry)
+
+
+def _column_kind(value: 'CellValue') -> str | None:
+    """The scalar kind a column carries — a config scalar's own
+    type, a record array's element type — or None when the array
+    is all-missing. int and float are one numeric kind: polars
+    upcasts them losslessly."""
+    if isinstance(value, list):
+        for element in value:
+            if element is None:
+                continue
+            if isinstance(element, float) and math.isnan(element):
+                continue
+            return (
+                'numeric' if not isinstance(element, bool)
+                and isinstance(element, (int, float))
+                else type(element).__name__
+            )
+        return None
+    if not isinstance(value, bool) and isinstance(value, (int, float)):
+        return 'numeric'
+    return type(value).__name__
 
 
 def _progress_files(root: Path) -> list[tuple[str, Path]]:
@@ -246,7 +295,16 @@ def load_sb3_logger_runs(
     corpus_name = corpus if corpus is not None else root_path.name
     rows: list[dict[str, CellValue]] = []
     registry: set[str] = set()
+    seen_ids: set[str] = set()
+    kind_by_column: dict[str, tuple[str, str]] = {}
     for row_id, file in _progress_files(root_path):
+        if row_id in seen_ids:
+            raise ValueError(
+                f'sb3_logger: duplicate row id {row_id!r} '
+                f'({file}) — a subdirectory shares the walk '
+                f"root's name; rename one so cell ids stay unique",
+            )
+        seen_ids.add(row_id)
         columns, leaves = progress_columns(
             read_progress(file),
             config_prefix=config_prefix,
@@ -258,6 +316,23 @@ def load_sb3_logger_runs(
                     f'sb3_logger: {file} records the reserved key '
                     f'{reserved!r}',
                 )
+        # Cross-file kind agreement: polars' diagonal concat
+        # unifies conflicting list dtypes to List(String)
+        # SILENTLY — a bool logged by one run and a 'True' string
+        # by another (a json/csv mixed folder) must be a loud
+        # producer error, never a stringified column.
+        for key, value in columns.items():
+            kind = _column_kind(value)
+            if kind is None:
+                continue
+            earlier = kind_by_column.get(key)
+            if earlier is not None and earlier[0] != kind:
+                raise ValueError(
+                    f'sb3_logger: column {key!r} is {earlier[0]} '
+                    f'in {earlier[1]} but {kind} in {file} — '
+                    f'mixed-type records do not pool',
+                )
+            kind_by_column.setdefault(key, (kind, str(file)))
         rows.append({'id': row_id, 'corpus': corpus_name, **columns})
         registry |= leaves
     return Panel.from_dataframe(

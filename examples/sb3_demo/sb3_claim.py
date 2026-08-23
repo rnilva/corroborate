@@ -17,6 +17,7 @@ different measurable; the record itself never privileges one.
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import TypeIs
 
@@ -60,10 +61,21 @@ def eval_reward_at_25k(record: Mapping[str, object]) -> float:
     rewards = record.get('eval/mean_reward')
     if not _is_list(steps) or not _is_list(rewards):
         return float('nan')
-    for step, reward in zip(steps, rewards):
-        if step == EVAL_HORIZON and _is_number(reward):
-            return float(reward)
-    return float('nan')
+    matches = [
+        float(reward)
+        for step, reward in zip(steps, rewards)
+        if step == EVAL_HORIZON and _is_number(reward)
+        and math.isfinite(reward)
+    ]
+    if not matches:
+        return float('nan')
+    if any(value != matches[0] for value in matches[1:]):
+        # Two dumps at the horizon with different values (a
+        # crash-resume that re-ran the final eval, concatenated
+        # logs): there is no single fact at this horizon — missing
+        # evidence, not an arbitrary pick.
+        return float('nan')
+    return matches[0]
 
 
 GAMMA_EFFECT = DoEffect.from_values(

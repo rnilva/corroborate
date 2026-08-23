@@ -59,8 +59,9 @@ bare frame cannot carry: the configuration registry and
 provenance. The reader is mechanical. Keys are kept verbatim;
 `config/*` keys — the producer's own statement of what was
 configured — become scalar columns and the registry; every other
-key stays a record: an array column with one slot per dump, null
-where the key wasn't recorded, aligned by `time/total_timesteps`
+key stays a record: an array column with one slot per dump —
+NaN for numeric keys, null otherwise, where the key wasn't
+recorded — aligned by `time/total_timesteps`
 (itself just a record column). Nothing is renamed, reduced, or
 classified at load time — no terminal means, no AUC, no "outcome"
 column role. What one run reached is that run's own record;
@@ -174,9 +175,10 @@ moves with gamma inside a seed pair is a co-varied knob (a
 confound — BLOCK, unless it was assigned jointly, in which case
 the declaration widens to
 `from_values(reference={...}, treatment={...})`), and an
-unregistered scalar column moving with the contrast warns — a
-label is harmless, an unlogged knob is not, and only the author
-can say which. `contrast_present` blocks when a declared arm is
+unregistered column moving with the contrast warns — a record
+array counts by its distinct values, so a knob logged per dump
+instead of under `config/` is still seen. A label is harmless,
+an unlogged knob is not, and only the author can say which. `contrast_present` blocks when a declared arm is
 absent from the record, and `pair_completeness` warns when a
 seed is missing one condition. A blocked claim gets the verdict
 `INADMISSIBLE` — quality problems land on the verdict record,

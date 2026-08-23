@@ -583,9 +583,24 @@ def no_predicted_direction(
 
 def _normalised(value: object) -> object:
     """NaN reads as missing for constancy checks — two NaNs must
-    not count as 'different values' (float NaN != NaN)."""
+    not count as 'different values' (float NaN != NaN). A list
+    (a record array — e.g. a knob logged once per Logger dump)
+    normalises to the frozenset of its distinct non-missing
+    element values: a constant-valued array reads as that one
+    value regardless of dump count, so a knob logged per-dump
+    instead of as configuration stays visible to the isolation
+    checks, while a genuine trajectory (many distinct values)
+    varies within an arm and drops out of the rider scan the
+    same way scalar outcomes do."""
     if isinstance(value, float) and math.isnan(value):
         return None
+    if isinstance(value, list):
+        return frozenset(
+            normalised
+            for element in value
+            for normalised in (_normalised(element),)
+            if normalised is not None
+        )
     return value
 
 
@@ -740,8 +755,9 @@ def contrast_isolation(
                     for rows in arms
                 ]
             except TypeError:
-                # Unhashable cell values (list-typed trajectory /
-                # trace columns) aren't configuration; skip.
+                # Still-unhashable cell values (dict-typed) are
+                # not configuration; skip. Lists were normalised
+                # to distinct-value frozensets above.
                 continue
             constant_within = all(len(values) == 1 for values in per_arm)
             if constant_within and len(set().union(*per_arm)) > 1:

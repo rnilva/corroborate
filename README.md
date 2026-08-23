@@ -115,8 +115,9 @@ Logger dump, aligned by `time/total_timesteps` — plus provenance
 (`sources`). Keys are kept verbatim; nothing is renamed, reduced,
 or classified at load time. For runs logged in your own format,
 `corroborate.data.load_runs` reads a directory of plain JSON
-records into the same Panel shape. Both are readers, not
-gatekeepers.
+records into a Panel of derived per-run scalars — its own
+layout contract, distinct from the Logger reader's verbatim
+record arrays. Both are readers, not gatekeepers.
 
 The claim is an ordinary, data-independent `@claim_bridge`
 module — the same shape as a native bridge, with no external

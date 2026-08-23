@@ -8,6 +8,7 @@ zero-semantics walk."""
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,15 @@ def test_read_progress_csv_round_trips_absence_and_numbers(
     assert dumps[1] == {'rollout/ep_rew_mean': 16.9, 'train/loss': 0.41}
 
 
+def _pattern(values: object) -> list[object]:
+    """NaN-tolerant comparison shape: NaN → the marker 'nan'."""
+    assert isinstance(values, list)
+    return [
+        'nan' if isinstance(v, float) and math.isnan(v) else v
+        for v in values
+    ]
+
+
 def test_progress_columns_splits_config_from_records() -> None:
     columns, registry = progress_columns(
         [{k: v for k, v in d.items() if isinstance(v, (int, float))}
@@ -69,9 +79,11 @@ def test_progress_columns_splits_config_from_records() -> None:
     )
     assert registry == {'config/gamma', 'config/seed'}
     assert columns['config/gamma'] == 0.99  # scalar, not array
-    # Record arrays align dump-by-dump, null where not recorded.
-    assert columns['train/loss'] == [None, None, 0.41]
-    assert columns['eval/mean_reward'] == [None, None, 168.6]
+    # Record arrays align dump-by-dump; numeric arrays pad the
+    # unrecorded dumps with NaN (numpy-consumable end-to-end),
+    # and an all-present int array stays int.
+    assert _pattern(columns['train/loss']) == ['nan', 'nan', 0.41]
+    assert _pattern(columns['eval/mean_reward']) == ['nan', 'nan', 168.6]
     assert columns['time/total_timesteps'] == [59, 135, 2000]
 
 
@@ -136,4 +148,51 @@ def test_load_rejects_reserved_key(tmp_path: Path) -> None:
 
 def test_load_raises_on_empty_root(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match='no progress'):
+        _ = load_sb3_logger_runs(tmp_path)
+
+
+def test_csv_number_recovery_is_narrow(tmp_path: Path) -> None:
+    """'nan', 'inf', '1_000', 'True' stay the strings the file
+    carries — int()/float() leniency would retype them, and a
+    smuggled NaN would defeat the config agreement check."""
+    file = tmp_path / 'progress.csv'
+    _ = file.write_text(
+        'config/tag,a,b,c\n'
+        'nan,inf,1_000,True\n',
+    )
+    dumps = read_progress(file)
+    assert dumps[0] == {'config/tag': 'nan', 'a': 'inf',
+                        'b': '1_000', 'c': 'True'}
+
+
+def test_ragged_csv_row_raises_with_location(tmp_path: Path) -> None:
+    file = tmp_path / 'progress.csv'
+    _ = file.write_text(
+        'a,b\n'
+        '1,2,3\n',
+    )
+    with pytest.raises(ValueError, match='ragged csv row'):
+        _ = read_progress(file)
+
+
+def test_duplicate_row_id_raises(tmp_path: Path) -> None:
+    """A first-level subdirectory sharing the walk root's name
+    would silently produce two cells with one id — downstream
+    id-joins fan out — so the collision is loud."""
+    root = tmp_path / 'runs'
+    _write_json(root / 'progress.json', [{'train/loss': 0.5}])
+    _write_json(root / 'runs' / 'progress.json', [{'train/loss': 0.7}])
+    with pytest.raises(ValueError, match='duplicate row id'):
+        _ = load_sb3_logger_runs(root)
+
+
+def test_mixed_kind_across_files_raises(tmp_path: Path) -> None:
+    """polars' diagonal concat unifies conflicting list dtypes to
+    List(String) silently; a bool logged by one run and a 'True'
+    string by another (a json/csv mixed folder) must be a loud
+    producer error instead."""
+    _write_json(tmp_path / 'a' / 'progress.json', [{'flag': True}])
+    _ = (tmp_path / 'b').mkdir()
+    _ = (tmp_path / 'b' / 'progress.csv').write_text('flag\nTrue\n')
+    with pytest.raises(ValueError, match="column 'flag'"):
         _ = load_sb3_logger_runs(tmp_path)

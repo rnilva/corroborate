@@ -46,8 +46,9 @@ print(f'registry: {", ".join(sorted(panel.leaves))}')
 # trajectory — not just any single point — is explorable directly.
 curve = (
     df.select('config/gamma', 'time/total_timesteps', 'eval/mean_reward')
-    .explode('time/total_timesteps', 'eval/mean_reward', empty_as_null=True)
-    .drop_nulls('eval/mean_reward')
+    .filter(pl.col('eval/mean_reward').is_not_null())
+    .explode('time/total_timesteps', 'eval/mean_reward')
+    .filter(pl.col('eval/mean_reward').is_not_nan())
     .sort('time/total_timesteps')
     .group_by('config/gamma', 'time/total_timesteps', maintain_order=True)
     .agg(pl.col('eval/mean_reward').mean().round(1))
