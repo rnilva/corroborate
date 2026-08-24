@@ -149,6 +149,39 @@ def test_missing_static_column_is_null_padded_before_panel() -> None:
     assert panel_inputs == [[]]
 
 
+def test_late_appearing_column_reaches_the_panel_builder() -> None:
+    """Regression: `resolve` must materialise through the entry
+    boundary's full-scan inference. A measurable column first
+    appearing after row 100 (heterogeneous diagonal corpora) was
+    silently dropped by the bare `pl.from_dicts` default — the
+    panel builder then stratified on a frame missing the column
+    and `keep` judged the wrong strata."""
+    received: list[pl.DataFrame] = []
+
+    @analysis
+    def _late_column_panel(
+        cells: pl.DataFrame,
+    ) -> StratumPanel:
+        received.append(cells)
+        return _empty_panel(list(to_dicts(cells)))
+
+    scope = scope_from_panel(
+        panel_analysis=_late_column_panel,
+        panel_kwargs={},
+        keep=lambda _panel, _index: True,
+    )
+    rows: list[dict[str, object]] = [
+        {'env_name': 'A', 'x': float(i)} for i in range(120)
+    ]
+    for i, row in enumerate(rows[110:]):
+        row['metric'] = float(i)
+    _ = scope.resolve(rows)
+    assert len(received) == 1
+    frame = received[0]
+    assert 'metric' in frame.columns
+    assert frame['metric'].drop_nulls().len() == 10
+
+
 def test_generator_cells_survive_deferred_scope_and_analysis() -> None:
     @analysis
     def _count_deferred_cells(

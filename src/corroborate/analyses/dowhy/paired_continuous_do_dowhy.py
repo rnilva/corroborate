@@ -30,18 +30,14 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.data.kernel import cells_to_dataframe
 from corroborate.analyses.dowhy import (
     BackdoorResult, RefutationResult,
-    backdoor_ate as _backdoor_ate_fn,
-    placebo_refutation as _placebo_fn,
-    random_common_cause_refutation as _rcc_fn,
 )
 from corroborate.bridge.analysis import analysis
 
@@ -62,7 +58,7 @@ class PairedContinuousDoResult:
 
 
 def _pair_and_extract(
-    cells: list[Mapping[str, object]],
+    cells: Sequence[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -189,7 +185,7 @@ def paired_continuous_do_dowhy(
     and `placebo.refuted_ate ≈ 0` / `random_common_cause.drift`
     small for the refutation gates."""
     rows = _pair_and_extract(
-        list(to_dicts(cells)),
+        to_dicts(cells),
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         treatment_var=treatment_var,
@@ -214,28 +210,27 @@ def paired_continuous_do_dowhy(
         )
 
     dag: list[tuple[str, str]] = [(treatment_var, 'delta_outcome')]
-    pair_df = cells_to_dataframe(rows)
-    backdoor = _backdoor_ate_fn.fn(
-        pair_df,
+    # Rows-level throughout: the derived pair rows go straight to
+    # the DoWhy cores — encoding a frame here would only be
+    # decoded again by each of the three calls.
+    from corroborate.analyses.dowhy.dowhy import (
+        backdoor_ate_rows, run_refuter,
+    )
+    backdoor = backdoor_ate_rows(
+        rows,
         treatment=treatment_var,
         outcome='delta_outcome',
         dag=dag,
         method_name=method_name,
     )
-    placebo = _placebo_fn.fn(
-        pair_df,
-        treatment=treatment_var,
-        outcome='delta_outcome',
-        dag=dag,
-        method_name=method_name,
+    placebo = run_refuter(
+        rows, treatment_var, 'delta_outcome', dag, method_name,
+        refuter_method='placebo_treatment_refuter',
         random_state=random_state,
     )
-    rcc = _rcc_fn.fn(
-        pair_df,
-        treatment=treatment_var,
-        outcome='delta_outcome',
-        dag=dag,
-        method_name=method_name,
+    rcc = run_refuter(
+        rows, treatment_var, 'delta_outcome', dag, method_name,
+        refuter_method='random_common_cause',
         random_state=random_state,
     )
     return PairedContinuousDoResult(

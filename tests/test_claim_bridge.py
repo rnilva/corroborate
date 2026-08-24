@@ -1204,14 +1204,21 @@ def test_analysis_call_passes_cells_through_unchanged() -> None:
     (`cells_to_dataframe`)."""
     from corroborate.bridge.analysis import Analysis, analysis
 
+    received_frames: list[pl.DataFrame] = []
+
     @analysis
     def _frame_probe(
         cells: pl.DataFrame,
     ) -> tuple[int, int]:
+        received_frames.append(cells)
         return (cells.height, cells.width)
 
     df = pl.DataFrame({'a': [1, 2, 3]})
     assert _frame_probe(df) == (3, 1)
+    # Object identity, not just shape: a hidden conversion or
+    # clone inside `__call__` would preserve (height, width) and
+    # still betray "receives exactly the frame the caller passed".
+    assert received_frames[0] is df
     # `.fn` preserves the wrapped function's positional-or-keyword
     # first parameter instead of falsely exposing it as positional-only.
     assert _frame_probe.fn(cells=df) == (3, 1)
@@ -1224,6 +1231,38 @@ def test_analysis_call_passes_cells_through_unchanged() -> None:
     # ParamSpec optional third.
     typed: Analysis[pl.DataFrame, tuple[int, int]] = _frame_probe
     assert typed(df) == (3, 1)
+
+
+def test_evaluate_hands_analyses_the_filtered_frame_itself() -> None:
+    """When no value contrast stamped the gate rows, `evaluate`
+    reuses the frame it already holds — the analyses receive the
+    caller's own DataFrame by identity, not a to_dicts/from_dicts
+    rebuild (the rebuild is paid only when a stamped contrast
+    actually mutated the rows)."""
+    from corroborate.bridge.analysis import analysis
+
+    captured: list[pl.DataFrame] = []
+
+    @analysis
+    def _frame_capture(
+        cells: pl.DataFrame,
+    ) -> int:
+        captured.append(cells)
+        return cells.height
+
+    @claim_bridge(
+        source=INTERVENTION,
+        target='return_mean',
+        direction=Direction.DIRECT,
+        tier=Tier.INTERVENTIONAL,
+    )
+    def _passthrough_probe(_frame_capture: int) -> Verdict:
+        return Verdict.HELD if _frame_capture else Verdict.NO_EFFECT
+
+    df = pl.DataFrame(_synthetic_cells(n_seeds=4))
+    out = evaluate(_passthrough_probe, df)
+    assert out.verdict is Verdict.HELD
+    assert captured and captured[0] is df
 
 
 def test_analysis_call_preserves_wrapped_signature_statically() -> None:

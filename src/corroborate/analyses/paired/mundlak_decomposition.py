@@ -34,6 +34,8 @@ about, rather than mixing aggregations and getting Simpson
 artifacts."""
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -125,10 +127,34 @@ def mundlak_decomposition(
     panel-data target where the predictor has both env-level and
     within-env variation. Forces an explicit choice of which
     level is being claimed about."""
-    rows = to_dicts(panel)
-    panel_list = [dict(p) for p in rows]
+    return mundlak_rows(
+        to_dicts(panel), stratum_key=stratum_key, x_key=x_key,
+        y_key=y_key, se_key=se_key, alpha=alpha,
+        cluster_robust=cluster_robust,
+    )
+
+
+def mundlak_rows(
+    panel_rows: Sequence[Mapping[str, object]],
+    *,
+    stratum_key: str,
+    x_key: str,
+    y_key: str,
+    se_key: str,
+    alpha: float,
+    cluster_robust: bool,
+) -> MundlakResult:
+    """Rows-level core of `mundlak_decomposition` — the in-tree
+    per-burst delegate hands its freshly built panel rows straight
+    here instead of encoding a frame the core would immediately
+    decode; the public `@analysis` wraps it behind the
+    plain-DataFrame boundary."""
+    panel_list = list(panel_rows)
     if not panel_list:
-        raise ValueError('rows must contain at least one observation')
+        raise ValueError(
+            'mundlak_decomposition: empty panel — at least one '
+            'observation is required',
+        )
 
     # Extract typed columns
     strata: list[object] = []
@@ -218,7 +244,7 @@ def mundlak_decomposition(
 
     if cluster_robust:
         # Liang-Zeger CR1 sandwich. Group rows by stratum_id (the
-        # natural cluster for rows data); within each cluster
+        # natural cluster for panel data); within each cluster
         # accumulate (Xᵀ W u)(Xᵀ W u)ᵀ. Final variance is
         # `bread @ meat @ bread` with the standard small-sample
         # correction `G/(G−1) · (n−1)/(n−p)`.

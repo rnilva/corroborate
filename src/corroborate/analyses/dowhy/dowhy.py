@@ -25,7 +25,7 @@ Reproduces FINDINGS.md fourth revision shape:
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -105,10 +105,29 @@ def backdoor_ate(
     """Identify + estimate the ATE of `treatment` on `outcome`
     under `dag`. Returns identified=False when the DAG admits
     no admissible adjustment."""
-    rows = to_dicts(cells)
-    cells_list = list(rows)
+    return backdoor_ate_rows(
+        to_dicts(cells), treatment=treatment, outcome=outcome,
+        dag=dag, method_name=method_name,
+    )
+
+
+def backdoor_ate_rows(
+    rows: 'Sequence[Mapping[str, object]]',
+    *,
+    treatment: str,
+    outcome: str,
+    dag: DAGLike,
+    method_name: str,
+) -> BackdoorResult:
+    """Rows-level core of `backdoor_ate` — deliberately not in
+    `__all__`: in-tree delegates (`backdoor_with_refutations`,
+    the paired/stratum trios) call this (and `run_refuter`)
+    directly so the bundled
+    three-call chain never encodes a polars frame it would
+    immediately decode; the public `@analysis` wraps it behind
+    the plain-DataFrame boundary."""
     df, identified, estimate = backdoor_estimate(
-        cells_list, treatment, outcome, dag, method_name,
+        rows, treatment, outcome, dag, method_name,
     )
     if estimate is None:
         return BackdoorResult(
@@ -133,7 +152,7 @@ def backdoor_ate(
     )
 
 
-def _run_refuter(
+def run_refuter(
     cells: Iterable[Mapping[str, object]],
     treatment: str,
     outcome: str,
@@ -222,7 +241,7 @@ def placebo_refutation(
     explicit different seed to probe sensitivity to the
     synthetic-confounder draw."""
     rows = to_dicts(cells)
-    return _run_refuter(
+    return run_refuter(
         rows, treatment, outcome, dag, method_name,
         refuter_method='placebo_treatment_refuter',
         random_state=random_state,
@@ -253,7 +272,7 @@ def random_common_cause_refutation(
     Deterministic seed 0 locks the synthetic-confounder draw;
     pass a different int to probe sensitivity."""
     rows = to_dicts(cells)
-    return _run_refuter(
+    return run_refuter(
         rows, treatment, outcome, dag, method_name,
         refuter_method='random_common_cause',
         random_state=random_state,

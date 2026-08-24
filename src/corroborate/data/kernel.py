@@ -110,9 +110,12 @@ def cells_to_dataframe(
 
     This is the ENTRY-BOUNDARY conversion, called once by whoever
     holds rows — the bridge evaluator (its gate rows), tests built
-    from `RunRow.as_dict()`, ad-hoc dict lists — never inside the
-    primitives themselves: analyses are plain-DataFrame functions
-    a polars user can call with no framework context.
+    from `RunRow.as_dict()`, ad-hoc dict lists. The `cells` INPUT
+    of a primitive is never converted inside the primitive —
+    analyses are plain-DataFrame functions a polars user can call
+    with no framework context; in-tree delegates that DERIVE new
+    row collections hand them to rows-level cores rather than
+    encoding a frame the callee would immediately decode.
 
     The two-arm input type IS the polymorphic boundary CLAUDE.md's
     "no `object` parameters" rule permits — the body narrows
@@ -131,11 +134,52 @@ def cells_to_dataframe(
     cells_list: list[Mapping[str, object]] = list(cells)
     if not cells_list:
         return pl.DataFrame()
+    _require_consistent_kinds(cells_list)
     # Skip the `[dict(c) for c in cells_list]` copy when cells
     # are already concrete dicts — polars' `from_dicts` accepts
     # any Mapping. The copy was insurance against frozen-dict
     # subtypes but the cost was real on 8k-cell caches.
     return pl.from_dicts(cells_list, infer_schema_length=None)
+
+
+def _scalar_kind(value: object) -> str | None:
+    """Coarse category for the mixed-kind check: numeric
+    (int/float — polars widens losslessly), bool, str. None and
+    nested values return None — absence isn't evidence, and
+    nested shapes are polars' own to accept or reject."""
+    if value is None or isinstance(value, (list, dict)):
+        return None
+    if isinstance(value, bool):
+        return 'bool'
+    if isinstance(value, (int, float)):
+        return 'numeric'
+    if isinstance(value, str):
+        return 'str'
+    return None
+
+
+def _require_consistent_kinds(
+    rows: list[Mapping[str, object]],
+) -> None:
+    """polars' full-scan inference resolves a column holding both
+    numbers and text by silently stringifying the numbers — after
+    which numeric readers see NaN for every row and a verdict can
+    quietly degrade. A column mixing scalar categories across
+    rows is a producer error; refuse it by name instead."""
+    kinds: dict[str, str] = {}
+    for row in rows:
+        for key, value in row.items():
+            kind = _scalar_kind(value)
+            if kind is None:
+                continue
+            earlier = kinds.setdefault(key, kind)
+            if earlier != kind:
+                raise ValueError(
+                    f'cells_to_dataframe: column {key!r} mixes '
+                    f'{earlier} and {kind} values across rows — '
+                    f'polars would silently unify these to '
+                    f'strings; repair the rows instead',
+                )
 
 
 __all__ = [

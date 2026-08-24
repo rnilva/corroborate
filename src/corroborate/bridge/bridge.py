@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import inspect
 import math
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from types import MappingProxyType
@@ -796,9 +796,11 @@ def evaluate(
         # scope's `resolve` runs on raw cells; static_scope inside
         # the deferred scope is applied by the resolve method.
         if isinstance(cells, pl.DataFrame):
-            cells_for_panel = cast(list[dict[str, object]], cells.to_dicts())
+            cells_for_panel: Sequence[Mapping[str, object]] = (
+                cast(list[dict[str, object]], cells.to_dicts())
+            )
         else:
-            cells_for_panel = [dict(c) for c in cells]
+            cells_for_panel = list(cells)
         bridge_scope_expr = bridge.scope.resolve(cells_for_panel)
     else:
         bridge_scope_expr = bridge.scope
@@ -813,24 +815,27 @@ def evaluate(
         effective_scope = bridge_scope_expr & module_scope
 
     filtered_cells: list[dict[str, object]]
+    # The frame the analyses will receive when the gate rows pass
+    # through unmutated (no value contrast stamped): kept from the
+    # branch that already holds it, so the hot DataFrame path pays
+    # no rebuild — gates read rows, analyses read this frame.
+    analysis_frame: pl.DataFrame
     if effective_scope is None:
-        # No cell filter — skip the DataFrame round-trip. Convert
-        # to list[dict] so the analysis fn can re-iterate.
+        # No cell filter — decode once for the gates.
         if isinstance(cells, pl.DataFrame):
             filtered_cells = cast(list[dict[str, object]], cells.to_dicts())
+            analysis_frame = cells
         else:
-            filtered_cells = [dict(c) for c in cells]
+            df = cells_to_dataframe(cells)
+            filtered_cells = cast(list[dict[str, object]], df.to_dicts())
+            analysis_frame = df
     else:
-        # Cell filter — materialise to DataFrame (if not already),
-        # filter, convert back to list[dict] for the analysis.
-        df: pl.DataFrame
-        if isinstance(cells, pl.DataFrame):
-            df = cells
-        else:
-            cells_list = list(cells)
-            df = pl.from_dicts(cells_list) if cells_list else pl.DataFrame()
-        if df.height > 0:
-            df = filter_cells(df, effective_scope)
+        # Cell filter — materialise via the one entry boundary
+        # (full-scan inference; bare from_dicts drops columns the
+        # first 100 rows don't carry), filter, decode for gates.
+        df = cells_to_dataframe(cells)
+        df = filter_cells(df, effective_scope)
+        analysis_frame = df
         filtered_cells = (
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []
@@ -951,12 +956,17 @@ def evaluate(
                     arm_keys[1] if v is ArmRole.TREATMENT
                     else arm_keys[0]
                 )
-    # Analyses take a plain DataFrame; the gate rows materialise
-    # into one HERE, once per evaluation — the single conversion
-    # boundary for the whole registry (previously each analysis
-    # re-materialised its own frame from the same rows).
+    # Analyses take a plain DataFrame. When the gate rows passed
+    # through unmutated, that frame already exists (the filtered
+    # input itself) — reuse it, bit-identical and rebuild-free.
+    # Only a stamped value contrast mutated the rows, and only
+    # then do they re-materialise through the entry boundary.
     analysis_results = resolve_for_holds_when(
-        bridge.holds_when, cells_to_dataframe(filtered_cells),
+        bridge.holds_when,
+        (
+            analysis_frame if contrast_labels is None
+            else cells_to_dataframe(filtered_cells)
+        ),
         bridge_params,
     )
     holds_result = bridge.holds_when(**analysis_results)

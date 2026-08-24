@@ -13,7 +13,7 @@ the claim's `holds_when` body consumes:
 
     @analysis
     def paired_g(
-        cells, *,
+        cells: pl.DataFrame, *,
         treatment_arm, baseline_arm, pair_by, source, ...,
     ) -> PairedGResult: ...
 
@@ -247,10 +247,10 @@ def analysis(
     Two decorator forms:
 
         @analysis
-        def paired_g(cells, *, ...) -> PairedGResult: ...
+        def paired_g(cells: pl.DataFrame, *, ...) -> PairedGResult: ...
 
         @analysis(reads=('<key_a>', '<key_b>'))
-        def paired_link_per_burst(cells, *, ...) -> ...: ...
+        def paired_link_per_burst(cells: pl.DataFrame, *, ...) -> ...: ...
 
     `reads` declares trace-store record-keys the analysis touches
     directly (without going through the @measurable resolver). The

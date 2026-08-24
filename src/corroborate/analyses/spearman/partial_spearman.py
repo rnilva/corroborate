@@ -34,7 +34,7 @@ consume it unchanged.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -123,7 +123,7 @@ def _detect_granularity(
 
 
 def _collect_per_cell(
-    cells: list[Mapping[str, object]],
+    cells: Sequence[Mapping[str, object]],
     *, x: str, y: str, conditioning: tuple[str, ...],
     stratify_by: str,
 ) -> tuple[list[float], list[float], list[list[float]], list[object]]:

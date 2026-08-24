@@ -17,7 +17,7 @@ intentional dynamic-attr boundary).
 Inputs use `object` (not `Any`) per CLAUDE.md's typing-discipline
 rule — the framework treats dowhy's polymorphic input shapes as
 opaque at the stub seam; corroborate's `_to_networkx` /
-`_cells_to_dataframe` helpers narrow before reaching this API."""
+`cells_to_pandas` helpers narrow before reaching this API."""
 from __future__ import annotations
 
 

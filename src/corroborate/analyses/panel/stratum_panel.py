@@ -237,12 +237,10 @@ def stratum_panel(
 ) -> StratumPanel:
     """Build the unified per-stratum panel.
 
-    Canonical input is `pl.DataFrame` (e.g. `Panel.cells`, the
-    runner's scope-filtered cells frame, or any caller-built
-    DataFrame). `Iterable[Mapping[str, object]]` is accepted as
-    a back-compat fallback for synthetic test cells + ad-hoc
-    dict lists; converted to DataFrame at entry via
-    `corroborate.data.kernel.cells_to_dataframe`.
+    Input is a plain `pl.DataFrame` (e.g. `Panel.cells`, the
+    runner's scope-filtered frame, or any caller-built
+    DataFrame); a caller holding rows converts once at its own
+    boundary via `corroborate.data.cells_to_dataframe`.
 
     Algorithm:
     1. Bucket cells by (arm, stratum_key).

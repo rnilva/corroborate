@@ -24,7 +24,7 @@ This closes the framework's "use the correlation edge directly"
 gap (γ in the original discussion)."""
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -32,6 +32,7 @@ import polars as pl
 
 from corroborate.analyses.panel.stratum_panel import StratumPanel
 from corroborate.bridge._filter import filter_cells
+from corroborate.data.kernel import cells_to_dataframe
 
 
 class _PanelAnalysis(Protocol):
@@ -65,15 +66,19 @@ class DeferredScope:
 
     def resolve(
         self,
-        cells: list[dict[str, object]],
+        cells: Sequence[Mapping[str, object]],
     ) -> pl.Expr:
         """Build the panel from `cells`, apply `keep` per stratum,
         return `pl.col(stratify_column).is_in([surviving]) & static_scope`."""
         # The panel builder takes a plain DataFrame; materialise
-        # the caller's rows once, applying the static pre-filter
-        # when one is declared.
-        panel_df = pl.from_dicts(cells) if cells else pl.DataFrame()
-        if self.static_scope is not None and panel_df.height > 0:
+        # the caller's rows once THROUGH THE ENTRY BOUNDARY (a
+        # bare `pl.from_dicts` infers the schema from 100 rows
+        # and silently drops a column that first appears later —
+        # the exact heterogeneous-corpus shape deferred scopes
+        # stratify over), applying the static pre-filter when one
+        # is declared.
+        panel_df = cells_to_dataframe(cells)
+        if self.static_scope is not None:
             panel_df = filter_cells(panel_df, self.static_scope)
         panel = self.panel_analysis.fn(
             panel_df,

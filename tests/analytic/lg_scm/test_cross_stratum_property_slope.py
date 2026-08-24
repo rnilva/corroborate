@@ -185,50 +185,6 @@ def test_cross_stratum_property_slope_missing_covariates_dropped() -> None:
     assert math.isnan(result.rho)
 
 
-def test_cross_stratum_property_slope_dataframe_input_identical_to_cells() -> None:
-    """Canonical-input invariant: Iterable[Mapping] and
-    pl.DataFrame inputs produce the same result. Guards against
-    the DataFrame branch diverging from cells branch."""
-    import polars as pl
-
-    cells = _build_cells()
-    # Key type `object`: the analysis accepts heterogeneous stratum
-    # keys (`Mapping[object, ...]`), and Mapping is invariant in its
-    # key parameter.
-    covariates_per_key: dict[object, dict[str, float]] = {
-        env: {'mu_x_cov': mu_x}
-        for env, mu_x in _ENV_MU_X.items()
-    }
-    # A closure rather than a shared kwargs dict: the single
-    # spelling of the arguments stays statically checked against
-    # the analysis signature (a dict would erase them to
-    # `dict[str, object]`).
-    def run(
-        cells_in: pl.DataFrame | list[Mapping[str, object]],
-    ):
-        return cross_stratum_property_slope.fn(
-            cells_to_dataframe(cells_in),
-            treatment_arm='treatment',
-            baseline_arm='baseline',
-            source='y_mean',
-            covariate_name='mu_x_cov',
-            covariates_per_key=covariates_per_key,
-            covariate_key_field='env_name',
-            scope_predictor='z_mean',
-            min_baseline_predictor=0.0,
-            min_strata=8,
-        )
-
-    result_cells = run(cells)
-    result_panel = run(pl.DataFrame(cells))
-    assert result_panel.n_strata == result_cells.n_strata
-    assert result_panel.rho == result_cells.rho
-    assert result_panel.p_value == result_cells.p_value
-    assert (
-        result_panel.cohen_d_per_stratum == result_cells.cohen_d_per_stratum
-    )
-
-
 def test_cross_stratum_property_slope_honours_custom_arm_field() -> None:
     """Both the effect panel and an arm-filtered derived covariate
     use the caller-selected arm column."""

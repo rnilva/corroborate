@@ -59,13 +59,9 @@ import numpy.typing as npt
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.data.kernel import cells_to_dataframe
 from corroborate.analyses.dowhy import (
     BackdoorResult,
     RefutationResult,
-    backdoor_ate,
-    placebo_refutation,
-    random_common_cause_refutation,
 )
 from corroborate.analyses._cell_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
@@ -312,7 +308,7 @@ def stratum_link_moderation_dowhy(
     `n_strata > p_covariates` and `n_envs_above ≥ 1 AND
     n_envs_below ≥ 1` for identification."""
     rows, dag, t_col, o_col, n_above, n_below = _build_panel(
-        list(to_dicts(cells)),
+        to_dicts(cells),
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         link_predictor=link_predictor,
@@ -343,19 +339,24 @@ def stratum_link_moderation_dowhy(
             outcome_col=o_col,
         )
 
-    panel_df = cells_to_dataframe(rows)
-    backdoor = backdoor_ate.fn(
-        panel_df, treatment=t_col, outcome=o_col,
+    # Rows-level throughout: the derived per-stratum panel rows
+    # go straight to the DoWhy cores — a frame here would only
+    # be decoded again by each of the three calls.
+    from corroborate.analyses.dowhy.dowhy import (
+        backdoor_ate_rows, run_refuter,
+    )
+    backdoor = backdoor_ate_rows(
+        rows, treatment=t_col, outcome=o_col,
         dag=dag, method_name=method_name,
     )
-    placebo = placebo_refutation.fn(
-        panel_df, treatment=t_col, outcome=o_col,
-        dag=dag, method_name=method_name,
+    placebo = run_refuter(
+        rows, t_col, o_col, dag, method_name,
+        refuter_method='placebo_treatment_refuter',
         random_state=random_state,
     )
-    rcc = random_common_cause_refutation.fn(
-        panel_df, treatment=t_col, outcome=o_col,
-        dag=dag, method_name=method_name,
+    rcc = run_refuter(
+        rows, t_col, o_col, dag, method_name,
+        refuter_method='random_common_cause',
         random_state=random_state,
     )
     return StratumLinkModerationDowhyResult(

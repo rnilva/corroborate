@@ -35,7 +35,6 @@ import polars as pl
 from corroborate._internals.polars import to_dicts
 from corroborate.analyses._cell_value import key_tuple, resolve_value
 from corroborate.analyses.panel import per_stratum_panel
-from corroborate.data.kernel import cells_to_dataframe
 from corroborate.bridge.analysis import analysis
 from corroborate.corpus.schema import StratumG
 
@@ -142,7 +141,7 @@ def paired_g(
     `pl.Expr`; `claim_bridge.evaluate()` filters before this
     analysis sees the cells. The analysis itself does not scope.
 
-    `dedupe_strategy` controls the policy when multiple cells share
+    `dedupe_strategy` controls the policy when multiple rows share
     the same `(arm, pair_by)` tuple:
     - `'mean'` (default): average the per-cell `source` values
       within each `(arm, pair_by)` bucket, then run paired-g on
@@ -182,7 +181,45 @@ def paired_g(
     `cliff_delta_paired` (when available) on small-n skewed-Δ
     corpora. `result.assumption_violations` flags inputs that
     cross the empirically-derived skew/kurtosis thresholds."""
-    rows = to_dicts(cells)
+    return _paired_g_rows(
+        to_dicts(cells), source=source, treatment_arm=treatment_arm,
+        baseline_arm=baseline_arm, pair_by=pair_by,
+        arm_field=arm_field, dedupe_strategy=dedupe_strategy,
+    )
+
+
+def _require_complete_pair_key(
+    key: tuple[object, ...],
+    pair_by: tuple[str, ...],
+    cell: Mapping[str, object],
+) -> None:
+    """A null pairing-unit key silently merges unrelated rows into
+    one `(None, ...)` bucket — after frame materialisation, rows
+    that never carried the key are indistinguishable from rows
+    carrying an explicit null, so the loud check lives here."""
+    if any(v is None for v in key):
+        raise ValueError(
+            f'paired_g: pairing key {pair_by} is null on row '
+            f'id={cell.get("id")!r} — a null unit key would merge '
+            f'unrelated rows into one bucket; scope the claim to '
+            f'rows carrying the key, or repair the record',
+        )
+
+
+def _paired_g_rows(
+    rows: Sequence[Mapping[str, object]],
+    *,
+    source: str,
+    treatment_arm: str,
+    baseline_arm: str,
+    pair_by: tuple[str, ...],
+    arm_field: str,
+    dedupe_strategy: str,
+) -> PairedGResult:
+    """Rows-level core of `paired_g` — in-tree per-stratum
+    delegates (`per_env_paired_g_panel`) call this directly so a
+    per-env subset never round-trips through a frame; the public
+    `@analysis` wraps it behind the plain-DataFrame boundary."""
     from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):
@@ -213,11 +250,13 @@ def paired_g(
         arm = cell.get(arm_field)
         if arm == treatment_arm:
             key = key_tuple(cell, pair_by)
+            _require_complete_pair_key(key, pair_by, cell)
             treatment_buckets.setdefault(key, []).append(
                 (cell, resolve_value(cell, source)),
             )
         elif arm == baseline_arm:
             key = key_tuple(cell, pair_by)
+            _require_complete_pair_key(key, pair_by, cell)
             baseline_buckets.setdefault(key, []).append(
                 (cell, resolve_value(cell, source)),
             )
@@ -413,10 +452,11 @@ def per_env_paired_g_panel(
     )
 
     def _analyze(subset: Sequence[Mapping[str, object]]) -> PairedGResult:
-        # Re-entry at a stratum subset: the analysis takes a
-        # DataFrame, so the subset rows materialise here.
-        return paired_g.fn(
-            cells_to_dataframe(subset),
+        # Re-entry at a stratum subset: straight into the rows
+        # core — a per-env subset never round-trips through a
+        # frame just to be decoded again.
+        return _paired_g_rows(
+            subset,
             treatment_arm=treatment_arm,
             baseline_arm=baseline_arm,
             pair_by=pair_by,

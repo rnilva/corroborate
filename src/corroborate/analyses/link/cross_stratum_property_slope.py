@@ -41,7 +41,7 @@ Distinct from:
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -103,7 +103,7 @@ class CrossStratumPropertySlopeResult:
 
 
 def _derive_per_stratum_covariate(
-    cells: list[Mapping[str, object]],
+    cells: Sequence[Mapping[str, object]],
     *,
     spec: 'DerivedCovariateSpec | DerivedSpecKernel',
     treatment_arm: str,

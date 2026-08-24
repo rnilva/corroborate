@@ -29,9 +29,9 @@ import numpy.typing as npt
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.data.kernel import cells_to_dataframe
 from corroborate.analyses.paired.mundlak_decomposition import (
-    MundlakResult, mundlak_decomposition,
+    MundlakResult,
+    mundlak_rows,
 )
 from corroborate.analyses.paired.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE,
@@ -119,7 +119,7 @@ def mundlak_paired_g_per_burst(
     defaults to `'mean'` (per-cell aggregation within each
     `(env, arm, pair_by)` bucket); pass `'raise'` to error on
     duplicates."""
-    cells_list = [dict(c) for c in to_dicts(cells)]
+    cells_list = to_dicts(cells)
     per_burst_g = paired_g_per_burst.fn(
         cells, treatment_arm=treatment_arm,
         baseline_arm=baseline_arm, pair_by=pair_by,
@@ -199,9 +199,9 @@ def mundlak_paired_g_per_burst(
             f'predictor join + drops; need at least 4.',
         )
 
-    return mundlak_decomposition.fn(
-        cells_to_dataframe(panel),
-        alpha=alpha, cluster_robust=cluster_robust,
+    return mundlak_rows(
+        panel, stratum_key='stratum_id', x_key='x', y_key='y',
+        se_key='se', alpha=alpha, cluster_robust=cluster_robust,
     )
 
 

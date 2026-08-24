@@ -107,7 +107,6 @@ def meta_regression_unpaired_d(
     coefficients tuple, intercept=NaN). Bridges should check
     `coef is None` or `math.isnan(coef.coefficient)` for graceful
     POW_INSUF fallthrough."""
-    rows = to_dicts(cells)
     if covariates_per_key is None and continuous_covariate is None:
         raise ValueError(
             "meta_regression_unpaired_d: provide either "
@@ -129,7 +128,6 @@ def meta_regression_unpaired_d(
         key_position = stratify_by.index(covariate_key_field)
     else:
         key_position = -1  # unused in continuous mode
-    cells_list = list(rows)
     pooled = stratified_arm_diff_pooled.fn(
         cells,
         source=source,
@@ -147,7 +145,9 @@ def meta_regression_unpaired_d(
     cc_per_stratum: dict[tuple[object, ...], float] = {}
     if continuous_covariate is not None:
         bucket: dict[tuple[object, ...], list[float]] = {}
-        for c in cells_list:
+        # Decode here, in the one branch that reads per-row values
+        # — key-based mode never pays the full-frame decode.
+        for c in to_dicts(cells):
             if c.get(arm_field) != continuous_covariate_arm:
                 continue
             sid = tuple(c.get(k) for k in stratify_by)

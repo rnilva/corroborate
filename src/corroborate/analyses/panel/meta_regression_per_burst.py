@@ -27,15 +27,13 @@ broadcasts the env-level vector across all bursts in that env).
 """
 from __future__ import annotations
 
-import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 
 import numpy as np
 import numpy.typing as npt
 
 import polars as pl
 
-from corroborate._internals.polars import to_dicts
 from corroborate.analyses.paired.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE,
     paired_g_per_burst,
@@ -107,8 +105,7 @@ def meta_regression_per_burst(
             covariates_per_env
         )
     elif covariates:
-        cells_list = [dict(c) for c in to_dicts(cells)]
-        env_covariates = _env_means_from_cells(cells_list, covariates)
+        env_covariates = _env_means_from_df(cells, covariates)
     else:
         env_covariates = {}
 
@@ -135,40 +132,49 @@ def meta_regression_per_burst(
     )
 
 
-def _env_means_from_cells(
-    cells: Sequence[Mapping[str, object]],
+def _env_means_from_df(
+    cells: pl.DataFrame,
     columns: tuple[str, ...],
 ) -> dict[str, dict[str, float]]:
-    """Build `{env_name: {col: mean(col over env's cells)}}` from
-    a per-cell list. NaN-skip per column. Cells lacking `env_name`
-    or with non-numeric column values are excluded from that
-    column's mean.
+    """Build `{env_name: {col: mean(col over env's rows)}}`
+    frame-natively — no full decode of per-burst list columns
+    just to average a few scalar columns. NaN-skip per column
+    (`fill_nan(None)` → polars' null-skipping mean); absent and
+    non-numeric columns are excluded, matching the per-row
+    numeric check of the rows-era helper; Boolean lifts to 0/1.
 
     Used to lift cell-level columns (typically materialised by
     the @measurable cache) to env-level covariates for the
     meta-regression's stratum panel."""
-    by_env: dict[str, dict[str, list[float]]] = {}
-    for cell in cells:
-        env = cell.get('env_name')
+    if 'env_name' not in cells.columns:
+        return {}
+    present = [
+        c for c in columns
+        if c in cells.columns
+        and (
+            cells.schema[c].is_numeric()
+            or cells.schema[c] == pl.Boolean
+        )
+    ]
+    if not present:
+        return {}
+    agg = (
+        cells.select('env_name', *present)
+        .with_columns([
+            pl.col(c).cast(pl.Float64).fill_nan(None) for c in present
+        ])
+        .group_by('env_name')
+        .agg([pl.col(c).mean() for c in present])
+    )
+    out: dict[str, dict[str, float]] = {}
+    for row in agg.iter_rows(named=True):
+        env = row['env_name']
         if not isinstance(env, str):
             continue
-        slot = by_env.setdefault(env, {})
-        for col in columns:
-            v = cell.get(col)
-            if not isinstance(v, (int, float)):
-                continue
-            f = float(v)
-            if math.isnan(f):
-                continue
-            slot.setdefault(col, []).append(f)
-    out: dict[str, dict[str, float]] = {}
-    for env, col_map in by_env.items():
-        env_means: dict[str, float] = {}
-        for col, vs in col_map.items():
-            if vs:
-                env_means[col] = sum(vs) / len(vs)
-        out[env] = env_means
+        values = {
+            c: float(v) for c in present
+            if isinstance((v := row[c]), (int, float))
+        }
+        if values:
+            out[env] = values
     return out
-
-
-__all__ = ['meta_regression_per_burst']

@@ -16,7 +16,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING
 
-from corroborate.data.kernel import cells_to_dataframe
 
 if TYPE_CHECKING:
     import networkx as nx
@@ -195,24 +194,26 @@ def backdoor_with_refutations(
     RCC samples are reproducible independently of numpy's global
     state. Passes through to `placebo_refutation` and
     `random_common_cause_refutation`."""
-    from corroborate.analyses.dowhy import (
-        backdoor_ate, placebo_refutation,
-        random_common_cause_refutation,
+    # Rows-level throughout: encoding a polars frame here would
+    # defeat `cells_to_pandas`'s per-row skip (one ill-typed value
+    # stringifies a whole column before the skip can see it) and
+    # buy one encode + three decodes for nothing.
+    from corroborate.analyses.dowhy.dowhy import (
+        backdoor_ate_rows, run_refuter,
     )
-    cells_list = list(cells)
-    cells_df = cells_to_dataframe(cells_list)
-    backdoor = backdoor_ate.fn(
-        cells_df, treatment=treatment, outcome=outcome,
+    rows = list(cells)
+    backdoor = backdoor_ate_rows(
+        rows, treatment=treatment, outcome=outcome,
         dag=dag, method_name=method_name,
     )
-    placebo = placebo_refutation.fn(
-        cells_df, treatment=treatment, outcome=outcome,
-        dag=dag, method_name=method_name,
+    placebo = run_refuter(
+        rows, treatment, outcome, dag, method_name,
+        refuter_method='placebo_treatment_refuter',
         random_state=random_state,
     )
-    rcc = random_common_cause_refutation.fn(
-        cells_df, treatment=treatment, outcome=outcome,
-        dag=dag, method_name=method_name,
+    rcc = run_refuter(
+        rows, treatment, outcome, dag, method_name,
+        refuter_method='random_common_cause',
         random_state=random_state,
     )
     return backdoor, placebo, rcc

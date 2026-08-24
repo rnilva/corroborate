@@ -228,3 +228,27 @@ def test_null_contrast_returns_indistinguishable_mean_diff() -> None:
         f'exact-zero-Delta sweep; expected 0.0 (no strict positives) '
         f'or NaN'
     )
+
+
+def test_null_pairing_key_raises_instead_of_bucketing() -> None:
+    """After frame materialisation, a row that never carried the
+    pair_by key is indistinguishable from an explicit null — both
+    would silently merge into one `(None, ...)` bucket. Loud
+    instead."""
+    import pytest
+
+    from corroborate.analyses.paired.paired_g import paired_g
+    from corroborate.data import cells_to_dataframe
+
+    rows: list[dict[str, object]] = [
+        {'id': 'a', 'arm_key': 'treatment', 'seed': 0, 'y': 1.0},
+        {'id': 'b', 'arm_key': 'baseline', 'seed': 0, 'y': 0.5},
+        {'id': 'c', 'arm_key': 'treatment', 'y': 2.0},  # no seed
+        {'id': 'd', 'arm_key': 'baseline', 'seed': 1, 'y': 0.7},
+    ]
+    with pytest.raises(ValueError, match='pairing key'):
+        _ = paired_g.fn(
+            cells_to_dataframe(rows),
+            source='y', treatment_arm='treatment',
+            baseline_arm='baseline', pair_by=('seed',),
+        )
