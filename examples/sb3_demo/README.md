@@ -210,7 +210,8 @@ point the reader at it); a longer-budget batch is just rows whose
 arrays extend further. The claim's horizon is pinned in the claim
 (`eval_reward_at_25k`), so old and new rows stay comparable by
 construction: a row without the declared horizon reads NaN and
-the gates report what that costs, per evaluation. Batches loaded
+the `target_finiteness` warning reports what that costs, per
+evaluation. Batches loaded
 separately pool with `concat_panels` (the pooled Panel keeps
 carrying the union registry). A verdict that moves as evidence
 accretes is the system working; the declared estimand stays fixed

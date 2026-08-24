@@ -56,7 +56,11 @@ def eval_reward_at_25k(record: Mapping[str, object]) -> float:
     """Mean evaluation reward at the claim's declared horizon —
     the dump where ``time/total_timesteps`` is exactly 25 000.
     NaN for a run not evaluated there: the horizon is pinned, a
-    shorter run is missing evidence, never rebased."""
+    shorter run is missing evidence, never rebased. The pin must
+    lie on the producer's dump grid (SB3 counts `num_timesteps`
+    in env-steps, so `n_envs > 1` shifts the grid); a miss reads
+    NaN per run, and the `target_finiteness` warning on the
+    verdict record names how many cells that cost."""
     steps = record.get('time/total_timesteps')
     rewards = record.get('eval/mean_reward')
     if not _is_list(steps) or not _is_list(rewards):

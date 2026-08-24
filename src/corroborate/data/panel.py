@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Literal
 
 import polars as pl
+from polars.datatypes import DataTypeClass
 
 
 # Default exogenous-keys / -prefixes are imported from the
@@ -1198,6 +1199,26 @@ class Panel:
         )
 
 
+def _dtypes_poolable(
+    a: pl.DataType | DataTypeClass,
+    b: pl.DataType | DataTypeClass,
+) -> bool:
+    """Whether one column may carry both dtypes across batches:
+    identical, numeric-widening (Int/Float family), an all-null
+    pad, or Lists of poolable inners. Everything else — notably
+    Boolean vs String, the json-vs-csv rendering split — would
+    be silently unified to strings by polars' diagonal concat."""
+    if a == b:
+        return True
+    if a == pl.Null or b == pl.Null:
+        return True
+    if a.is_numeric() and b.is_numeric():
+        return True
+    if isinstance(a, pl.List) and isinstance(b, pl.List):
+        return _dtypes_poolable(a.inner, b.inner)
+    return False
+
+
 def concat_panels(panels: Sequence[Panel]) -> Panel:
     """Pool batches of a growing record into one Panel.
 
@@ -1259,6 +1280,20 @@ def concat_panels(panels: Sequence[Panel]) -> Panel:
                     f'directories), or author the claim against an '
                     f'explicit {root}_mean_at_<checkpoint> column '
                     f'both batches carry.',
+                )
+    dtype_seen: dict[str, tuple[pl.DataType, int]] = {}
+    for batch_index, p in enumerate(contributing):
+        for name, dtype in p.cells.schema.items():
+            known = dtype_seen.get(name)
+            if known is None:
+                dtype_seen[name] = (dtype, batch_index)
+            elif not _dtypes_poolable(known[0], dtype):
+                raise ValueError(
+                    f"concat_panels: column {name!r} is {known[0]} "
+                    f'in batch {known[1]} but {dtype} in batch '
+                    f'{batch_index} — polars would silently unify '
+                    f'these to strings; mixed-type batches do not '
+                    f'pool',
                 )
     leaves: frozenset[str] | None
     if any(p.leaves is None for p in contributing):

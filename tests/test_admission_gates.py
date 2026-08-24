@@ -40,6 +40,7 @@ from corroborate.bridge.admission import (
     no_predicted_direction,
     pair_completeness,
     resolved_source,
+    target_finiteness,
 )
 from corroborate.bridge.bridge import (
     Bridge,
@@ -441,22 +442,23 @@ def test_no_predicted_direction_silent_when_set() -> None:
 # ---------- AUTO_GATES wiring ----------
 
 
-def test_auto_gates_tuple_contains_all_nine() -> None:
+def test_auto_gates_tuple_contains_all_ten() -> None:
     """Sanity: the framework's auto-gate list is exactly the
-    nine shipped functions, in diagnostic-priority order —
+    ten shipped functions, in diagnostic-priority order —
     `resolved_source` before the endogeneity test so typo'd
     sources surface as typos; `contrast_present` and
     `exogenous_source` before `distinct_units` so a value-contrast
     record without its contrast, and a native leaf-sourced
     interventional bridge, each hear the structural diagnosis
     rather than the effective-n symptom; the contrast-quality
-    gates (`contrast_isolation`, `pair_completeness`) after the
-    structural gates, checking the derived conditions per claim,
-    per extent, on the verdict record."""
+    gates (`contrast_isolation`, `pair_completeness`,
+    `target_finiteness`) after the structural gates, checking
+    the derived conditions per claim, per extent, on the verdict
+    record."""
     assert AUTO_GATES == (
         distinct_arms, resolved_source, contrast_present,
         exogenous_source, distinct_units, exogenous_scope,
-        contrast_isolation, pair_completeness,
+        contrast_isolation, pair_completeness, target_finiteness,
         no_predicted_direction,
     )
 

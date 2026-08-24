@@ -585,22 +585,31 @@ def _normalised(value: object) -> object:
     """NaN reads as missing for constancy checks — two NaNs must
     not count as 'different values' (float NaN != NaN). A list
     (a record array — e.g. a knob logged once per Logger dump)
-    normalises to the frozenset of its distinct non-missing
-    element values: a constant-valued array reads as that one
-    value regardless of dump count, so a knob logged per-dump
-    instead of as configuration stays visible to the isolation
-    checks, while a genuine trajectory (many distinct values)
-    varies within an arm and drops out of the rider scan the
-    same way scalar outcomes do."""
+    collapses to its single distinct non-missing value when it
+    has exactly one: a constant array reads as that knob value
+    whatever the dump count, so a knob logged per-dump instead
+    of as configuration stays visible to the isolation checks;
+    an all-missing array reads as None, indistinguishable from
+    an absent column. A VARYING list is returned as-is — the
+    registered-balance check then compares it by equality (order
+    and multiplicity intact: a reordered schedule is still a
+    confound), and the rider scan skips it as unhashable, the
+    way trajectories were always skipped. The walk bails at the
+    second distinct value, so trace-sized arrays cost a few
+    comparisons, not a full pass."""
     if isinstance(value, float) and math.isnan(value):
         return None
     if isinstance(value, list):
-        return frozenset(
-            normalised
-            for element in value
-            for normalised in (_normalised(element),)
-            if normalised is not None
-        )
+        first: object = None
+        for element in value:
+            normalised = _normalised(element)
+            if normalised is None:
+                continue
+            if first is None:
+                first = normalised
+            elif not _scalar_equal(normalised, first):
+                return value
+        return first
     return value
 
 
@@ -755,9 +764,10 @@ def contrast_isolation(
                     for rows in arms
                 ]
             except TypeError:
-                # Still-unhashable cell values (dict-typed) are
-                # not configuration; skip. Lists were normalised
-                # to distinct-value frozensets above.
+                # Unhashable cell values (varying list-typed
+                # trajectory / trace columns, dict-typed cells)
+                # aren't configuration; skip. Constant record
+                # arrays collapsed to their scalar above.
                 continue
             constant_within = all(len(values) == 1 for values in per_arm)
             if constant_within and len(set().union(*per_arm)) > 1:
@@ -948,6 +958,51 @@ def pair_completeness(
     return None
 
 
+def target_finiteness(
+    bridge: 'Bridge',
+    cells: Sequence[Mapping[str, object]],
+    ctx: GateContext,
+) -> GateResult | None:
+    """WARN: cells in scope whose target resolves to no finite
+    value. Analyses drop such cells silently (a paired analysis
+    drops the whole pairing unit), so a run truncated before the
+    claim's horizon — or a horizon that never aligned with the
+    producer's dump grid at all — must land on the verdict
+    record, not vanish into an unexplained n_pairs. Counts via
+    the same record-first / registry-fallback resolution the
+    analyses use, so the number reported is the number dropped."""
+    del ctx
+    if not value_contrast_active(bridge):
+        return None
+    if not cells:
+        return None
+    # Lazy: corroborate.analyses imports the bridge package at
+    # import time; resolving here at call time avoids the cycle.
+    from corroborate.analyses._cell_value import resolve_value
+    missing = 0
+    for cell in cells:
+        try:
+            value = resolve_value(cell, bridge.target_name)
+        except (KeyError, TypeError):
+            missing += 1
+            continue
+        if math.isnan(value):
+            missing += 1
+    if missing:
+        return GateResult(
+            gate_name='target_finiteness',
+            level=GateLevel.WARN,
+            passed=False,
+            message=(
+                f'{missing} of {len(cells)} cell(s) in scope '
+                f'carry no finite {bridge.target_name!r}; '
+                f'analyses drop them (a paired analysis drops '
+                f'the whole pairing unit)'
+            ),
+        )
+    return None
+
+
 # Auto-gates run on every bridge before its body. Per-bridge
 # `gates=(...)` are appended to this tuple at evaluate-time.
 # `resolved_source` runs first so a typo'd source surfaces with
@@ -972,6 +1027,7 @@ AUTO_GATES: tuple[AdmissionGate, ...] = (
     exogenous_scope,
     contrast_isolation,
     pair_completeness,
+    target_finiteness,
     no_predicted_direction,
 )
 
@@ -992,6 +1048,7 @@ __all__ = [
     'is_endogenous',
     'no_predicted_direction',
     'pair_completeness',
+    'target_finiteness',
     'resolved_source',
     'value_contrast_active',
 ]

@@ -11,6 +11,7 @@ dependency graph cleaner.
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 
 import numpy as np
@@ -32,14 +33,17 @@ def resolve_value(record: Mapping[str, object], source: str) -> float:
     quantity by name on a record where only the raw inputs were
     persisted (e.g. ad-hoc reductions over the trace store).
 
-    A *present* key with a None / NaN / non-numeric value is
-    treated as a cached miss (returns NaN) — DO NOT fall through
-    to the measurable. The bridge cache writes None for cells
-    where the measurable couldn't resolve at build time (e.g.
-    corpus without traces); recomputing here would re-trigger the
-    same failure with no new information AND mask the universal-
-    merge schema heterogeneity. Only an *absent* key falls through
-    to the registry.
+    A *present* key holding None or NaN falls through to the
+    measurable registry, mirroring `compute_missing_columns`'s
+    null|NaN-means-recompute contract: diagonal pooling
+    (`concat_panels`, `from_corpora`) null-pads a materialised
+    column onto batches whose RAW inputs are present, and
+    reading the pad as a cached miss would silently drop exactly
+    the cells the growing record just gained. A cell whose
+    inputs are genuinely absent recomputes to the same NaN it
+    would have read — one registry call slower, never wronger.
+    A present NON-numeric, non-null value (schema corruption)
+    still reads NaN without recompute.
 
     Raises `KeyError` if `source` isn't in the record AND no
     measurable is registered under that name."""
@@ -48,7 +52,17 @@ def resolve_value(record: Mapping[str, object], source: str) -> float:
         if isinstance(v, bool):
             return float(v)
         if isinstance(v, (int, float)):
-            return float(v)
+            if not (isinstance(v, float) and math.isnan(v)):
+                return float(v)
+        elif v is not None:
+            return float('nan')
+        from corroborate.measurables import get_registered as _get_null_m
+        null_m = _get_null_m(source)
+        if null_m is None:
+            return float('nan')
+        recomputed: object = null_m(record)
+        if isinstance(recomputed, (int, float)):
+            return float(recomputed)
         return float('nan')
     from corroborate.measurables import get_registered as _get_m
     m = _get_m(source)

@@ -173,17 +173,43 @@ def test_load_raises_on_empty_root(tmp_path: Path) -> None:
 
 
 def test_csv_number_recovery_is_narrow(tmp_path: Path) -> None:
-    """'nan', 'inf', '1_000', 'True' stay the strings the file
-    carries — int()/float() leniency would retype them, and a
-    smuggled NaN would defeat the config agreement check."""
+    """str(float)'s own renderings — 'nan', 'inf', '-inf' —
+    recover as the floats SB3's CSV writer str()ed (a routine
+    ep_rew_mean before the first episode is the text 'nan');
+    ambiguous texts like '1_000' and 'True' stay strings."""
     file = tmp_path / 'progress.csv'
     _ = file.write_text(
-        'config/tag,a,b,c\n'
+        'a,b,c,d\n'
         'nan,inf,1_000,True\n',
     )
     dumps = read_progress(file)
-    assert dumps[0] == {'config/tag': 'nan', 'a': 'inf',
-                        'b': '1_000', 'c': 'True'}
+    a = dumps[0]['a']
+    assert isinstance(a, float) and math.isnan(a)
+    assert dumps[0]['b'] == float('inf')
+    assert dumps[0]['c'] == '1_000'
+    assert dumps[0]['d'] == 'True'
+
+
+def test_csv_with_nan_metric_loads_as_numeric(tmp_path: Path) -> None:
+    """A csv log whose metric passes through 'nan' is ordinary
+    producer output, not a type mixture."""
+    file = tmp_path / 'progress.csv'
+    _ = file.write_text('train/loss\nnan\n0.5\n')
+    columns, _registry = progress_columns(read_progress(file))
+    assert _pattern(columns['train/loss']) == ['nan', 0.5]
+
+
+def test_all_nan_array_still_conflicts_with_text(tmp_path: Path) -> None:
+    """An all-NaN float array is numeric evidence; pooling it
+    with a str array for the same key must raise, not silently
+    stringify."""
+    _write_json(
+        tmp_path / 'a' / 'progress.json', [{'train/loss': float('nan')}],
+    )
+    _ = (tmp_path / 'b').mkdir()
+    _ = (tmp_path / 'b' / 'progress.csv').write_text('train/loss\noops\n')
+    with pytest.raises(ValueError, match="column 'train/loss'"):
+        _ = load_sb3_logger_runs(tmp_path, glob='**/progress.*')
 
 
 def test_ragged_csv_row_raises_with_location(tmp_path: Path) -> None:

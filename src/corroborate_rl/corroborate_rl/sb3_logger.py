@@ -68,13 +68,18 @@ def _parse_csv_value(text: str) -> MeasurementLeaf | None:
     """CSV erased the types; recover them mechanically — and
     narrowly. Empty string is how the CSV writer renders a key
     absent from that dump: read it back as absence, not a value.
-    Only unambiguous decimal literals become numbers; 'nan',
-    'inf', '1_000', 'True' stay the strings the file carries
-    (int()/float() would silently retype them, and a NaN smuggled
-    into a config value would defeat the agreement check's
-    NaN-tolerance)."""
+    Only unambiguous decimal literals become numbers, plus the
+    three texts `str(float)` itself produces — 'nan', 'inf',
+    '-inf' — because SB3's CSV writer renders values with str(),
+    so those ARE the floats the producer had (a routine
+    `rollout/ep_rew_mean` before the first episode completes is
+    the text 'nan'). Everything else ambiguous — '1_000',
+    'True' — stays the string the file carries; int()/float()
+    leniency would silently retype it."""
     if text == '':
         return None
+    if text in ('nan', 'inf', '-inf'):
+        return float(text)
     if _INT_TEXT.fullmatch(text):
         return int(text)
     if _FLOAT_TEXT.fullmatch(text):
@@ -94,7 +99,9 @@ def read_progress(path: Path | str) -> list[dict[str, MeasurementLeaf]]:
     file = Path(path)
     dumps: list[dict[str, MeasurementLeaf]] = []
     if file.name.endswith('.json') or file.suffix == '.jsonl':
-        for n, line in enumerate(file.read_text().splitlines(), start=1):
+        for n, line in enumerate(
+            file.read_text(encoding='utf-8').splitlines(), start=1,
+        ):
             if not line.strip():
                 continue
             raw: object = json.loads(line)
@@ -115,7 +122,7 @@ def read_progress(path: Path | str) -> list[dict[str, MeasurementLeaf]]:
                 dump[key] = value
             dumps.append(dump)
     else:
-        with file.open(newline='') as handle:
+        with file.open(newline='', encoding='utf-8') as handle:
             for n, row in enumerate(csv.DictReader(handle), start=2):
                 if None in row:
                     # DictReader parks a long row's extra fields
@@ -236,8 +243,9 @@ def _column_kind(value: 'CellValue') -> str | None:
         for element in value:
             if element is None:
                 continue
-            if isinstance(element, float) and math.isnan(element):
-                continue
+            # NaN IS numeric evidence — an all-NaN float array
+            # (a crashed run's safe_mean) must still conflict
+            # loudly with a str array for the same key.
             return (
                 'numeric' if not isinstance(element, bool)
                 and isinstance(element, (int, float))
@@ -293,8 +301,10 @@ def load_sb3_logger_runs(
     (`pair_by`, `DoEffect`, `scope`) checked by its admission
     gates over the cells it admits. A folder carrying both Logger
     renderings under a `progress.*` glob is two matched files —
-    two declared rows; the claim layer's duplicate-unit checks
-    make the double-count loud."""
+    two declared rows: the paired family's duplicate-unit checks
+    surface that (`dedupe_strategy='raise'`), but unpaired
+    analyses pool what they are given, so point the glob at ONE
+    rendering unless duplication is meant."""
     root_path = Path(root)
     corpus_name = corpus if corpus is not None else root_path.name
     rows: list[dict[str, CellValue]] = []

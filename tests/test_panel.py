@@ -1194,3 +1194,25 @@ def test_measurable_availability_matrix_missing_env_column_falls_back() -> None:
     # Single-env fallback group
     assert len(matrix.cell_counts) == 1
     assert '__p6_no_env_col' in matrix.uniform_available
+
+
+def test_concat_panels_rejects_conflicting_list_dtypes() -> None:
+    """polars' diagonal concat silently unifies List(Boolean) +
+    List(String) to List(String); pooling must refuse instead —
+    the json-vs-csv rendering split becomes a loud error."""
+    from corroborate.data import concat_panels
+    a = Panel.from_dataframe(pl.DataFrame({'id': ['a'], 'flag': [[True]]}))
+    b = Panel.from_dataframe(
+        pl.DataFrame({'id': ['b'], 'flag': [['True']]}),
+    )
+    with pytest.raises(ValueError, match="column 'flag'"):
+        _ = concat_panels([a, b])
+
+
+def test_concat_panels_pools_numeric_width_differences() -> None:
+    """Int vs Float is lossless widening, not a type conflict."""
+    from corroborate.data import concat_panels
+    a = Panel.from_dataframe(pl.DataFrame({'id': ['a'], 'x': [[1]]}))
+    b = Panel.from_dataframe(pl.DataFrame({'id': ['b'], 'x': [[1.5]]}))
+    pooled = concat_panels([a, b])
+    assert pooled.cells.height == 2
