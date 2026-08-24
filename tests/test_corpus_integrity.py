@@ -133,7 +133,7 @@ def test_assert_no_nested_corpora_ignores_tmp_shards(
     tmp_dir = corp / 'tmp'
     tmp_dir.mkdir()
     # Per-arm shard with characteristic naming.
-    shard = tmp_dir / 'row000__Env__baseline__runs.parquet'
+    shard = tmp_dir / 'cell000__Env__baseline__runs.parquet'
     pl.DataFrame({'id': ['x'], 'env_name': ['Env']}).write_parquet(shard)
 
     # Should NOT raise — tmp/ shards aren't corpora.

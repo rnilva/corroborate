@@ -391,7 +391,7 @@ def test_run_intervention_reruns_row_when_tmp_parquet_is_zero_bytes(
     # Simulate a crashed mid-write: truncate one row's traces to 0.
     # The framework writes per-row parquets under
     # `<out_dir>/<arm_tag>/tmp/row<N>__<tag>__traces.parquet`.
-    tmp_files = list(tmp_path.rglob('row*__traces.parquet'))
+    tmp_files = list(tmp_path.rglob('cell*__traces.parquet'))
     assert tmp_files, 'expected per-row tmp traces.parquet to exist'
     poisoned = tmp_files[0]
     poisoned.write_bytes(b'')  # 0-byte corruption

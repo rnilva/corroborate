@@ -342,13 +342,13 @@ def run_intervention[R: Mapping[str, object]](
             t_row = time.monotonic()
             tag = effective_arm_tag(arm_key, grid_point)
             runs_path = (
-                tmp_dir / f'row{row_idx:03d}__{tag}__runs.parquet'
+                tmp_dir / f'cell{row_idx:03d}__{tag}__runs.parquet'
             )
             traces_path = (
-                tmp_dir / f'row{row_idx:03d}__{tag}__traces.parquet'
+                tmp_dir / f'cell{row_idx:03d}__{tag}__traces.parquet'
             )
             graph_path = (
-                tmp_dir / f'row{row_idx:03d}__{tag}__graph.json'
+                tmp_dir / f'cell{row_idx:03d}__{tag}__graph.json'
             )
             rp_rel = runs_path.relative_to(out_dir).as_posix()
             tp_rel = traces_path.relative_to(out_dir).as_posix()
@@ -427,15 +427,21 @@ def run_intervention[R: Mapping[str, object]](
                 # diverge from `row_idx` here because skipped iterations
                 # don't bump their counter, leading to sidecar filename
                 # collisions on subsequent rows. The sentinel key
-                # `__framework_row_idx__` is stripped from `unexpected`
+                # `__framework_cell_idx__` is stripped from `unexpected`
                 # checks by the implementation runner; old implementations that
                 # ignore it keep their pre-fix behavior unchanged.
-                grid_point_with_row_idx: dict[str, object] = {
+                # The injected key and the shard filenames are
+                # WIRE names: substrates outside this repo read
+                # `__framework_cell_idx__`, and archived corpora
+                # carry `tmp/cell###__…` shards. Persisted and
+                # protocol identifiers do not churn with in-process
+                # vocabulary (CLAUDE.md).
+                grid_point_with_cell_idx: dict[str, object] = {
                     **grid_point,
-                    '__framework_row_idx__': row_idx,
+                    '__framework_cell_idx__': row_idx,
                 }
                 row_result = runner(
-                    claim, arm_key, measurables, grid_point_with_row_idx,
+                    claim, arm_key, measurables, grid_point_with_cell_idx,
                 )
             except Exception as exc:  # noqa: BLE001
                 failures.append(RowFailure(

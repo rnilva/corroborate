@@ -235,7 +235,7 @@ def test_remotefile_round_trip_with_row_ids() -> None:
     """RemoteFile.from_dict / as_dict round-trip preserves
     row_ids when present."""
     f = cloud.RemoteFile(
-        relpath='tmp/row001__runs.parquet',
+        relpath='tmp/cell001__runs.parquet',
         size_bytes=100, sha256='deadbeef',
         pushed_at='2026-05-06T00:00:00Z',
         row_ids=('a', 'b', 'c'),
@@ -532,9 +532,9 @@ def test_archive_picks_up_nested_sidecar_tree(
     Regression for the 2026-05-26 substrate-coverage gap: the
     nested layout used to be silently skipped by `is_file()` on
     iterdir entries that landed on arm-named subdirs."""
-    msgpack_a = sweep_dir / 'q_checkpoints' / 'arm_a' / 'row000_0_burst00.msgpack'
-    msgpack_b = sweep_dir / 'q_checkpoints' / 'arm_a' / 'row000_0_burst01.msgpack'
-    msgpack_c = sweep_dir / 'q_checkpoints' / 'arm_b' / 'row001_0_final.msgpack'
+    msgpack_a = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst00.msgpack'
+    msgpack_b = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst01.msgpack'
+    msgpack_c = sweep_dir / 'q_checkpoints' / 'arm_b' / 'cell001_0_final.msgpack'
     for p in (msgpack_a, msgpack_b, msgpack_c):
         p.parent.mkdir(parents=True, exist_ok=True)
         _ = p.write_bytes(b'msgpack-payload-' + p.name.encode())
@@ -545,9 +545,9 @@ def test_archive_picks_up_nested_sidecar_tree(
     relpaths = {f.relpath for f in manifest.files}
     assert 'runs.parquet' in relpaths
     assert 'traces.parquet' in relpaths
-    assert 'q_checkpoints/arm_a/row000_0_burst00.msgpack' in relpaths
-    assert 'q_checkpoints/arm_a/row000_0_burst01.msgpack' in relpaths
-    assert 'q_checkpoints/arm_b/row001_0_final.msgpack' in relpaths
+    assert 'q_checkpoints/arm_a/cell000_0_burst00.msgpack' in relpaths
+    assert 'q_checkpoints/arm_a/cell000_0_burst01.msgpack' in relpaths
+    assert 'q_checkpoints/arm_b/cell001_0_final.msgpack' in relpaths
     assert len(relpaths) == 5
 
 
@@ -559,7 +559,7 @@ def test_purge_deletes_both_parquets_and_nested_sidecars(
     the parquets AND the nested-sidecar msgpacks via the unified
     manifest. This is what makes the implementation's
     `keep_q_checkpoint_*` opt-in self-cleaning at sweep end."""
-    msgpack = sweep_dir / 'q_checkpoints' / 'arm_a' / 'row000_0_burst00.msgpack'
+    msgpack = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst00.msgpack'
     msgpack.parent.mkdir(parents=True, exist_ok=True)
     _ = msgpack.write_bytes(b'ckpt-bytes')
 
@@ -569,7 +569,7 @@ def test_purge_deletes_both_parquets_and_nested_sidecars(
     # Both parquets + the nested msgpack land in the deletion set.
     assert set(deleted) == {
         'runs.parquet', 'traces.parquet',
-        'q_checkpoints/arm_a/row000_0_burst00.msgpack',
+        'q_checkpoints/arm_a/cell000_0_burst00.msgpack',
     }
     assert not (sweep_dir / 'runs.parquet').exists()
     assert not msgpack.exists()

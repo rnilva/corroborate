@@ -59,7 +59,7 @@ def _cells_from_arm(
     measurements (which carry `env_name`, `seed`, the registered
     measurables' scalars, etc.)."""
     out: list[dict[str, object]] = []
-    for cell in result.df:
+    for cell in result.cells:
         row: dict[str, object] = {'arm_key': arm_key}
         row.update(cell.run.measurements)
         out.append(row)

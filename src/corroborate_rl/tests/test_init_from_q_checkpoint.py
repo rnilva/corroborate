@@ -307,8 +307,8 @@ def test_dqn_resumes_from_loaded_init_params(tmp_path: Path) -> None:
         init_online_params_batched=init_batched,
     )
     # Both seeds emitted a CellResult, each with a populated trace.
-    assert len(arm.df) == 2
-    for cell in arm.df:
+    assert len(arm.cells) == 2
+    for cell in arm.cells:
         assert cell.trace.leaves, (
             f'cell {cell.run.id} emitted empty trace'
         )
@@ -363,8 +363,8 @@ def test_dqn_resumes_from_init_override_direct(tmp_path: Path) -> None:
         arm_key=combined_arm_key(()), measurables=(),
         init_override_batched=init_override,
     )
-    assert len(arm.df) == 2
-    for cell in arm.df:
+    assert len(arm.cells) == 2
+    for cell in arm.cells:
         assert cell.trace.leaves, (
             f'cell {cell.run.id} emitted empty trace'
         )
