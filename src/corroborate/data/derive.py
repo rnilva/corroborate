@@ -1,11 +1,11 @@
 """Shared derivation kernel for run readers.
 
-`load_runs` (neutral JSON layout) and `corroborate_rl.sb3`
-(SB3 artifacts) must produce bit-identical column semantics —
-same flattening, same collision policy, same terminal-summary
-definition — or the meaning of a derived column would depend on
-which reader built the frame. This module is the single home of
-those semantics; readers import it rather than re-implementing.
+Run readers of the neutral JSON layout (`load_runs` today) must
+produce bit-identical column semantics — same flattening, same
+collision policy, same terminal-summary definition — or the
+meaning of a derived column would depend on which reader built
+the frame. This module is the single home of those semantics;
+readers import it rather than re-implementing.
 
 The load-bearing definitions:
 

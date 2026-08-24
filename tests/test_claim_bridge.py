@@ -582,6 +582,106 @@ def test_contrast_isolation_warns_on_an_unregistered_rider() -> None:
     assert 'return_mean' not in rider.message
 
 
+def test_contrast_isolation_sees_a_per_dump_logged_rider() -> None:
+    """A knob logged once per Logger dump (a record array)
+    normalises to its distinct-value set, so constant arrays of
+    different lengths read as one value and the rider scan sees
+    the knob move with the contrast; a genuine trajectory varies
+    within each arm and drops out like any scalar outcome."""
+    cells = _contrast_cells()
+    for i, cell in enumerate(cells):
+        knob = 5e-4 if cell['gamma'] == 0.99 else 1e-3
+        cell['train/learning_rate'] = [knob] * (3 + i)
+        cell['train/loss'] = [float(i), float(i) + 0.5]
+    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    rider = next(
+        w for w in out.warnings if w.gate_name == 'contrast_isolation'
+    )
+    assert 'train/learning_rate' in rider.message
+    assert 'train/loss' not in rider.message
+
+
+def test_registered_record_array_reorder_still_blocks() -> None:
+    """A varying record array is compared by equality — order and
+    multiplicity intact — so a reordered schedule on a REGISTERED
+    leaf is still a co-varied knob, not two spellings of one
+    value set."""
+    cells = _contrast_cells()
+    for cell in cells:
+        cell['lr_schedule'] = (
+            [1e-3, 5e-4] if cell['gamma'] == 0.99 else [5e-4, 1e-3]
+        )
+    out = evaluate(
+        higher_gamma_value_helps, cells,
+        leaves=frozenset({'gamma', 'lr_schedule'}),
+    )
+    assert out.verdict is Verdict.INADMISSIBLE
+    assert out.blocked_by is not None
+    assert out.blocked_by.gate_name == 'contrast_isolation'
+    assert 'lr_schedule' in out.blocked_by.message
+
+
+def test_all_missing_record_array_reads_as_absent() -> None:
+    """An all-NaN record array carries zero data; it must compare
+    equal to a column that is absent entirely — not fire a rider
+    warning naming a knob that never had a value."""
+    cells = _contrast_cells()
+    for cell in cells:
+        if cell['gamma'] == 0.99:
+            cell['train/ent_coef'] = [float('nan'), float('nan')]
+    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    assert not any(
+        w.gate_name == 'contrast_isolation' for w in out.warnings
+    )
+
+
+def test_target_finiteness_warns_on_dropped_pairs() -> None:
+    """A cell whose target resolves to no finite value vanishes
+    from paired analyses; the gate puts the count on the verdict
+    record instead of leaving an unexplained n_pairs."""
+    cells = _contrast_cells()
+    for cell in cells[:3]:
+        cell['return_mean'] = float('nan')
+    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    warn = next(
+        w for w in out.warnings if w.gate_name == 'target_finiteness'
+    )
+    assert '3 of 24' in warn.message
+    assert 'return_mean' in warn.message
+
+
+def test_resolve_value_falls_through_null_pad_to_registry() -> None:
+    """Diagonal pooling null-pads a materialised measurable column
+    onto fresh batches whose raw inputs ARE present; resolution
+    must recompute those cells (compute_missing_columns's
+    null|NaN contract), not read the pad as a cached miss."""
+    import math as _math
+
+    from corroborate.analyses._cell_value import resolve_value
+    from corroborate.measurables import measurable
+
+    @measurable(name='_tcb_last_return', reads=('returns',))
+    def _last_return(record: Mapping[str, object]) -> float:
+        returns = record.get('returns')
+        if not isinstance(returns, list) or not returns:
+            return float('nan')
+        tail = returns[-1]
+        if isinstance(tail, (int, float)) and not isinstance(tail, bool):
+            return float(tail)
+        return float('nan')
+
+    assert _last_return.name == '_tcb_last_return'
+    # Null pad + raw inputs present → recomputed from the registry.
+    assert resolve_value(
+        {'returns': [1.0, 2.0], '_tcb_last_return': None},
+        '_tcb_last_return',
+    ) == 2.0
+    # Genuinely unsatisfiable → the same NaN it always read.
+    assert _math.isnan(resolve_value(
+        {'_tcb_last_return': None}, '_tcb_last_return',
+    ))
+
+
 def test_contrast_isolation_balances_registered_leaves_per_pair() -> None:
     """A setting may vary between seeds provided each matched pair
     shares it."""

@@ -744,8 +744,7 @@ def evaluate(
     registry: the set of column names the producer's record says
     were configured. Panels carry it already; the kwarg serves
     frames built another way (derive it via
-    `corroborate.data.config_columns` /
-    `corroborate_rl.sb3.sb3_config_columns`, or list it by hand
+    `corroborate.data.config_columns`, or list it by hand
     for artifact-less data), and when both are present the
     explicit kwarg wins. It is authoritative about knob-ness,
     and the gates use it both ways: a value-based DoEffect whose
