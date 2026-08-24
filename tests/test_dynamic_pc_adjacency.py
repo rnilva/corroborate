@@ -97,16 +97,16 @@ def _build_full_mediation_panel(
         outcome_matrix[:, b] = (
             beta_mediator_outcome * mediator_matrix[:, b] + e_y
         )
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(n):
-        cells.append({
+        rows.append({
             'env_name': env_name,
             'gamma': gamma,
             'arm_key': arms[i],
             'mediator_pb': mediator_matrix[i, :].tolist(),
             'outcome_pb': outcome_matrix[i, :].tolist(),
         })
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def _build_direct_edge_panel(
@@ -144,16 +144,16 @@ def _build_direct_edge_panel(
     for b in range(n_bursts):
         e_y = rng.normal(0.0, sigma_outcome, size=n)
         outcome_matrix[:, b] = beta_arm_outcome * arm_code + e_y
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(n):
-        cells.append({
+        rows.append({
             'env_name': env_name,
             'gamma': gamma,
             'arm_key': arms[i],
             'mediator_pb': mediator_matrix[i, :].tolist(),
             'outcome_pb': outcome_matrix[i, :].tolist(),
         })
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def _build_null_panel(
@@ -175,16 +175,16 @@ def _build_null_panel(
     arms = ['treatment'] * _N_CELLS_PER_ARM + ['baseline'] * _N_CELLS_PER_ARM
     mediator_matrix = rng.normal(0.0, 1.0, size=(n, n_bursts))
     outcome_matrix = rng.normal(0.0, 1.0, size=(n, n_bursts))
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(n):
-        cells.append({
+        rows.append({
             'env_name': env_name,
             'gamma': gamma,
             'arm_key': arms[i],
             'mediator_pb': mediator_matrix[i, :].tolist(),
             'outcome_pb': outcome_matrix[i, :].tolist(),
         })
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def _get_single_stratum(
@@ -363,18 +363,18 @@ def test_sign_flip_below_floor_is_noise() -> None:
 
 def _build_n_panel(
     *,
-    n_cells_per_arm: int,
+    n_rows_per_arm: int,
     n_bursts: int,
     seed: int,
 ) -> pl.DataFrame:
-    """Tiny-stratum panel where each cell carries a length-
+    """Tiny-stratum panel where each row carries a length-
     `n_bursts` per-burst trajectory. Used for `min_n_per_burst`
     boundary tests."""
     rng = np.random.default_rng(seed)
-    n = 2 * n_cells_per_arm
-    arms = ['treatment'] * n_cells_per_arm + ['baseline'] * n_cells_per_arm
+    n = 2 * n_rows_per_arm
+    arms = ['treatment'] * n_rows_per_arm + ['baseline'] * n_rows_per_arm
     arm_code = np.asarray(
-        [0.5] * n_cells_per_arm + [-0.5] * n_cells_per_arm,
+        [0.5] * n_rows_per_arm + [-0.5] * n_rows_per_arm,
         dtype=np.float64,
     )
     mediator_matrix = np.zeros((n, n_bursts), dtype=np.float64)
@@ -384,7 +384,7 @@ def _build_n_panel(
         e_y = rng.normal(0.0, 0.5, size=n)
         mediator_matrix[:, b] = arm_code + e_m
         outcome_matrix[:, b] = mediator_matrix[:, b] + e_y
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {
             'env_name': 'env_a', 'gamma': 0.99, 'arm_key': arms[i],
             'mediator_pb': mediator_matrix[i, :].tolist(),
@@ -392,14 +392,14 @@ def _build_n_panel(
         }
         for i in range(n)
     ]
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def test_below_min_n_per_burst_marks_underpowered() -> None:
-    """n=10 cells per burst, default `min_n_per_burst=20`: all
+    """n=10 rows per burst, default `min_n_per_burst=20`: all
     bursts under-powered → NaN p-values, NaN ρs, all boolean
     counters zero, status UNDERPOWERED_BURSTS."""
-    df = _build_n_panel(n_cells_per_arm=5, n_bursts=3, seed=10)
+    df = _build_n_panel(n_rows_per_arm=5, n_bursts=3, seed=10)
     results = dynamic_pc_adjacency.fn(
         df, arm_field='arm_key',
         mediator_per_burst='mediator_pb',
@@ -422,9 +422,9 @@ def test_below_min_n_per_burst_marks_underpowered() -> None:
 
 
 def test_at_or_above_min_n_per_burst_defined() -> None:
-    """n=50 cells per burst (well above default 20): ρ and
+    """n=50 rows per burst (well above default 20): ρ and
     p-values are defined (not NaN) at every burst."""
-    df = _build_n_panel(n_cells_per_arm=25, n_bursts=3, seed=11)
+    df = _build_n_panel(n_rows_per_arm=25, n_bursts=3, seed=11)
     results = dynamic_pc_adjacency.fn(
         df, arm_field='arm_key',
         mediator_per_burst='mediator_pb',
@@ -451,14 +451,14 @@ def test_accepts_measurable_inputs() -> None:
     from corroborate.measurables import measurable
 
     @measurable(name='outcome_pb', reads=('outcome_pb',))
-    def outcome_pb_m(cell: Mapping[str, object]) -> npt.NDArray[np.floating]:
-        raw = cell['outcome_pb']
+    def outcome_pb_m(row: Mapping[str, object]) -> npt.NDArray[np.floating]:
+        raw = row['outcome_pb']
         assert isinstance(raw, list)
         return np.asarray(raw, dtype=np.float64)
 
     @measurable(name='mediator_pb', reads=('mediator_pb',))
-    def mediator_pb_m(cell: Mapping[str, object]) -> npt.NDArray[np.floating]:
-        raw = cell['mediator_pb']
+    def mediator_pb_m(row: Mapping[str, object]) -> npt.NDArray[np.floating]:
+        raw = row['mediator_pb']
         assert isinstance(raw, list)
         return np.asarray(raw, dtype=np.float64)
 
@@ -492,9 +492,9 @@ def test_accepts_measurable_inputs() -> None:
 # ============ Ragged-tail per-burst alignment ============
 
 def test_ragged_tail_alignment() -> None:
-    """Cells with shorter trajectories contribute only their
-    prefix. Construction: 50 short cells (25 per arm, length 2) +
-    80 long cells (40 per arm, length 4). n_bursts = max length =
+    """Rows with shorter trajectories contribute only their
+    prefix. Construction: 50 short rows (25 per arm, length 2) +
+    80 long rows (40 per arm, length 4). n_bursts = max length =
     4. n_per_burst should be (130, 130, 80, 80).
 
     Pins the ragged-tail semantics for the PC primitive (same
@@ -502,27 +502,27 @@ def test_ragged_tail_alignment() -> None:
     sibling).
     """
     rng = np.random.default_rng(40)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for arm, arm_code in (('treatment', 0.5), ('baseline', -0.5)):
-        # 25 short cells per arm.
+        # 25 short rows per arm.
         for _ in range(25):
-            cells.append({
+            rows.append({
                 'env_name': 'env_a', 'gamma': 0.99, 'arm_key': arm,
                 'outcome_pb': (
                     arm_code + rng.normal(0.0, 0.5, size=2)
                 ).tolist(),
                 'mediator_pb': rng.normal(0.0, 1.0, size=2).tolist(),
             })
-        # 40 long cells per arm.
+        # 40 long rows per arm.
         for _ in range(40):
-            cells.append({
+            rows.append({
                 'env_name': 'env_a', 'gamma': 0.99, 'arm_key': arm,
                 'outcome_pb': (
                     arm_code + rng.normal(0.0, 0.5, size=4)
                 ).tolist(),
                 'mediator_pb': rng.normal(0.0, 1.0, size=4).tolist(),
             })
-    df = pl.DataFrame(cells)
+    df = pl.DataFrame(rows)
     results = dynamic_pc_adjacency.fn(
         df, arm_field='arm_key',
         mediator_per_burst='mediator_pb',
@@ -591,7 +591,7 @@ def test_registered_as_analysis() -> None:
 
 
 def test_empty_panel_returns_empty_mapping() -> None:
-    """No cells → empty result mapping."""
+    """No rows → empty result mapping."""
     empty = pl.DataFrame(schema={
         'env_name': pl.Utf8, 'gamma': pl.Float64,
         'arm_key': pl.Utf8,
@@ -767,7 +767,7 @@ def test_pc_cluster_bootstrap_populated_under_n_bootstrap_positive() -> None:
       - Mediator d-separates → partial ρ ≈ 0 → bootstrap CI
         should bracket 0.
 
-    n_resamples=200 with n_cells=60 gives bootstrap-replica DL
+    n_resamples=200 with n_rows=60 gives bootstrap-replica DL
     sampling SD ≈ 1/sqrt(60-3) ≈ 0.132 in z-units; at ρ=0.58 the
     delta-method ρ-unit SD ≈ (1 - 0.58²) · 0.132 ≈ 0.087. 95% CI
     half-width ≈ 1.96 · 0.087 ≈ 0.17; bracket bound at 0.30."""
@@ -838,8 +838,8 @@ def test_pc_cluster_bootstrap_reproducible() -> None:
 # `bootstrap_edge_counts` field carries integer-count CIs on
 # (n_bursts_marginal_edge, n_bursts_mediator_dseparates,
 # n_bursts_direct_edge); the question is "is the edge
-# classification robust to which cells we sampled?" — wide CI
-# means a few outlier cells flip per-burst CI decisions and the
+# classification robust to which rows we sampled?" — wide CI
+# means a few outlier rows flip per-burst CI decisions and the
 # count drifts across resamples.
 
 
@@ -1023,11 +1023,11 @@ def _build_heterogeneous_panel(
     n_bursts: int,
     seed: int,
 ) -> pl.DataFrame:
-    """Heterogeneous-cell panel for the wide-CI test on
+    """Heterogeneous-row panel for the wide-CI test on
     `bootstrap_edge_counts`.
 
-    Two cell sub-populations:
-      A. Half the cells follow `arm → mediator → outcome` (full
+    Two row sub-populations:
+      A. Half the rows follow `arm → mediator → outcome` (full
          mediation, strong signal) → dsep at most bursts.
       B. Other half follow `arm → outcome` directly with mediator
          independent (direct edge) → direct at most bursts.
@@ -1037,8 +1037,8 @@ def _build_heterogeneous_panel(
     `dsep` should be WIDE: dsep_upper - dsep_lower >= n_bursts/2
     (heterogeneity uncovered)."""
     rng = np.random.default_rng(seed)
-    # Mix: half cells follow full-mediation chain at strong
-    # signal, half cells follow weak direct-edge with a tiny
+    # Mix: half rows follow full-mediation chain at strong
+    # signal, half rows follow weak direct-edge with a tiny
     # arm→outcome coefficient. Bootstrap-resampling the mixture
     # produces a CI on the count because:
     #   - replicas drawn mostly from type-A → high dsep count
@@ -1077,21 +1077,21 @@ def _build_heterogeneous_panel(
         e_y_b = rng.normal(0.0, 1.0, size=n_a)
         mediator_matrix[n_a:, b] = e_m_b
         outcome_matrix[n_a:, b] = 0.3 * arm_code[n_a:] + e_y_b
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(n_total):
-        cells.append({
+        rows.append({
             'env_name': 'env_a',
             'gamma': 0.99,
             'arm_key': arms[i],
             'mediator_pb': mediator_matrix[i, :].tolist(),
             'outcome_pb': outcome_matrix[i, :].tolist(),
         })
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def test_pc_bootstrap_edge_counts_heterogeneous_wide_ci() -> None:
-    """Heterogeneous panel (half full-mediation cells + half
-    direct-edge cells): different cell sub-populations imply
+    """Heterogeneous panel (half full-mediation rows + half
+    direct-edge rows): different row sub-populations imply
     different per-burst CI classifications. Bootstrap resampling
     should surface this — the CI on the dsep count should be
     wider than under the clean full-mediation panel.
@@ -1119,7 +1119,7 @@ def test_pc_bootstrap_edge_counts_heterogeneous_wide_ci() -> None:
     dsep_width = bec.dsep_upper - bec.dsep_lower
     direct_width = bec.direct_upper - bec.direct_lower
     # At least one of dsep or direct should have non-zero CI
-    # width — the bootstrap is surfacing the cell-mixture.
+    # width — the bootstrap is surfacing the row-mixture.
     assert dsep_width + direct_width >= 1, (
         f'expected non-zero CI width under heterogeneous panel; '
         f'got dsep_width={dsep_width}, direct_width={direct_width}'
@@ -1260,9 +1260,9 @@ def _build_two_mediator_full_mediation_panel(
         z1[:, b] = arm_code + rng.normal(0.0, 0.5, size=n)
         z2[:, b] = arm_code + rng.normal(0.0, 0.5, size=n)
         out[:, b] = z1[:, b] + z2[:, b] + rng.normal(0.0, 0.5, size=n)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(n):
-        cells.append({
+        rows.append({
             'env_name': env_name,
             'gamma': gamma,
             'arm_key': arms[i],
@@ -1270,7 +1270,7 @@ def _build_two_mediator_full_mediation_panel(
             'z2_pb': z2[i, :].tolist(),
             'outcome_pb': out[i, :].tolist(),
         })
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def test_pc_multi_mediator_joint_dseparates_at_every_burst() -> None:

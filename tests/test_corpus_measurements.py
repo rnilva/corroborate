@@ -3,7 +3,7 @@ store from CACHE_BUILD.md Phase 1.
 
 The two-level architecture: each corpus carries its own
 `measurements.parquet` with every measurable ever computed for
-its cells, keyed by `RunRow.id`. The per-hypothesis cache (Phase
+its rows, keyed by `RunRow.id`. The per-hypothesis cache (Phase
 2) becomes a cheap projection over these.
 
 These tests pin the contract:
@@ -51,7 +51,7 @@ def x_plus_y(record: Mapping[str, object]) -> float:
 
 def _runs_df(n: int = 5) -> pl.DataFrame:
     return pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(n)],
+        'id': [f'row-{i}' for i in range(n)],
         'x': [float(i) for i in range(n)],
         'y': [float(i * 10) for i in range(n)],
     })
@@ -163,7 +163,7 @@ def test_build_measurements_drops_drifted_column(tmp_path: Path) -> None:
     # Corrupt the stored column with a sentinel — the framework
     # would never produce these for `double_x = 2 * x`.
     corrupted = pl.DataFrame({
-        'id': ['cell-0', 'cell-1', 'cell-2'],
+        'id': ['row-0', 'row-1', 'row-2'],
         'double_x': [999.0, 999.0, 999.0],
     })
     corrupted.write_parquet(tmp_path / MEASUREMENTS_FILENAME)
@@ -311,9 +311,9 @@ def test_build_measurements_rebuilds_from_scratch_on_duplicate_ids(
     # Hand-stage a corrupt store: 12 rows, 3 unique ids.
     corrupt = pl.DataFrame({
         'id': [
-            'cell-0', 'cell-0', 'cell-0', 'cell-0',
-            'cell-1', 'cell-1', 'cell-1', 'cell-1',
-            'cell-2', 'cell-2', 'cell-2', 'cell-2',
+            'row-0', 'row-0', 'row-0', 'row-0',
+            'row-1', 'row-1', 'row-1', 'row-1',
+            'row-2', 'row-2', 'row-2', 'row-2',
         ],
         'double_x': [99.0] * 12,
     })
@@ -341,7 +341,7 @@ def test_build_measurements_drops_orphan_rows_not_in_runs(
     """**corpus-integrity invariant CI6**: rows in `measurements.parquet`
     whose `id` is no longer in `runs.parquet` are orphans —
     dropped on every rebuild. Sweep extensions or partial
-    reruns that removed cells from runs.parquet would
+    reruns that removed rows from runs.parquet would
     otherwise leave stale measurement rows accumulating
     forever.
 
@@ -351,16 +351,16 @@ def test_build_measurements_drops_orphan_rows_not_in_runs(
     orphan), and the canonical recompute fires.
     """
     runs_df = pl.DataFrame({
-        'id': ['cell-0', 'cell-1'],
+        'id': ['row-0', 'row-1'],
         'x': [1.0, 2.0],
         'y': [10.0, 20.0],
     })
     out_path = tmp_path / MEASUREMENTS_FILENAME
 
-    # Pre-stage: 3 rows. cell-2 will be orphan once runs_df
-    # comes in with only cell-0 and cell-1.
+    # Pre-stage: 3 rows. row-2 will be orphan once runs_df
+    # comes in with only row-0 and row-1.
     pre_existing = pl.DataFrame({
-        'id': ['cell-0', 'cell-1', 'cell-2'],
+        'id': ['row-0', 'row-1', 'row-2'],
         'double_x': [99.0, 99.0, 99.0],
     })
     pre_existing.write_parquet(out_path)
@@ -371,9 +371,9 @@ def test_build_measurements_drops_orphan_rows_not_in_runs(
     df = load_measurements(tmp_path)
 
     ids = sorted(df['id'].to_list())
-    assert ids == ['cell-0', 'cell-1'], (
-        f'CI6 orphan eviction failed: expected ids [cell-0, cell-1]; '
-        f'got {ids}. Stale `cell-2` row should have been dropped.'
+    assert ids == ['row-0', 'row-1'], (
+        f'CI6 orphan eviction failed: expected ids [row-0, row-1]; '
+        f'got {ids}. Stale `row-2` row should have been dropped.'
     )
     assert df.height == 2
 
@@ -388,7 +388,7 @@ def test_build_measurements_idempotent_skip_rejects_disjoint_ids(
     count but not ID-set membership. A caller passing a runs_df
     with disjoint IDs but identical height + pre-populated
     measurable cols got a no-op build — the persisted store
-    retained the old cells' values keyed under the OLD IDs,
+    retained the old rows' values keyed under the OLD IDs,
     silently leaking obsolete data.
 
     Probe: build for IDs `[a, b, c]` first; then call again with
@@ -458,7 +458,7 @@ def test_build_measurements_drops_column_when_signature_fn_returns_none(
     )
     # Corrupt the persisted column.
     corrupted = pl.DataFrame({
-        'id': ['cell-0', 'cell-1', 'cell-2'],
+        'id': ['row-0', 'row-1', 'row-2'],
         'double_x': [-99.0, -99.0, -99.0],
     })
     corrupted.write_parquet(tmp_path / MEASUREMENTS_FILENAME)
@@ -539,19 +539,19 @@ def test_build_measurements_runs_df_column_wins_on_collision(
     assert 'double_x_right' not in df.columns
 
 
-def test_build_measurements_partial_stamp_recomputes_only_null_cells(
+def test_build_measurements_partial_stamp_recomputes_only_null_rows(
     tmp_path: Path,
 ) -> None:
     """**#1 roast fix, partial-nullity edge**: when runs_df partially
-    stamps (some cells filled, others null), substrate-stamped
-    cells preserve their values; null cells are recomputed via
+    stamps (some rows filled, others null), substrate-stamped
+    rows preserve their values; null rows are recomputed via
     the framework's `@measurable` definition. Existing-store
     values for collision columns are dropped at the join — they
     do NOT participate in the merge.
 
-    Probe: implementation stamps cell 0 = 99, leaves cell 1 null,
-    stamps cell 2 = 77. Existing has [0, 2, 4]. Expected:
-    [99, 2, 77] (cell 1 recomputed via `2 * x`).
+    Probe: implementation stamps row 0 = 99, leaves row 1 null,
+    stamps row 2 = 77. Existing has [0, 2, 4]. Expected:
+    [99, 2, 77] (row 1 recomputed via `2 * x`).
     """
     runs_df = _runs_df(3)
     build_measurements(
@@ -570,9 +570,9 @@ def test_build_measurements_partial_stamp_recomputes_only_null_cells(
     )
     assert vals == [99.0, 2.0, 77.0], (
         f'partial-stamp expected [99, 2, 77]; got {vals}. '
-        f'Cell 0/2: substrate stamp must win. Cell 1: framework '
+        f'Row 0/2: substrate stamp must win. Row 1: framework '
         f'recompute via `2 * x`. The existing-store value 2.0 at '
-        f'cell 1 happens to match — but that is incidental, not '
+        f'row 1 happens to match — but that is incidental, not '
         f'proof that existing was consulted.'
     )
 
@@ -580,30 +580,30 @@ def test_build_measurements_partial_stamp_recomputes_only_null_cells(
 # ============ Partial-nullity awareness ============
 
 
-def test_build_measurements_recomputes_null_cells_in_existing_column(
+def test_build_measurements_recomputes_null_rows_in_existing_column(
     tmp_path: Path,
 ) -> None:
     """**Partial-nullity recompute** (per measurable.py's check):
-    when an existing column has SOME null cells, the next build
-    recomputes ONLY those cells; non-null cells preserve their
+    when an existing column has SOME null rows, the next build
+    recomputes ONLY those rows; non-null rows preserve their
     values.
 
     Pre-fix: build_measurements naively excluded required names
     that were already in `existing.columns`, so a column with
-    NULL cells from a prior failed compute (transient missing
+    NULL rows from a prior failed compute (transient missing
     input, code-fix-between-runs) stayed null forever despite
     the fix. Post-fix: pass the FULL required list to
-    `compute_missing_columns`, which detects the null cells via
+    `compute_missing_columns`, which detects the null rows via
     `col.is_null().any()` and recomputes them.
 
     Construction: build measurements once with one runs_df; then
-    write a measurements.parquet by hand with NULL cells; then
-    rebuild. The null cells should be filled in.
+    write a measurements.parquet by hand with NULL rows; then
+    rebuild. The null rows should be filled in.
     """
     runs_df = _runs_df(3)
     out_path = tmp_path / MEASUREMENTS_FILENAME
 
-    # First build populates double_x for all 3 cells AND writes
+    # First build populates double_x for all 3 rows AND writes
     # the sidecar with the canonical closure hash.
     build_measurements(
         tmp_path, required=['double_x'], runs_df=runs_df,
@@ -613,26 +613,26 @@ def test_build_measurements_recomputes_null_cells_in_existing_column(
         'first build should have written sidecar entry'
     )
 
-    # Simulate "transient failure on cell 1" — overwrite the
-    # parquet with cell 1 nulled out, but DO NOT touch the
+    # Simulate "transient failure on row 1" — overwrite the
+    # parquet with row 1 nulled out, but DO NOT touch the
     # sidecar. The sidecar still claims the canonical closure
     # hash (no drift signal); the partial-nullity branch is the
     # only path that can fix this — disambiguation post-roast-#15.
     df_with_null = pl.DataFrame({
-        'id': ['cell-0', 'cell-1', 'cell-2'],
-        'double_x': [0.0, None, 4.0],   # cell 1 is null
+        'id': ['row-0', 'row-1', 'row-2'],
+        'double_x': [0.0, None, 4.0],   # row 1 is null
     })
     df_with_null.write_parquet(out_path)
 
-    # Rebuild: the partial-nullity check should recompute cell 1.
+    # Rebuild: the partial-nullity check should recompute row 1.
     build_measurements(
         tmp_path, required=['double_x'], runs_df=runs_df,
     )
     df = load_measurements(tmp_path)
     vals = df.sort('id')['double_x'].to_list()
     assert vals == [0.0, 2.0, 4.0], (
-        f'partial-nullity recompute failed: cell 1 should be '
-        f'2.0 (recomputed), got {vals[1]}. cell 0 / 2 should '
+        f'partial-nullity recompute failed: row 1 should be '
+        f'2.0 (recomputed), got {vals[1]}. row 0 / 2 should '
         f'be preserved as 0.0 / 4.0.'
     )
 
@@ -770,7 +770,7 @@ def _runs_df_with_traces(n: int = 5) -> pl.DataFrame:
     measurable inputs inline (no separate traces.parquet needed
     for these measurables)."""
     return pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(n)],
+        'id': [f'row-{i}' for i in range(n)],
         'x': [float(i) for i in range(n)],
         'y': [float(i * 10) for i in range(n)],
     })
@@ -821,10 +821,10 @@ def test_recompute_fills_in_missing_measurable(tmp_path: Path) -> None:
         df['x_plus_y'].to_list(),
     ))
     assert canonical == [
-        ('cell-0', 0.0),
-        ('cell-1', 11.0),
-        ('cell-2', 22.0),
-        ('cell-3', 33.0),
+        ('row-0', 0.0),
+        ('row-1', 11.0),
+        ('row-2', 22.0),
+        ('row-3', 33.0),
     ]
     # Sidecar updated with the new measurable's hash.
     sidecar_after = current_signatures(corpus)
@@ -1066,11 +1066,11 @@ def test_recompute_reads_trace_columns_when_local_traces_present(
 
     corpus = tmp_path / 'corp'
     runs = pl.DataFrame({
-        'id': ['cell-0', 'cell-1', 'cell-2'],
+        'id': ['row-0', 'row-1', 'row-2'],
         'x': [1.0, 2.0, 3.0],
     })
     traces = pl.DataFrame({
-        'id': ['cell-0', 'cell-1', 'cell-2'],
+        'id': ['row-0', 'row-1', 'row-2'],
         'step_value': [10.0, 20.0, 30.0],
     })
     _write_corpus(corpus, runs)
@@ -1085,9 +1085,9 @@ def test_recompute_reads_trace_columns_when_local_traces_present(
     assert 'trace_double' in df.columns
     vals = sorted(zip(df['id'].to_list(), df['trace_double'].to_list()))
     assert vals == [
-        ('cell-0', 20.0),
-        ('cell-1', 40.0),
-        ('cell-2', 60.0),
+        ('row-0', 20.0),
+        ('row-1', 40.0),
+        ('row-2', 60.0),
     ]
 
 
@@ -1258,8 +1258,8 @@ def test_recover_nan_auto_fixes_stale_nan_columns(
     vals = sorted(zip(df_after['id'].to_list(),
                        df_after['x_plus_y'].to_list()))
     assert vals == [
-        ('cell-0', 0.0), ('cell-1', 11.0),
-        ('cell-2', 22.0), ('cell-3', 33.0),
+        ('row-0', 0.0), ('row-1', 11.0),
+        ('row-2', 22.0), ('row-3', 33.0),
     ]
     assert not result.is_clean
 
@@ -1270,7 +1270,7 @@ def test_force_recompute_named_measurable_bypasses_sidecar_current(
     """`force=frozenset({'x_plus_y'})` treats x_plus_y as gap even
     when its sidecar hash matches the live registry. Use case:
     operator knows a measurable's values are stale (e.g., partial
-    sweep that wrote some cells with bad inputs) and wants to
+    sweep that wrote some rows with bad inputs) and wants to
     rebuild without invalidating the sidecar manually."""
     corpus = tmp_path / 'corp'
     runs = _runs_df_with_traces(3)
@@ -1364,11 +1364,11 @@ from corroborate.graph.causal import Direction as _Direction, Tier as _Tier   # 
 
 @_cli_analysis
 def _xy_minus_analysis(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     _xy_minus: object,   # noqa: ARG001
 ) -> int:
     from corroborate._internals.polars import to_dicts
-    return len(list(to_dicts(cells)))
+    return len(list(to_dicts(df)))
 
 
 @_claim_bridge(
@@ -1435,9 +1435,9 @@ def test_cli_recompute_targets_named_list_calls_recompute(
     # Values are the canonical `x - y` framework computation.
     vals = sorted(zip(df['id'].to_list(), df['_xy_minus'].to_list()))
     assert vals == [
-        ('cell-0', 0.0),
-        ('cell-1', -9.0),
-        ('cell-2', -18.0),
+        ('row-0', 0.0),
+        ('row-1', -9.0),
+        ('row-2', -18.0),
     ]
 
 
@@ -1550,7 +1550,7 @@ def test_stream_assemble_frames_preserves_data(tmp_path: 'Path') -> None:
         }),
     ]
     merged = _stream_assemble_frames(frames, walk_root=tmp_path)
-    # All cells flowed through.
+    # All rows flowed through.
     assert merged.height == 6
     # Schema union of all input columns.
     assert set(merged.columns) == {'id', 'shared', 'only_a', 'only_b'}
@@ -1587,46 +1587,46 @@ def _stream_mean_q(record: Mapping[str, object]) -> float:
     that blow up RAM when the whole trace file is read at once."""
     q = record.get('q_per_step')
     if not isinstance(q, (list, tuple)) or not q:
-        raise KeyError('q_per_step missing or empty on this cell')
+        raise KeyError('q_per_step missing or empty on this row')
     vals = [float(v) for v in q]
     return sum(vals) / len(vals)
 
 
 def _write_single_row_group_traces(
-    path: 'Path', *, n_cells: int, steps_per_cell: int,
+    path: 'Path', *, n_rows: int, steps_per_row: int,
 ) -> None:
     """Write a traces.parquet whose ENTIRE content is one row group
     — the pathological layout that defeats row-group streaming
-    (snake_g099_canonical_3M_ckpt: 60 cells in 1 RG). pyarrow's
+    (snake_g099_canonical_3M_ckpt: 60 rows in 1 RG). pyarrow's
     `write_table(..., row_group_size=)` with a size >= row count
     yields a single row group."""
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    ids = [f'cell-{i}' for i in range(n_cells)]
+    ids = [f'row-{i}' for i in range(n_rows)]
     q_per_step = [
-        [float(i * 100 + s) for s in range(steps_per_cell)]
-        for i in range(n_cells)
+        [float(i * 100 + s) for s in range(steps_per_row)]
+        for i in range(n_rows)
     ]
     table = pa.table({'id': ids, 'q_per_step': q_per_step})
     # row_group_size larger than the row count -> exactly 1 RG.
-    pq.write_table(table, str(path), row_group_size=n_cells + 1)
+    pq.write_table(table, str(path), row_group_size=n_rows + 1)
 
 
-def test_streaming_compute_single_row_group_takes_per_cell_fallback(
+def test_streaming_compute_single_row_group_takes_per_row_fallback(
     tmp_path: 'Path',
     monkeypatch: 'pytest.MonkeyPatch',
 ) -> None:
     """A traces.parquet written as ONE huge row group must NOT be
     read whole (that OOMs on real 30 GB files). The streaming
     compute path detects the single-RG layout and drops to the
-    per-cell lazy-scan fallback — verified here by asserting the
+    per-row lazy-scan fallback — verified here by asserting the
     fallback function is the one that ran AND that the per-step
     reduction comes out correct.
 
     Root cause this guards: row groups are the framework's streaming
     unit, but a cloud sweep merger can emit a single row group
-    spanning every cell; iterating "by row group" then loads the
+    spanning every row; iterating "by row group" then loads the
     whole file at once."""
     import pyarrow.parquet as pq
 
@@ -1635,19 +1635,19 @@ def test_streaming_compute_single_row_group_takes_per_cell_fallback(
         compute_trace_measurables_streaming,
     )
 
-    n_cells = 12
+    n_rows = 12
     traces_path = tmp_path / 'traces.parquet'
     _write_single_row_group_traces(
-        traces_path, n_cells=n_cells, steps_per_cell=8,
+        traces_path, n_rows=n_rows, steps_per_row=8,
     )
     # Precondition: the writer really produced a single row group.
     pf = pq.ParquetFile(str(traces_path))
     assert pf.num_row_groups == 1
-    assert pf.metadata.num_rows == n_cells
+    assert pf.metadata.num_rows == n_rows
 
-    runs_df = pl.DataFrame({'id': [f'cell-{i}' for i in range(n_cells)]})
+    runs_df = pl.DataFrame({'id': [f'row-{i}' for i in range(n_rows)]})
 
-    # Spy on the per-cell fallback so we can assert it was the path
+    # Spy on the per-row fallback so we can assert it was the path
     # taken (the OOM-safe branch), not the whole-RG read.
     calls: list[int] = []
     # Spying on the private fallback is the most direct assertion
@@ -1673,7 +1673,7 @@ def test_streaming_compute_single_row_group_takes_per_cell_fallback(
         batch_size=4,
     )
 
-    # The per-cell fallback was the path taken — NOT the whole-RG
+    # The per-row fallback was the path taken — NOT the whole-RG
     # read that would OOM on a real 30 GB file.
     assert calls == [1]
 
@@ -1683,8 +1683,8 @@ def test_streaming_compute_single_row_group_takes_per_cell_fallback(
         out_sorted['id'].to_list(),
         out_sorted['_stream_mean_q'].to_list(),
     ))
-    for i in range(n_cells):
-        assert got[f'cell-{i}'] == pytest.approx(i * 100 + 3.5)
+    for i in range(n_rows):
+        assert got[f'row-{i}'] == pytest.approx(i * 100 + 3.5)
 
 
 def test_streaming_compute_overrides_stale_runs_stamp(
@@ -1700,38 +1700,38 @@ def test_streaming_compute_overrides_stale_runs_stamp(
     shadows the trace recompute — the exact pathology that left
     snake's eval measurables stuck at n=5 on the streaming path.
 
-    Exercises the ROW-GROUP path (batch_size > n_cells). Closed
+    Exercises the ROW-GROUP path (batch_size > n_rows). Closed
     form: `_stream_mean_q = mean(q_per_step)`; the stale stamp is
-    999.0, the true per-cell mean for cell-i is i*100 + 3.5."""
+    999.0, the true per-row mean for row-i is i*100 + 3.5."""
     from corroborate.corpus.measurements import (
         compute_trace_measurables_streaming,
     )
-    n_cells = 6
+    n_rows = 6
     traces_path = tmp_path / 'traces.parquet'
     _write_single_row_group_traces(
-        traces_path, n_cells=n_cells, steps_per_cell=8,
+        traces_path, n_rows=n_rows, steps_per_row=8,
     )
     # runs_df carries a STALE stamp for the measurable we recompute.
     runs_df = pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(n_cells)],
-        '_stream_mean_q': [999.0] * n_cells,
+        'id': [f'row-{i}' for i in range(n_rows)],
+        '_stream_mean_q': [999.0] * n_rows,
     })
     out = compute_trace_measurables_streaming(
         runs_df,
         traces_path,
         measurable_reads=frozenset({'q_per_step'}),
         required=['_stream_mean_q'],
-        batch_size=n_cells + 4,   # > n_cells -> row-group path, not fallback
+        batch_size=n_rows + 4,   # > n_rows -> row-group path, not fallback
     )
     out_sorted = out.sort('id')
     got = dict(zip(
         out_sorted['id'].to_list(),
         out_sorted['_stream_mean_q'].to_list(),
     ))
-    for i in range(n_cells):
-        assert got[f'cell-{i}'] == pytest.approx(i * 100 + 3.5), (
+    for i in range(n_rows):
+        assert got[f'row-{i}'] == pytest.approx(i * 100 + 3.5), (
             f'stale runs stamp 999.0 shadowed the trace recompute for '
-            f'cell-{i}: got {got[f"cell-{i}"]} (closed form {i * 100 + 3.5})'
+            f'row-{i}: got {got[f"row-{i}"]} (closed form {i * 100 + 3.5})'
         )
 
 
@@ -1741,20 +1741,20 @@ def test_build_measurements_streaming_persists_single_row_group(
     """`build_measurements_streaming` lands the trace-derived
     measurable in `measurements.parquet` for a single-row-group
     trace file — the full ingest contract for the snake_3M corpus
-    (cells enter the store ONLY through the build path, never a
+    (rows enter the store ONLY through the build path, never a
     hand-written `df.write_parquet`)."""
     from corroborate.corpus.measurements import (
         build_measurements_streaming,
     )
 
-    n_cells = 10
+    n_rows = 10
     corpus = tmp_path / 'corp'
     corpus.mkdir()
     traces_path = corpus / 'traces.parquet'
     _write_single_row_group_traces(
-        traces_path, n_cells=n_cells, steps_per_cell=6,
+        traces_path, n_rows=n_rows, steps_per_row=6,
     )
-    runs_df = pl.DataFrame({'id': [f'cell-{i}' for i in range(n_cells)]})
+    runs_df = pl.DataFrame({'id': [f'row-{i}' for i in range(n_rows)]})
     runs_df.write_parquet(corpus / 'runs.parquet')
 
     out_path = build_measurements_streaming(
@@ -1768,7 +1768,7 @@ def test_build_measurements_streaming_persists_single_row_group(
 
     stored = load_measurements(corpus)
     assert '_stream_mean_q' in stored.columns
-    assert stored.height == n_cells
+    assert stored.height == n_rows
     stored_sorted = stored.sort('id')
     vals = stored_sorted['_stream_mean_q'].to_list()
     # mean of [i*100 .. i*100+5] = i*100 + 2.5.
@@ -1788,7 +1788,7 @@ def test_build_measurements_streaming_persists_single_row_group(
 # (no per-column sidecar skip — it always evaluates the full list
 # on the loaded batch). A measurable held "current" (so its read
 # isn't in the drifted set) but still riding `satisfiable_required`
-# then had its read unloaded → KeyError on every cell → all-null
+# then had its read unloaded → KeyError on every row → all-null
 # column whose null + "current" closure-hash self-perpetuated.
 #
 # Hit `mc_return__mean_axis_-1` (the per-burst outcome) and
@@ -1807,7 +1807,7 @@ def _mc_burst_mean(record: Mapping[str, object]) -> object:
     mean over the episode axis."""
     mc = record.get('mc_return')
     if mc is None:
-        raise KeyError('mc_return missing on this cell')
+        raise KeyError('mc_return missing on this row')
     import numpy as _np
     arr = _np.asarray(mc, dtype=float)
     if arr.ndim != 2 or arr.size == 0:
@@ -1832,8 +1832,8 @@ def _q_burst_mean_drifts(record: Mapping[str, object]) -> float:
 def _write_outcome_corpus(corpus: Path) -> None:
     """A corpus carrying `mc_return` (per-burst×episode) and
     `online_max_q_per_step` (per-step) trace cols + a runs.parquet
-    with the `id` key. Three cells; the per-burst mean of
-    `mc_return` is deterministic per cell."""
+    with the `id` key. Three rows; the per-burst mean of
+    `mc_return` is deterministic per row."""
     corpus.mkdir(parents=True, exist_ok=True)
     runs = pl.DataFrame({
         'id': ['c0', 'c1', 'c2'],
@@ -1842,7 +1842,7 @@ def _write_outcome_corpus(corpus: Path) -> None:
     runs.write_parquet(corpus / 'runs.parquet')
     traces = pl.DataFrame({
         'id': ['c0', 'c1', 'c2'],
-        # (n_bursts=2, n_episodes=2) per cell. Per-burst mean:
+        # (n_bursts=2, n_episodes=2) per row. Per-burst mean:
         #   c0 -> [2.0, 3.0]; c1 -> [5.0, 6.0]; c2 -> [8.0, 9.0].
         'mc_return': [
             [[1.0, 3.0], [2.0, 4.0]],
@@ -1861,7 +1861,7 @@ def test_streaming_ingest_streams_reads_of_current_measurable(
     """**Regression**: when only a Q-reading measurable is drifted,
     the streaming ingest must STILL stream `mc_return` so the
     held-current per-burst-mean measurable computes finite rather
-    than KeyError-ing on every cell.
+    than KeyError-ing on every row.
 
     Pre-state: build the store with BOTH measurables current (full
     build, all trace cols joined), so `_mc_burst_mean` lands finite.
@@ -1872,7 +1872,7 @@ def test_streaming_ingest_streams_reads_of_current_measurable(
     On the buggy code path `streamed_trace_reads` = drifted reads
     only = `{online_max_q_per_step}`, so the streaming compute (which
     evaluates the full `satisfiable_required` list, `_mc_burst_mean`
-    included) KeyErrors on `mc_return` for every cell and emits the
+    included) KeyErrors on `mc_return` for every row and emits the
     all-null warning. The fix streams the full measurable trace-read
     set, so no warning fires and the value stays finite.
     """

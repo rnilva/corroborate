@@ -23,7 +23,7 @@ about which mediator candidates survive the audit and which
 get unmasked as artifacts of HP shadow / outcome leakage.
 
 Wraps `corroborate.redundancy_check.audit_mediator_panel`. The
-analysis converts the cell collection to `RunRow` objects at
+analysis converts the row collection to `RunRow` objects at
 the boundary; the existing audit is preserved unchanged."""
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ class AuditResult:
 
 @analysis
 def tautology_audit(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     measurables: Sequence[Mapping[str, object]],
     outcome_path: str,
@@ -100,17 +100,17 @@ def tautology_audit(
     arm — the audit then reports mediator quality conditional
     on that arm's data only.
 
-    `mediator_path_for` is an optional `name → cell-dict-key`
+    `mediator_path_for` is an optional `name → row-dict-key`
     override. By default `audit_mediator_panel` looks up each
     mediator's value at `RunRow.measurements[f'mediator.{name}']`
     (or at `name` when `name` already contains a dot). When the
-    cells expose mediator scalars under a different key
+    rows expose mediator scalars under a different key
     convention — e.g. bare names like `target_staleness_late`
     rather than `mediator.target_staleness_late` — pass an
     explicit map so the audit reads them without forcing the
     caller to rename keys. Forwarded verbatim to
     `audit_mediator_panel`."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     spec_list: list[_MeasurableSpec] = []
     for m in measurables:
         name_v = m.get('name')
@@ -130,10 +130,10 @@ def tautology_audit(
         spec_list.append(_MeasurableSpec(name=name_v, reads=reads_v))
 
     runs: list[RunRow] = []
-    for cell in rows:
-        if arm_filter is not None and cell.get(arm_field) != arm_filter:
+    for row in rows:
+        if arm_filter is not None and row.get(arm_field) != arm_filter:
             continue
-        runs.append(RunRow.from_row_dict(cell))
+        runs.append(RunRow.from_row_dict(row))
 
     reports = audit_mediator_panel(
         spec_list,

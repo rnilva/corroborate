@@ -62,7 +62,7 @@ def _build_panel(
     target value in `rho_trajectory`.
 
     Construction:
-      - 2*_N_CELLS_PER_ARM cells, half labelled 'treatment', half
+      - 2*_N_CELLS_PER_ARM rows, half labelled 'treatment', half
         'baseline'.
       - At each burst `b`, outcome = ρ_b * arm_code + sqrt(1 - ρ_b²) *
         independent_noise. ρ(arm_code, outcome) approaches ρ_b
@@ -98,9 +98,9 @@ def _build_panel(
             + math.sqrt(max(1.0 - target_rho ** 2, 0.0)) * noise
         )
 
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(n):
-        cells.append({
+        rows.append({
             'env_name': env_name,
             'gamma': gamma,
             'arm_key': arms[i],
@@ -108,12 +108,12 @@ def _build_panel(
             'outcome_pb': outcome_matrix[i, :].tolist(),
         })
     # Replace placeholder mediator with the independent matrix.
-    for i, cell in enumerate(cells):
-        # Cells are dict-typed (Mapping abstract but built as dict).
-        assert isinstance(cell, dict)
-        cell['mediator_pb'] = mediator_matrix[i, :].tolist()
+    for i, row in enumerate(rows):
+        # Rows are dict-typed (Mapping abstract but built as dict).
+        assert isinstance(row, dict)
+        row['mediator_pb'] = mediator_matrix[i, :].tolist()
 
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def _expected_rho_per_burst(
@@ -400,7 +400,7 @@ def test_multi_stratum_partition() -> None:
 
 
 def test_empty_panel_returns_empty_mapping() -> None:
-    """No cells → empty result mapping. No crash."""
+    """No rows → empty result mapping. No crash."""
     empty = pl.DataFrame(schema={
         'env_name': pl.Utf8, 'gamma': pl.Float64,
         'arm_key': pl.Utf8,
@@ -681,25 +681,25 @@ def test_weak_time_varying_robust_to_single_noise_burst() -> None:
 
 def _build_small_panel(
     *,
-    n_cells_per_arm: int,
+    n_rows_per_arm: int,
     seed: int,
 ) -> pl.DataFrame:
     """Tiny-stratum panel for `min_n_per_burst` boundary tests.
-    Single burst; per-burst n = 2 * n_cells_per_arm."""
+    Single burst; per-burst n = 2 * n_rows_per_arm."""
     rng = np.random.default_rng(seed)
-    n = 2 * n_cells_per_arm
-    arms = ['treatment'] * n_cells_per_arm + ['baseline'] * n_cells_per_arm
+    n = 2 * n_rows_per_arm
+    arms = ['treatment'] * n_rows_per_arm + ['baseline'] * n_rows_per_arm
     outcome = rng.normal(0.0, 1.0, size=n)
     # Plant a moderate ρ via the arm code so the per-burst ρ is
     # well-defined when n is sufficient.
     arm_code = np.asarray(
-        [1.0] * n_cells_per_arm + [0.0] * n_cells_per_arm,
+        [1.0] * n_rows_per_arm + [0.0] * n_rows_per_arm,
         dtype=np.float64,
     )
     arm_centred = (arm_code - arm_code.mean()) / float(np.std(arm_code))
     outcome = 0.5 * arm_centred + math.sqrt(0.75) * outcome
     mediator = rng.normal(0.0, 1.0, size=n)
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {
             'env_name': 'env_a', 'gamma': 0.99, 'arm_key': arms[i],
             'mediator_pb': [float(mediator[i])],
@@ -707,14 +707,14 @@ def _build_small_panel(
         }
         for i in range(n)
     ]
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def test_min_n_per_burst_boundary_n_below_floor() -> None:
-    """At n=4 (2 cells per arm) with `min_n_per_burst=5`, the
+    """At n=4 (2 rows per arm) with `min_n_per_burst=5`, the
     single burst falls below the floor → all per-burst ρ are
     NaN → status UNDERPOWERED_BURSTS."""
-    df = _build_small_panel(n_cells_per_arm=2, seed=30)  # n=4
+    df = _build_small_panel(n_rows_per_arm=2, seed=30)  # n=4
     results = dynamic_partial_spearman.fn(
         df, arm_field='arm_key',
         mediator_per_burst='mediator_pb',
@@ -735,14 +735,14 @@ def test_min_n_per_burst_boundary_n_below_floor() -> None:
 
 
 def test_min_n_per_burst_boundary_n_at_floor() -> None:
-    """At n=6 (3 cells per arm; we use 3 here to stay safely above
+    """At n=6 (3 rows per arm; we use 3 here to stay safely above
     boundary while keeping n above the closed-form partial floor of
     n=5) with `min_n_per_burst=5`, the burst meets the floor → ρ
     computed (non-NaN)."""
     # n=6 chosen because partial_spearman_rho requires n >= 5 for
     # the closed-form first-order partial; n=5 sits at the boundary
     # where partial ρ is well-defined but rho_partial has df=1.
-    df = _build_small_panel(n_cells_per_arm=3, seed=31)  # n=6
+    df = _build_small_panel(n_rows_per_arm=3, seed=31)  # n=6
     results = dynamic_partial_spearman.fn(
         df, arm_field='arm_key',
         mediator_per_burst='mediator_pb',
@@ -813,14 +813,14 @@ def test_df_offset_distinguishes_marginal_and_partial_pools() -> None:
     # have ρ ≈ planted (with mediator independent so partial ≈
     # marginal). We construct a single-stratum panel where burst 0
     # has small n and burst 1 has large n with the same planted ρ.
-    # Use the ragged-tail semantics: short cells contribute only
-    # to burst 0; long cells contribute to both. n_burst_0 = 5,
+    # Use the ragged-tail semantics: short rows contribute only
+    # to burst 0; long rows contribute to both. n_burst_0 = 5,
     # n_burst_1 = 20.
     rng = np.random.default_rng(40)
     rho_target = 0.5
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
 
-    def _one_cell(arm: str, arm_code: float, n_bursts: int) -> Mapping[str, object]:
+    def _one_row(arm: str, arm_code: float, n_bursts: int) -> Mapping[str, object]:
         noise_out = rng.normal(0.0, 1.0, size=n_bursts)
         outcome = (
             rho_target * arm_code
@@ -836,13 +836,13 @@ def test_df_offset_distinguishes_marginal_and_partial_pools() -> None:
     # Encode arms as centred for the construction to plant ρ;
     # framework's sorted-unique encoding will recover the same
     # partition since 'baseline' < 'treatment'.
-    for _ in range(3):  # 3 cells per arm with length-1 trajectory
-        cells.append(_one_cell('treatment', 1.0, 1))
-        cells.append(_one_cell('baseline', -1.0, 1))
-    for _ in range(10):  # 10 cells per arm with length-2 trajectory
-        cells.append(_one_cell('treatment', 1.0, 2))
-        cells.append(_one_cell('baseline', -1.0, 2))
-    df = pl.DataFrame(cells)
+    for _ in range(3):  # 3 rows per arm with length-1 trajectory
+        rows.append(_one_row('treatment', 1.0, 1))
+        rows.append(_one_row('baseline', -1.0, 1))
+    for _ in range(10):  # 10 rows per arm with length-2 trajectory
+        rows.append(_one_row('treatment', 1.0, 2))
+        rows.append(_one_row('baseline', -1.0, 2))
+    df = pl.DataFrame(rows)
     results = dynamic_partial_spearman.fn(
         df, arm_field='arm_key',
         mediator_per_burst='mediator_pb',
@@ -851,8 +851,8 @@ def test_df_offset_distinguishes_marginal_and_partial_pools() -> None:
         min_n_per_burst=5,  # both bursts above floor
     )
     result = _get_single_stratum(results)
-    # n_per_burst[0] = 26 (all cells); n_per_burst[1] = 20 (only
-    # the length-2 cells contribute to burst 1).
+    # n_per_burst[0] = 26 (all rows); n_per_burst[1] = 20 (only
+    # the length-2 rows contribute to burst 1).
     assert result.n_per_burst[0] == 26
     assert result.n_per_burst[1] == 20
     # The framework's pool weights are:
@@ -893,41 +893,41 @@ def test_df_offset_distinguishes_marginal_and_partial_pools() -> None:
 # ============ Ragged-tail per-burst alignment ============
 
 def test_ragged_tail_uses_max_length_with_decreasing_n_per_burst() -> None:
-    """Cells with shorter trajectories contribute their prefix
-    only; n_per_burst grows past shorter cells' tails as longer
-    cells continue contributing.
+    """Rows with shorter trajectories contribute their prefix
+    only; n_per_burst grows past shorter rows' tails as longer
+    rows continue contributing.
 
-    Construction: 6 short cells (3 per arm, length 2) + 8 long
-    cells (4 per arm, length 4). n_bursts = max length = 4.
-    n_per_burst should be: (14, 14, 8, 8) — all 14 cells
-    contribute to bursts 0-1; only 8 long cells contribute to
+    Construction: 6 short rows (3 per arm, length 2) + 8 long
+    rows (4 per arm, length 4). n_bursts = max length = 4.
+    n_per_burst should be: (14, 14, 8, 8) — all 14 rows
+    contribute to bursts 0-1; only 8 long rows contribute to
     bursts 2-3.
 
     This pins the "less-information-losing" docstring claim
     against the pre-fix truncate-to-min behaviour (which would
     have given n_bursts=2 and discarded bursts 2-3 entirely)."""
     rng = np.random.default_rng(50)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for arm, arm_code in (('treatment', 1.0), ('baseline', -1.0)):
-        # 3 short cells per arm.
+        # 3 short rows per arm.
         for _ in range(3):
-            cells.append({
+            rows.append({
                 'env_name': 'env_a', 'gamma': 0.99, 'arm_key': arm,
                 'outcome_pb': (
                     0.5 * arm_code + rng.normal(0.0, 0.5, size=2)
                 ).tolist(),
                 'mediator_pb': rng.normal(0.0, 1.0, size=2).tolist(),
             })
-        # 4 long cells per arm.
+        # 4 long rows per arm.
         for _ in range(4):
-            cells.append({
+            rows.append({
                 'env_name': 'env_a', 'gamma': 0.99, 'arm_key': arm,
                 'outcome_pb': (
                     0.5 * arm_code + rng.normal(0.0, 0.5, size=4)
                 ).tolist(),
                 'mediator_pb': rng.normal(0.0, 1.0, size=4).tolist(),
             })
-    df = pl.DataFrame(cells)
+    df = pl.DataFrame(rows)
     results = dynamic_partial_spearman.fn(
         df, arm_field='arm_key',
         mediator_per_burst='mediator_pb',
@@ -942,8 +942,8 @@ def test_ragged_tail_uses_max_length_with_decreasing_n_per_burst() -> None:
     )
     assert result.n_per_burst == (14, 14, 8, 8), (
         f'n_per_burst={result.n_per_burst} — ragged-tail should '
-        f'give (14, 14, 8, 8): all 14 cells contribute bursts 0-1; '
-        f'only 8 long cells contribute bursts 2-3'
+        f'give (14, 14, 8, 8): all 14 rows contribute bursts 0-1; '
+        f'only 8 long rows contribute bursts 2-3'
     )
 
 
@@ -963,17 +963,17 @@ def test_accepts_measurable_inputs_for_mediator_and_outcome() -> None:
     from corroborate.measurables import measurable
 
     @measurable(name='outcome_pb', reads=('outcome_pb',))
-    def outcome_pb_m(cell: Mapping[str, object]) -> npt.NDArray[np.floating]:
+    def outcome_pb_m(row: Mapping[str, object]) -> npt.NDArray[np.floating]:
         # Cache-first dispatch should make this body unreachable
-        # when the cell has the cached column — but the function
+        # when the row has the cached column — but the function
         # must be well-typed.
-        raw = cell['outcome_pb']
+        raw = row['outcome_pb']
         assert isinstance(raw, list)
         return np.asarray(raw, dtype=np.float64)
 
     @measurable(name='mediator_pb', reads=('mediator_pb',))
-    def mediator_pb_m(cell: Mapping[str, object]) -> npt.NDArray[np.floating]:
-        raw = cell['mediator_pb']
+    def mediator_pb_m(row: Mapping[str, object]) -> npt.NDArray[np.floating]:
+        raw = row['mediator_pb']
         assert isinstance(raw, list)
         return np.asarray(raw, dtype=np.float64)
 
@@ -1319,16 +1319,16 @@ def test_fisher_z_dl_pool_helper_nan_under_g_lt_2() -> None:
 
 # ============ Cluster bootstrap CI ============
 #
-# The cluster bootstrap resamples WHOLE CELLS (each cell = one
+# The cluster bootstrap resamples WHOLE CELLS (each row = one
 # training trajectory) with replacement, recomputes per-burst ρ
 # from the resampled panel, and DL-pools per replica. The
 # empirical [α/2, 1−α/2] percentile range across replicas is the
-# CI — assumption-free under any within-cell autocorrelation
+# CI — assumption-free under any within-row autocorrelation
 # (vs DL's PI bounds which assume per-burst independence).
 #
-# Bound derivation: at n=80 cells with planted constant ρ=0.5
+# Bound derivation: at n=80 rows with planted constant ρ=0.5
 # across 3 bursts, the bootstrap-replica DL-pooled ρ has sampling
-# SD ≈ 1/sqrt(n_cells - df) = 1/sqrt(77) ≈ 0.114 in Fisher-z
+# SD ≈ 1/sqrt(n_rows - df) = 1/sqrt(77) ≈ 0.114 in Fisher-z
 # units; at ρ=0.5 the delta-method ρ-unit SE ≈ (1 - ρ²) · SE_z ≈
 # 0.75 · 0.114 ≈ 0.086. 95% percentile half-width ≈ 1.96 · 0.086
 # ≈ 0.169; width ≈ 0.34. So `rho_upper - rho_lower < 0.2` (the
@@ -1356,10 +1356,10 @@ def test_n_bootstrap_zero_default_keeps_bootstrap_fields_none() -> None:
 
 def test_cluster_bootstrap_narrow_ci_under_consistent_constant_rho() -> None:
     """Constant ρ trajectory (no per-burst heterogeneity, no
-    within-cell autocorrelation by construction): the cluster
+    within-row autocorrelation by construction): the cluster
     bootstrap CI should be narrow.
 
-    Planted ρ=0.5 across 3 bursts at n_cells=80. Bootstrap CI
+    Planted ρ=0.5 across 3 bursts at n_rows=80. Bootstrap CI
     width ≈ 2 · 1.96 · 0.086 ≈ 0.34 in ρ-units (closed-form
     derivation in module docstring). Bound at 0.4 admits the
     closed-form value + finite-`n_resamples` slack at 200
@@ -1402,8 +1402,8 @@ def test_cluster_bootstrap_narrow_ci_under_consistent_constant_rho() -> None:
 
 def test_cluster_bootstrap_recovers_pool_median_under_sign_flip() -> None:
     """Sign-flip ρ trajectory (+0.5, +0.5, −0.5): DL surfaces
-    I² ≈ 0.97, τ² ≈ 0.39. The cluster bootstrap resamples cells
-    (not bursts); since every cell carries the same per-burst
+    I² ≈ 0.97, τ² ≈ 0.39. The cluster bootstrap resamples rows
+    (not bursts); since every row carries the same per-burst
     trajectory, the bootstrap distribution's median collapses
     to roughly the DL point estimate (cancellation around 0.18
     in ρ-units). Pins:
@@ -1417,15 +1417,15 @@ def test_cluster_bootstrap_recovers_pool_median_under_sign_flip() -> None:
     a PREDICTIVE interval for a hypothetical new burst's
     underlying parameter (formula uses τ² heterogeneity); the
     bootstrap is a SAMPLING interval for the pool point
-    estimate. Under planted sign-flip with identical per-cell
-    trajectories, the bootstrap stays NARROW (cells are
+    estimate. Under planted sign-flip with identical per-row
+    trajectories, the bootstrap stays NARROW (rows are
     interchangeable → pool is stable across resamples) while DL
     PI gets wide (heterogeneity propagates to predicted-burst
     uncertainty). The two are different quantities — bootstrap
     > PI is NOT a load-bearing property here. The load-bearing
     property is that the bootstrap is assumption-free under
-    within-cell autocorrelation, which manifests on data where
-    cells DIFFER in trajectory shape, not where they all share
+    within-row autocorrelation, which manifests on data where
+    rows DIFFER in trajectory shape, not where they all share
     the same heterogeneous structure."""
     df = _build_panel(rho_trajectory=(0.5, 0.5, -0.5), seed=202)
     results = dynamic_partial_spearman.fn(
@@ -1493,37 +1493,37 @@ def test_cluster_bootstrap_reproducible_under_same_seed() -> None:
     )
 
 
-def test_cluster_bootstrap_wider_under_between_cell_heterogeneity() -> None:
+def test_cluster_bootstrap_wider_under_between_row_heterogeneity() -> None:
     """The load-bearing methodological claim: under genuine
-    BETWEEN-CELL heterogeneity (cells with structurally different
+    BETWEEN-CELL heterogeneity (rows with structurally different
     trajectory shapes) the cluster bootstrap CI is wider than
     under matched no-heterogeneity data. The bootstrap's
-    assumption-free property kicks in here — resampling cells
+    assumption-free property kicks in here — resampling rows
     with replacement up-weights some trajectory shapes over
-    others, surfacing the cross-cell variability that DL's
+    others, surfacing the cross-row variability that DL's
     parametric formula (which treats all bursts as iid within
     the same population) doesn't see.
 
-    Construction: 40 'positive' cells with trajectory (+0.6,
-    +0.6, +0.6) + 40 'negative' cells with trajectory (−0.6,
+    Construction: 40 'positive' rows with trajectory (+0.6,
+    +0.6, +0.6) + 40 'negative' rows with trajectory (−0.6,
     −0.6, −0.6) — same overall marginal ρ as a constant=0
-    panel BUT the per-cell trajectories are dramatically
+    panel BUT the per-row trajectories are dramatically
     heterogeneous. Compare bootstrap CI width on this panel
     against an iid-noise panel with planted ρ ≈ 0.
 
-    Bound: heterogeneous-cells width >= iid width (the
-    bootstrap surfaces the bimodal cell-shape distribution).
+    Bound: heterogeneous-rows width >= iid width (the
+    bootstrap surfaces the bimodal row-shape distribution).
     """
-    # Build the heterogeneous-cells panel by concatenating two
+    # Build the heterogeneous-rows panel by concatenating two
     # half-panels with opposite arm-coding (so the marginal ρ
-    # nearly cancels but per-cell trajectories are extreme).
-    # Actually simpler: just plant a heterogeneous cell mixture
+    # nearly cancels but per-row trajectories are extreme).
+    # Actually simpler: just plant a heterogeneous row mixture
     # by hand.
     rng = np.random.default_rng(204)
-    n_per_half = 20  # 20 cells per arm per "sign-cluster"
-    cells_het: list[Mapping[str, object]] = []
+    n_per_half = 20  # 20 rows per arm per "sign-cluster"
+    rows_het: list[Mapping[str, object]] = []
 
-    def _cell(arm: str, arm_code: float, rho: float) -> Mapping[str, object]:
+    def _row(arm: str, arm_code: float, rho: float) -> Mapping[str, object]:
         out_arr: list[float] = []
         med_arr: list[float] = []
         for _ in range(3):  # 3 bursts
@@ -1536,20 +1536,20 @@ def test_cluster_bootstrap_wider_under_between_cell_heterogeneity() -> None:
             'outcome_pb': out_arr, 'mediator_pb': med_arr,
         }
 
-    # 20 treatment cells with positive ρ; 20 treatment cells with
-    # negative ρ. Same for baseline. Each cell's whole trajectory
+    # 20 treatment rows with positive ρ; 20 treatment rows with
+    # negative ρ. Same for baseline. Each row's whole trajectory
     # is consistently positive OR consistently negative — extreme
-    # between-cell heterogeneity.
+    # between-row heterogeneity.
     for _ in range(n_per_half):
-        cells_het.append(_cell('treatment', 1.0, +0.6))
-        cells_het.append(_cell('baseline', -1.0, +0.6))
+        rows_het.append(_row('treatment', 1.0, +0.6))
+        rows_het.append(_row('baseline', -1.0, +0.6))
     for _ in range(n_per_half):
-        cells_het.append(_cell('treatment', 1.0, -0.6))
-        cells_het.append(_cell('baseline', -1.0, -0.6))
-    df_het = pl.DataFrame(cells_het)
+        rows_het.append(_row('treatment', 1.0, -0.6))
+        rows_het.append(_row('baseline', -1.0, -0.6))
+    df_het = pl.DataFrame(rows_het)
 
     # Comparison panel: iid noise, marginal ρ ≈ 0 by construction.
-    # Same n_cells (80) for equal sampling-SD baseline.
+    # Same n_rows (80) for equal sampling-SD baseline.
     df_iid = _build_panel(rho_trajectory=(0.0, 0.0, 0.0), seed=205)
 
     res_het = dynamic_partial_spearman.fn(
@@ -1573,13 +1573,13 @@ def test_cluster_bootstrap_wider_under_between_cell_heterogeneity() -> None:
     assert boot_het is not None and boot_iid is not None
     width_het = boot_het.rho_upper - boot_het.rho_lower
     width_iid = boot_iid.rho_upper - boot_iid.rho_lower
-    # Heterogeneous-cells width is wider than iid (the
-    # cluster-bootstrap surfaces the bimodal cell-shape mixture
+    # Heterogeneous-rows width is wider than iid (the
+    # cluster-bootstrap surfaces the bimodal row-shape mixture
     # that an iid-noise panel doesn't have).
     assert width_het > width_iid, (
-        f'heterogeneous-cells CI width={width_het:.4f} should be '
+        f'heterogeneous-rows CI width={width_het:.4f} should be '
         f'wider than iid CI width={width_iid:.4f}: cluster '
-        f'bootstrap should expose between-cell heterogeneity'
+        f'bootstrap should expose between-row heterogeneity'
     )
 
 
@@ -1682,7 +1682,7 @@ def _build_two_mediator_panel(
 ) -> pl.DataFrame:
     """Planted DAG: arm → {Z1, Z2} → outcome (no direct edge).
 
-    Each cell:
+    Each row:
       Z1[b] = arm_code + ε_1
       Z2[b] = arm_code + ε_2  (indep noise per mediator)
       outcome[b] = Z1[b] + Z2[b] + ε_Y
@@ -1707,9 +1707,9 @@ def _build_two_mediator_panel(
         z1[:, b] = arm_code + rng.normal(0.0, 0.5, size=n)
         z2[:, b] = arm_code + rng.normal(0.0, 0.5, size=n)
         out[:, b] = z1[:, b] + z2[:, b] + rng.normal(0.0, 0.5, size=n)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(n):
-        cells.append({
+        rows.append({
             'env_name': env_name,
             'gamma': gamma,
             'arm_key': arms[i],
@@ -1717,7 +1717,7 @@ def _build_two_mediator_panel(
             'z2_pb': z2[i, :].tolist(),
             'outcome_pb': out[i, :].tolist(),
         })
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def test_depth_2_joint_partial_rho_near_zero() -> None:

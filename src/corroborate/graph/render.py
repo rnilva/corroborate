@@ -136,7 +136,7 @@ def _aggregate_verdict(
         name: PostEvalEntry(
             verdict=evaluation.verdict,
             extent_hash=evaluation.extent_hash,
-            n_cells_in_scope=evaluation.n_cells_in_scope,
+            n_rows_in_scope=evaluation.n_rows_in_scope,
         )
         for name, evaluation in evaluations.items()
     }
@@ -211,8 +211,8 @@ def _evidence_spec(
         summary = summaries.get(bridge.name)
         if summary:
             lines.append(summary)
-        elif evaluation is not None and evaluation.n_cells_in_scope >= 0:
-            lines.append(f'extent: {evaluation.n_cells_in_scope} cells')
+        elif evaluation is not None and evaluation.n_rows_in_scope >= 0:
+            lines.append(f'extent: {evaluation.n_rows_in_scope} rows')
         edges.append(_RenderEdge(
             source=source,
             target=target,

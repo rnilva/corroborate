@@ -1,15 +1,15 @@
 """`partial_spearman` — unified JCI Spearman ρ(X, Y | Z₁, …, Zₖ),
-env-stratified, Fisher-z pooled, per-cell OR per-burst.
+env-stratified, Fisher-z pooled, per-row OR per-burst.
 
 Subsumes the five separately-named Spearman primitives:
-  - `stratified_spearman`              → k=0, granularity=per_cell
-  - `stratified_partial_spearman`      → k=1, granularity=per_cell
-  - `stratified_partial_spearman_multi`→ k≥1, granularity=per_cell
+  - `stratified_spearman`              → k=0, granularity=per_row
+  - `stratified_partial_spearman`      → k=1, granularity=per_row
+  - `stratified_partial_spearman_multi`→ k≥1, granularity=per_row
   - `per_burst_jci_spearman`           → k=0, granularity=per_burst
   - `per_burst_partial_jci_spearman`   → k=1, granularity=per_burst
 
 Granularity is detected from input types:
-  - `x: str` (column name)  → per-cell observations
+  - `x: str` (column name)  → per-row observations
   - `x: Measurable[..., NDArray]` → per-burst observations
 
 `y` and each entry of `conditioning` must match `x`'s shape;
@@ -43,7 +43,7 @@ import polars as pl
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.analyses._cell_value import (
+from corroborate.analyses._row_value import (
     evaluate_per_burst_source, resolve_value,
 )
 from corroborate.bridge.analysis import analysis
@@ -60,7 +60,7 @@ type _PerBurstMeasurable = Measurable[
 ]
 type _ScalarOrPerBurst = str | _PerBurstMeasurable
 
-type _Granularity = Literal['per_cell', 'per_burst']
+type _Granularity = Literal['per_row', 'per_burst']
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +71,7 @@ class PartialSpearmanResult:
     names (for Measurable inputs — uses `.name`). `conditioning`
     is the tuple of conditioning column-or-measurable names in
     the order passed; empty tuple for marginal Spearman.
-    `granularity` records the observation shape (`per_cell` or
+    `granularity` records the observation shape (`per_row` or
     `per_burst`) for diagnostic / snapshot stability.
 
     `rho_pooled` is the tanh of the Fisher-z weighted average
@@ -81,7 +81,7 @@ class PartialSpearmanResult:
     multi-Z forms — df accounts for k conditioning vars).
 
     `n_obs_total` counts observations contributing to the pool
-    (per-cell: one per cell; per-burst: one per (cell, burst)
+    (per-row: one per row; per-burst: one per (row, burst)
     that has non-NaN x/y/z values). `n_strata` counts strata that
     met the size+df floor."""
     x: str
@@ -103,27 +103,27 @@ def _detect_granularity(
     x: _ScalarOrPerBurst, y: _ScalarOrPerBurst,
     conditioning: tuple[_ScalarOrPerBurst, ...],
 ) -> _Granularity:
-    """All inputs must agree on shape: all str → per_cell, all
+    """All inputs must agree on shape: all str → per_row, all
     Measurable → per_burst. Mixing raises — silently coercing
     would mask a bridge-author bug (treating a per-burst array
     as a scalar or vice versa)."""
     all_args: tuple[_ScalarOrPerBurst, ...] = (x, y, *conditioning)
     str_count = sum(1 for a in all_args if isinstance(a, str))
     if str_count == len(all_args):
-        return 'per_cell'
+        return 'per_row'
     if str_count == 0:
         return 'per_burst'
     raise TypeError(
         f'partial_spearman: x/y/conditioning must all be str '
-        f'(per-cell) OR all Measurable (per-burst); got mix of '
+        f'(per-row) OR all Measurable (per-burst); got mix of '
         f'{str_count} str and {len(all_args) - str_count} '
         f'Measurable. Mixed types mask a bridge bug — coercion '
         f'would silently flatten or broadcast incorrectly.',
     )
 
 
-def _collect_per_cell(
-    cells: Sequence[Mapping[str, object]],
+def _collect_per_row(
+    rows: Sequence[Mapping[str, object]],
     *, x: str, y: str, conditioning: tuple[str, ...],
     stratify_by: str,
 ) -> tuple[list[float], list[float], list[list[float]], list[object]]:
@@ -131,12 +131,12 @@ def _collect_per_cell(
     ys: list[float] = []
     zs: list[list[float]] = [[] for _ in conditioning]
     strata: list[object] = []
-    for cell in cells:
+    for row in rows:
         try:
-            xv = resolve_value(cell, x)
-            yv = resolve_value(cell, y)
+            xv = resolve_value(row, x)
+            yv = resolve_value(row, y)
             z_vals = tuple(
-                resolve_value(cell, z) for z in conditioning
+                resolve_value(row, z) for z in conditioning
             )
         except (KeyError, TypeError, ValueError):
             continue
@@ -144,7 +144,7 @@ def _collect_per_cell(
             continue
         if any(math.isnan(zv) for zv in z_vals):
             continue
-        sk = cell.get(stratify_by)
+        sk = row.get(stratify_by)
         if sk is None:
             continue
         xs.append(xv)
@@ -156,7 +156,7 @@ def _collect_per_cell(
 
 
 def _collect_per_burst(
-    cells: list[Mapping[str, object]],
+    rows: list[Mapping[str, object]],
     *, x: _PerBurstMeasurable, y: _PerBurstMeasurable,
     conditioning: tuple[_PerBurstMeasurable, ...],
     stratify_by: str,
@@ -165,14 +165,14 @@ def _collect_per_burst(
     ys: list[float] = []
     zs: list[list[float]] = [[] for _ in conditioning]
     strata: list[object] = []
-    for cell in cells:
-        x_arr = evaluate_per_burst_source(x, cell)
-        y_arr = evaluate_per_burst_source(y, cell)
+    for row in rows:
+        x_arr = evaluate_per_burst_source(x, row)
+        y_arr = evaluate_per_burst_source(y, row)
         z_arrs = tuple(
-            evaluate_per_burst_source(z, cell) for z in conditioning
+            evaluate_per_burst_source(z, row) for z in conditioning
         )
         # Length-match via element-wise min across x, y, all z's —
-        # multi-regime cells with mismatched burst counts contribute
+        # multi-regime rows with mismatched burst counts contribute
         # the shorter prefix.
         n = min(
             (x_arr.size, y_arr.size, *(z.size for z in z_arrs)),
@@ -180,7 +180,7 @@ def _collect_per_burst(
         )
         if n == 0:
             continue
-        sk = cell.get(stratify_by)
+        sk = row.get(stratify_by)
         if sk is None:
             continue
         for i in range(n):
@@ -201,7 +201,7 @@ def _collect_per_burst(
 
 @analysis
 def partial_spearman(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     x: _ScalarOrPerBurst,
     y: _ScalarOrPerBurst,
@@ -211,9 +211,9 @@ def partial_spearman(
 ) -> PartialSpearmanResult:
     """JCI-stratified Spearman ρ(X, Y | Z₁, …, Zₖ).
 
-    Granularity is detected from input types: str → per-cell
-    observations (one per cell); Measurable → per-burst
-    observations (one per (cell, burst)). All of `x`, `y`,
+    Granularity is detected from input types: str → per-row
+    observations (one per row); Measurable → per-burst
+    observations (one per (row, burst)). All of `x`, `y`,
     `conditioning` must agree on type.
 
     `conditioning=()` → marginal Spearman; one or more entries →
@@ -226,18 +226,18 @@ def partial_spearman(
     Returns NaN ρ/p when no stratum survives the size + df
     floors."""
     from corroborate._internals.polars import to_dicts as _to_dicts
-    cells_list: list[Mapping[str, object]] = list(_to_dicts(cells))
+    rows_list: list[Mapping[str, object]] = list(_to_dicts(df))
     granularity = _detect_granularity(x, y, conditioning)
-    if granularity == 'per_cell':
+    if granularity == 'per_row':
         # Type narrowing for pyright — _detect_granularity guarantees
-        # all-str when granularity is per_cell.
+        # all-str when granularity is per_row.
         x_s = x if isinstance(x, str) else x.name
         y_s = y if isinstance(y, str) else y.name
         cond_s = tuple(
             z if isinstance(z, str) else z.name for z in conditioning
         )
-        xs, ys, zs, strata = _collect_per_cell(
-            cells_list, x=x_s, y=y_s, conditioning=cond_s,
+        xs, ys, zs, strata = _collect_per_row(
+            rows_list, x=x_s, y=y_s, conditioning=cond_s,
             stratify_by=stratify_by,
         )
     else:
@@ -252,7 +252,7 @@ def partial_spearman(
             'detection — should be unreachable'
         )
         xs, ys, zs, strata = _collect_per_burst(
-            cells_list, x=x, y=y, conditioning=cond_m,
+            rows_list, x=x, y=y, conditioning=cond_m,
             stratify_by=stratify_by,
         )
 

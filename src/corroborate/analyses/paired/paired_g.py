@@ -1,7 +1,7 @@
 """`paired_g` — paired Hedges' g + raw-diff across pair keys.
 
 The headline analysis shape for paired intervention claims.
-Pairs treatment cells with baseline cells on a key tuple
+Pairs treatment rows with baseline rows on a key tuple
 (typically `('seed',)`), computes per-pair Δ on a `source`
 quantity, returns BOTH standardized Hedges' g AND raw mean-diff
 in `PairedGResult`. Bridges pick whichever they need:
@@ -13,16 +13,16 @@ rescue case).
 `source` resolves through the measurable registry first
 (fixture-style: declare a `@measurable outcome_native` and any
 analysis can request it by name), falling back to a direct
-field-path read on the cell record. This is the convergence
+field-path read on the row record. This is the convergence
 point for the framework's "(1) claim outputs + (2) post-run
-measurables" architecture: ALL per-cell quantities (raw or
+measurables" architecture: ALL per-row quantities (raw or
 derived) become resolvable by name through one resolver,
 and analyses are generic over what they consume.
 
-Cell-set scoping (env, HP equality, threshold gates, arbitrary
+Row-set scoping (env, HP equality, threshold gates, arbitrary
 predicates) lives upstream on `Bridge.scope` as a polars
 `pl.Expr`; `claim_bridge.evaluate()` filters before this analysis
-sees the cells. Analyses pair, never scope.
+sees the df. Analyses pair, never scope.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.analyses._cell_value import key_tuple, resolve_value
+from corroborate.analyses._row_value import key_tuple, resolve_value
 from corroborate.analyses.panel import per_stratum_panel
 from corroborate.bridge.analysis import analysis
 from corroborate.corpus.schema import StratumG
@@ -45,7 +45,7 @@ class PairedGResult:
 
     `g` and `se` are the standardized effect size + its SE.
     `mean_diff` and `mean_diff_se` are the raw paired mean
-    difference + its standard error — the same input cells, but
+    difference + its standard error — the same input rows, but
     NOT pooled-SD-scaled. Bridges that test interventions on the
     reward magnitude itself must consume `mean_diff` (Hedges' g
     cancels reward-scale variance via the pooled SD).
@@ -110,7 +110,7 @@ class PairedGResult:
 
 @analysis
 def paired_g(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -120,11 +120,11 @@ def paired_g(
     dedupe_strategy: str = 'mean',
 ) -> PairedGResult:
     """Compute paired Hedges' g + raw mean-diff at `source` across
-    matched (T, B) pairs in `cells`.
+    matched (T, B) pairs in `rows`.
 
     Pairing is by string match on `arm_field` (defaults to
     `'arm_key'`; the `canonical_str` fingerprint the substrate's
-    cell runner stamps on each cell). `treatment_arm` and
+    row runner stamps on each row). `treatment_arm` and
     `baseline_arm` come from the bridge's `DoEffect` — either via
     per-bridge `source = DoEffect(...)` decorator override or via
     file-level `INTERVENTION = DoEffect(...)` resolved at
@@ -134,24 +134,24 @@ def paired_g(
     case) and forwards them into this analysis's kwargs.
 
     `source` resolves through the measurable registry (preferred)
-    or as a field-path read on the cell record.
+    or as a field-path read on the row record.
 
-    Cell-level scoping (env, HP equality, threshold gates,
+    Row-level scoping (env, HP equality, threshold gates,
     arbitrary predicates) lives on `Bridge.scope` as a polars
     `pl.Expr`; `claim_bridge.evaluate()` filters before this
-    analysis sees the cells. The analysis itself does not scope.
+    analysis sees the df. The analysis itself does not scope.
 
     `dedupe_strategy` controls the policy when multiple rows share
     the same `(arm, pair_by)` tuple:
-    - `'mean'` (default): average the per-cell `source` values
+    - `'mean'` (default): average the per-row `source` values
       within each `(arm, pair_by)` bucket, then run paired-g on
       the aggregated values. Suits M2M scopes that legitimately
       pool across multiple corpora at the same `(seed, env)`. The
-      aggregated value is the per-cell mean, NOT the underlying
-      raw cells; downstream SE / df reflect the post-aggregation
+      aggregated value is the per-row mean, NOT the underlying
+      raw rows; downstream SE / df reflect the post-aggregation
       n_pairs.
 
-      **WARNING:** when the duplicate cells differ on regime-
+      **WARNING:** when the duplicate rows differ on regime-
       defining fields (γ, total_steps, sync_period, …) NOT in
       `pair_by`, `'mean'` silently averages causally distinct
       experiments. Pass `'raise'` to detect this — it reports
@@ -159,9 +159,9 @@ def paired_g(
       can tighten `pair_by`.
 
     - `'raise'`: error loudly on any `(arm, pair_by)` bucket with
-      more than one cell. Use when the corpus shouldn't have
+      more than one row. Use when the corpus shouldn't have
       duplicates and silent averaging would hide a regime split —
-      e.g. a sweep that meant to produce one cell per
+      e.g. a sweep that meant to produce one row per
       `(env, seed, sync_period)` but `pair_by=('seed',)` collapses
       sync regimes into one bucket. The error message names the
       duplicate key so the author can either tighten `pair_by` or
@@ -182,7 +182,7 @@ def paired_g(
     corpora. `result.assumption_violations` flags inputs that
     cross the empirically-derived skew/kurtosis thresholds."""
     return _paired_g_rows(
-        to_dicts(cells), source=source, treatment_arm=treatment_arm,
+        to_dicts(df), source=source, treatment_arm=treatment_arm,
         baseline_arm=baseline_arm, pair_by=pair_by,
         arm_field=arm_field, dedupe_strategy=dedupe_strategy,
     )
@@ -191,7 +191,7 @@ def paired_g(
 def _require_complete_pair_key(
     key: tuple[object, ...],
     pair_by: tuple[str, ...],
-    cell: Mapping[str, object],
+    row: Mapping[str, object],
 ) -> None:
     """A null pairing-unit key silently merges unrelated rows into
     one `(None, ...)` bucket — after frame materialisation, rows
@@ -200,7 +200,7 @@ def _require_complete_pair_key(
     if any(v is None for v in key):
         raise ValueError(
             f'paired_g: pairing key {pair_by} is null on row '
-            f'id={cell.get("id")!r} — a null unit key would merge '
+            f'id={row.get("id")!r} — a null unit key would merge '
             f'unrelated rows into one bucket; scope the claim to '
             f'rows carrying the key, or repair the record',
         )
@@ -246,19 +246,19 @@ def _paired_g_rows(
     baseline_buckets: dict[
         tuple[object, ...], list[tuple[Mapping[str, object], float]],
     ] = {}
-    for cell in rows:
-        arm = cell.get(arm_field)
+    for row in rows:
+        arm = row.get(arm_field)
         if arm == treatment_arm:
-            key = key_tuple(cell, pair_by)
-            _require_complete_pair_key(key, pair_by, cell)
+            key = key_tuple(row, pair_by)
+            _require_complete_pair_key(key, pair_by, row)
             treatment_buckets.setdefault(key, []).append(
-                (cell, resolve_value(cell, source)),
+                (row, resolve_value(row, source)),
             )
         elif arm == baseline_arm:
-            key = key_tuple(cell, pair_by)
-            _require_complete_pair_key(key, pair_by, cell)
+            key = key_tuple(row, pair_by)
+            _require_complete_pair_key(key, pair_by, row)
             baseline_buckets.setdefault(key, []).append(
-                (cell, resolve_value(cell, source)),
+                (row, resolve_value(row, source)),
             )
 
     def _check_or_raise(
@@ -272,9 +272,9 @@ def _paired_g_rows(
         for key, items in buckets.items():
             if len(items) <= 1:
                 continue
-            cells_in_bucket = [c for c, _ in items]
+            rows_in_bucket = [c for c, _ in items]
             diff = distinguishing_columns(
-                cells_in_bucket,
+                rows_in_bucket,
                 skip=frozenset(pair_by) | {arm_field},
             )
             if not diff:
@@ -420,7 +420,7 @@ def _paired_g_assumption_violations(
 # ============ per-env panel helper ============
 
 def per_env_paired_g_panel(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -431,9 +431,9 @@ def per_env_paired_g_panel(
     dedupe_strategy: str = 'mean',
 ) -> tuple[StratumG[str], ...]:
     """Per-env paired-g panel — one `StratumG[str]` per env in
-    `env_filter` (or every env present in `cells` when empty).
+    `env_filter` (or every env present in `rows` when empty).
 
-    Wraps the generic `per_stratum_panel`: stratifies cells by
+    Wraps the generic `per_stratum_panel`: stratifies rows by
     `env_name`, calls `paired_g.fn` on each env's subset, packs
     the result as `StratumG[str]`. Consumers (e.g.
     `meta_regression_paired_g`) iterate the panel rather than
@@ -443,8 +443,8 @@ def per_env_paired_g_panel(
     an entry, including degenerate ones (n_pairs<2 → g/se=NaN).
     Consumers that need to drop underpowered strata filter at
     their own boundary so they can decide what to report."""
-    def _stratify(cell: Mapping[str, object]) -> str | None:
-        env = cell.get('env_name')
+    def _stratify(row: Mapping[str, object]) -> str | None:
+        env = row.get('env_name')
         return env if isinstance(env, str) else None
 
     key_filter: Callable[[str], bool] | None = (
@@ -466,7 +466,7 @@ def per_env_paired_g_panel(
         )
 
     panel = per_stratum_panel(
-        cells, stratify_by=_stratify, analysis=_analyze,
+        rows, stratify_by=_stratify, analysis=_analyze,
         key_filter=key_filter,
     )
     return tuple(

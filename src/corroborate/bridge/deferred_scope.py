@@ -1,10 +1,10 @@
 """Deferred scope — bridge scopes that resolve at evaluation time
-by computing a panel from cells and applying a per-stratum
+by computing a panel from rows and applying a per-stratum
 predicate.
 
 The framework's regular scope predicates are `pl.Expr` — declarative
 and computed at decorator time. Some scopes legitimately depend
-on per-stratum aggregates of the cells themselves (e.g. "restrict
+on per-stratum aggregates of the rows themselves (e.g. "restrict
 to envs where MC_disc ↔ MC_raw coupling is below 0.7"), which
 require deferred resolution.
 
@@ -12,12 +12,12 @@ require deferred resolution.
 1. A panel-building analysis function (typically `stratum_panel`)
 2. The kwargs to feed it
 3. A `keep` predicate over per-stratum panel data
-4. The stratify column to filter cells by
+4. The stratify column to filter rows by
 5. An optional `static_scope` that's AND-combined with the dynamic
    `is_in(surviving_strata)` filter
 
 At bridge evaluation time, `Bridge.evaluate()` calls
-`DeferredScope.resolve(cells)` to produce a `pl.Expr` and applies
+`DeferredScope.resolve(rows)` to produce a `pl.Expr` and applies
 it like any other scope.
 
 This closes the framework's "use the correlation edge directly"
@@ -31,8 +31,8 @@ from typing import Protocol
 import polars as pl
 
 from corroborate.analyses.panel.stratum_panel import StratumPanel
-from corroborate.bridge._filter import filter_cells
-from corroborate.data.kernel import cells_to_dataframe
+from corroborate.bridge._filter import filter_with_measurables
+from corroborate.data.kernel import to_dataframe
 
 
 class _PanelAnalysis(Protocol):
@@ -66,9 +66,9 @@ class DeferredScope:
 
     def resolve(
         self,
-        cells: Sequence[Mapping[str, object]],
+        rows: Sequence[Mapping[str, object]],
     ) -> pl.Expr:
-        """Build the panel from `cells`, apply `keep` per stratum,
+        """Build the panel from `rows`, apply `keep` per stratum,
         return `pl.col(stratify_column).is_in([surviving]) & static_scope`."""
         # The panel builder takes a plain DataFrame; materialise
         # the caller's rows once THROUGH THE ENTRY BOUNDARY (a
@@ -77,9 +77,9 @@ class DeferredScope:
         # the exact heterogeneous-corpus shape deferred scopes
         # stratify over), applying the static pre-filter when one
         # is declared.
-        panel_df = cells_to_dataframe(cells)
+        panel_df = to_dataframe(rows)
         if self.static_scope is not None:
-            panel_df = filter_cells(panel_df, self.static_scope)
+            panel_df = filter_with_measurables(panel_df, self.static_scope)
         panel = self.panel_analysis.fn(
             panel_df,
             **self.panel_kwargs,
@@ -96,7 +96,7 @@ class DeferredScope:
             if self.keep(panel, i):
                 surviving.append(panel.strata[i][stratify_idx])
         # Empty surviving → predicate evaluates to False for all
-        # cells (is_in on an empty list). That's the correct
+        # rows (is_in on an empty list). That's the correct
         # behaviour: zero strata pass.
         dynamic_expr = pl.col(self.stratify_column).is_in(surviving)
         if self.static_scope is None:
@@ -147,7 +147,7 @@ def scope_from_panel(
     that pre-filter directly. The `keep` predicate then
     decides which strata survive on top of that. This gives
     proper edge-conditioning: upstream-fixture's per-stratum data
-    drives downstream-bridge's cell admission."""
+    drives downstream-bridge's row admission."""
     return DeferredScope(
         panel_analysis=panel_analysis,
         panel_kwargs=panel_kwargs,

@@ -80,7 +80,7 @@ if TYPE_CHECKING:
 
 def root_claim_name(value: object) -> str | None:
     """The name of the root `@claim` at the bottom of a composed
-    callable. A cell's program identity: the runner receives
+    callable. A row's program identity: the runner receives
     `claim = apply_interventions(partial(reg.fn(program), **hps),
     arm_iv)` — a `functools.partial` chain bottoming out in the root
     program's `FnClaim`. Unwrap the `.func` chain and return that

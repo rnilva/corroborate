@@ -21,7 +21,7 @@ import numpy as np
 from scipy.stats import norm
 
 from corroborate.analyses.paired.cliff_delta_paired import cliff_delta_paired
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -32,12 +32,12 @@ _MU, _SIGMA = 1.0, 2.0
 _DELTA_POP = 2.0 * float(norm.cdf(_MU / _SIGMA)) - 1.0   # ≈ 0.3829
 
 
-def _make_paired_cells(deltas: list[float]) -> list[dict[str, object]]:
-    cells: list[dict[str, object]] = []
+def _make_paired_rows(deltas: list[float]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
     for s, d in enumerate(deltas):
-        cells.append({'arm_key': 'T', 'seed': s, 'value': float(d)})
-        cells.append({'arm_key': 'B', 'seed': s, 'value': 0.0})
-    return cells
+        rows.append({'arm_key': 'T', 'seed': s, 'value': float(d)})
+        rows.append({'arm_key': 'B', 'seed': s, 'value': 0.0})
+    return rows
 
 
 def test_cliff_delta_recovers_population_value_under_normal_delta() -> None:
@@ -52,7 +52,7 @@ def test_cliff_delta_recovers_population_value_under_normal_delta() -> None:
     rng = np.random.default_rng(_det_seed('cliff_recover', 200))
     deltas = rng.normal(_MU, _SIGMA, 200).tolist()
     result = cliff_delta_paired.fn(
-        cells_to_dataframe(_make_paired_cells(deltas)),
+        to_dataframe(_make_paired_rows(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
@@ -69,7 +69,7 @@ def test_cliff_delta_se_matches_closed_form_under_normal_delta() -> None:
     rng = np.random.default_rng(_det_seed('cliff_se', 200))
     deltas = rng.normal(_MU, _SIGMA, 200).tolist()
     result = cliff_delta_paired.fn(
-        cells_to_dataframe(_make_paired_cells(deltas)),
+        to_dataframe(_make_paired_rows(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
@@ -88,7 +88,7 @@ def test_cliff_delta_negative_when_treatment_worse() -> None:
     rng = np.random.default_rng(_det_seed('cliff_neg', 100))
     deltas = rng.normal(-1.0, 2.0, 100).tolist()
     result = cliff_delta_paired.fn(
-        cells_to_dataframe(_make_paired_cells(deltas)),
+        to_dataframe(_make_paired_rows(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
@@ -107,7 +107,7 @@ def test_cliff_delta_extreme_when_all_pairs_helped() -> None:
     δ = 1.0 exactly."""
     deltas = [1.0, 0.5, 2.0, 1.5, 0.1]   # all positive
     result = cliff_delta_paired.fn(
-        cells_to_dataframe(_make_paired_cells(deltas)),
+        to_dataframe(_make_paired_rows(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
@@ -129,7 +129,7 @@ def test_cliff_delta_zero_under_symmetric_delta() -> None:
     median = math.exp(0.0)   # log-normal median for μ_log=0
     deltas = (raw - median).tolist()
     result = cliff_delta_paired.fn(
-        cells_to_dataframe(_make_paired_cells(deltas)),
+        to_dataframe(_make_paired_rows(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
@@ -141,10 +141,10 @@ def test_cliff_delta_zero_under_symmetric_delta() -> None:
 
 
 def test_cliff_delta_n_pairs_zero_returns_nan() -> None:
-    """Boundary: 0 paired cells → NaN delta + NaN SE. Pins the
+    """Boundary: 0 paired rows → NaN delta + NaN SE. Pins the
     n_pairs < 2 NaN guard."""
     result = cliff_delta_paired.fn(
-        cells_to_dataframe([]),
+        to_dataframe([]),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )

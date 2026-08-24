@@ -591,7 +591,7 @@ def test_classify_single_stratum_treated_as_within() -> None:
     The multi-stratum WITHIN/ACROSS/BOTH/DEGENERATE cases plus
     the `assert_stratification_admissible` happy/raise paths are
     covered end-to-end at `tests/analytic/lg_scm/test_variable_scope.py`
-    on real LG-SCM cells. The single-stratum edge case stays here
+    on real LG-SCM rows. The single-stratum edge case stays here
     because it doesn't fit the multi-env analytic substrate."""
     rng = np.random.default_rng(0)
     values = rng.standard_normal(50)

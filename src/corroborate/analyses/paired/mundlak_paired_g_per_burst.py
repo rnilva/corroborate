@@ -9,9 +9,9 @@ changing the string; no per-moderator helper functions.
 
 The shape:
 
-  cells × `predictor_name` (registered @measurable)
+  rows × `predictor_name` (registered @measurable)
     → paired_g_per_burst (per-(env, burst) → (g, se))
-    → resolve `predictor_name` once per cell (cached array)
+    → resolve `predictor_name` once per row (cached array)
     → mundlak_decomposition (env-mean + within-deviation)
     → MundlakResult
 
@@ -42,27 +42,27 @@ from corroborate.measurables import Measurable
 
 
 def _per_env_burst_predictor_mean(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     burst_index: int,
-    per_cell_array: dict[str, npt.NDArray[np.float64]],
+    per_row_array: dict[str, npt.NDArray[np.float64]],
     env_name: str,
     arm_filter: str | None,
     arm_field: str = 'arm_key',
 ) -> float:
-    """Average a precomputed per-burst array across the cells of
-    `env_name` at `burst_index`. `per_cell_array` is keyed by
-    cell `id`. `arm_filter` restricts the average to a single
+    """Average a precomputed per-burst array across the rows of
+    `env_name` at `burst_index`. `per_row_array` is keyed by
+    row `id`. `arm_filter` restricts the average to a single
     arm (e.g., the baseline arm name)."""
     vals: list[float] = []
-    for c in cells:
+    for c in rows:
         if c.get('env_name') != env_name:
             continue
         if arm_filter is not None and c.get(arm_field) != arm_filter:
             continue
-        cell_id = c.get('id')
-        if not isinstance(cell_id, str):
+        row_id = c.get('id')
+        if not isinstance(row_id, str):
             continue
-        arr = per_cell_array.get(cell_id)
+        arr = per_row_array.get(row_id)
         if arr is None or arr.ndim < 1 or burst_index >= arr.shape[0]:
             continue
         v = float(arr[burst_index])
@@ -73,7 +73,7 @@ def _per_env_burst_predictor_mean(
 
 @analysis
 def mundlak_paired_g_per_burst(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -97,8 +97,8 @@ def mundlak_paired_g_per_burst(
     `predictor_name` resolves a registered `@measurable` whose
     `__call__(record)` returns a `(n_bursts,)` array (e.g.
     `log_mc_variance_per_burst`, `mc_variance_per_burst`). The
-    analysis applies it once per cell, caches the array, then
-    averages across cells at each burst index across the
+    analysis applies it once per row, caches the array, then
+    averages across rows at each burst index across the
     *baseline arm only* to build the per-(env, burst) predictor
     column. Restricting to the baseline keeps the predictor a
     covariate of the regime (env + HPs as the unmodified
@@ -116,19 +116,19 @@ def mundlak_paired_g_per_burst(
     sandwich (clusters by env).
 
     `dedupe_strategy` is forwarded to `paired_g_per_burst`:
-    defaults to `'mean'` (per-cell aggregation within each
+    defaults to `'mean'` (per-row aggregation within each
     `(env, arm, pair_by)` bucket); pass `'raise'` to error on
     duplicates."""
-    cells_list = to_dicts(cells)
+    rows_list = to_dicts(df)
     per_burst_g = paired_g_per_burst.fn(
-        cells, treatment_arm=treatment_arm,
+        df, treatment_arm=treatment_arm,
         baseline_arm=baseline_arm, pair_by=pair_by,
         source=source,
         arm_field=arm_field,
         dedupe_strategy=dedupe_strategy,
     )
 
-    # Resolve the named measurable; apply once per cell with
+    # Resolve the named measurable; apply once per row with
     # transitive dep resolution via `evaluate_with_measurables`,
     # cache the array. Substrate consumers register their
     # measurables via their package's `__init__.py` side effect;
@@ -146,10 +146,10 @@ def mundlak_paired_g_per_burst(
             f'usually import the substrate package, which '
             f'registers its measurables in its `__init__.py`).',
         )
-    per_cell_array: dict[str, npt.NDArray[np.float64]] = {}
-    for c in cells_list:
-        cell_id = c.get('id')
-        if not isinstance(cell_id, str):
+    per_row_array: dict[str, npt.NDArray[np.float64]] = {}
+    for c in rows_list:
+        row_id = c.get('id')
+        if not isinstance(row_id, str):
             continue
         # Cache-first discipline: if the bridge cache materialised
         # the predictor as a column at build time, the persisted
@@ -159,12 +159,12 @@ def mundlak_paired_g_per_burst(
         # Heterogeneous universal-merge corpora often have the
         # column with None for rows from sources without traces;
         # NaN-skip those rather than re-trigger the same KeyError
-        # by evaluating the measurable on a leaf-less cell.
+        # by evaluating the measurable on a leaf-less row.
         if predictor_name in c:
             cached = c[predictor_name]
             if cached is None:
                 continue
-            per_cell_array[cell_id] = np.asarray(
+            per_row_array[row_id] = np.asarray(
                 cached, dtype=np.float64,
             )
             continue
@@ -174,7 +174,7 @@ def mundlak_paired_g_per_burst(
             )
         except (KeyError, TypeError, ValueError):
             continue
-        per_cell_array[cell_id] = np.asarray(arr_obj, dtype=np.float64)
+        per_row_array[row_id] = np.asarray(arr_obj, dtype=np.float64)
 
     panel: list[dict[str, object]] = []
     for s in per_burst_g.strata:
@@ -182,7 +182,7 @@ def mundlak_paired_g_per_burst(
                 or s.se <= 0.0:
             continue
         x = _per_env_burst_predictor_mean(
-            cells_list, s.burst_index, per_cell_array,
+            rows_list, s.burst_index, per_row_array,
             s.env_name, baseline_arm, arm_field,
         )
         if math.isnan(x):

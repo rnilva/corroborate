@@ -46,7 +46,7 @@ from collections.abc import Mapping, Sequence
 
 from corroborate.analyses.paired.arm_mean_diff import arm_mean_diff
 from corroborate.corpus.schema import RunRow
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm._closed_form import y_mean_arm_variance
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
@@ -151,7 +151,7 @@ def test_arm_mean_diff_recovers_structural_contrast() -> None:
     )
 
     result = arm_mean_diff.fn(
-        cells_to_dataframe(_as_dicts(rows)),
+        to_dataframe(_as_dicts(rows)),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -209,7 +209,7 @@ def test_arm_mean_diff_null_contrast_welch_se_matches_closed_form() -> None:
     """True null contrast: identical SCMs but DISTINCT seeds across
     arms (independent samples from the same population). Shared-
     seed identical-SCM is tautological — y_mean is bit-identical
-    across arms cell-by-cell, so mean_diff is identically 0.0
+    across arms row-by-row, so mean_diff is identically 0.0
     before the framework's reducer runs. Distinct seeds force the
     framework's mean / SD / Welch-SE / Welch-df / Cohen's d /
     pairing-ρ reducers all the way through non-trivial values.
@@ -252,7 +252,7 @@ def test_arm_mean_diff_null_contrast_welch_se_matches_closed_form() -> None:
     rows = treatment_rows + baseline_rows
 
     result = arm_mean_diff.fn(
-        cells_to_dataframe(_as_dicts(rows)),
+        to_dataframe(_as_dicts(rows)),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -311,7 +311,7 @@ def test_arm_mean_diff_sign_matches_contrast_direction() -> None:
         seeds=tuple(range(_N_SEEDS_PER_ARM)),
     )
     result = arm_mean_diff.fn(
-        cells_to_dataframe(_as_dicts(rows)),
+        to_dataframe(_as_dicts(rows)),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',

@@ -19,15 +19,15 @@ import numpy as np
 
 from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.stats.effect_size import random_effects_summary
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
-def _paired_cells(deltas: list[float]) -> list[dict[str, object]]:
-    cells: list[dict[str, object]] = []
+def _paired_rows(deltas: list[float]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
     for s, d in enumerate(deltas):
-        cells.append({'arm_key': 'T', 'seed': s, 'value': float(d)})
-        cells.append({'arm_key': 'B', 'seed': s, 'value': 0.0})
-    return cells
+        rows.append({'arm_key': 'T', 'seed': s, 'value': float(d)})
+        rows.append({'arm_key': 'B', 'seed': s, 'value': 0.0})
+    return rows
 
 
 # ============ paired_g heuristics ============
@@ -39,7 +39,7 @@ def test_paired_g_no_violations_on_normal_n_30() -> None:
     rng = np.random.default_rng(0)
     deltas = list(rng.normal(1.0, 2.0, 30))
     result = paired_g.fn(
-        cells_to_dataframe(_paired_cells(deltas)),
+        to_dataframe(_paired_rows(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
@@ -56,7 +56,7 @@ def test_paired_g_flags_small_n() -> None:
     rng = np.random.default_rng(0)
     deltas = list(rng.normal(1.0, 2.0, 5))
     result = paired_g.fn(
-        cells_to_dataframe(_paired_cells(deltas)),
+        to_dataframe(_paired_rows(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
@@ -72,7 +72,7 @@ def test_paired_g_flags_skew() -> None:
     rng = np.random.default_rng(0)
     deltas = list(rng.lognormal(0.0, 0.7, 30))
     result = paired_g.fn(
-        cells_to_dataframe(_paired_cells(deltas)),
+        to_dataframe(_paired_rows(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
@@ -97,7 +97,7 @@ def test_paired_g_flags_heavy_tail_only_when_kurtosis_above_5() -> None:
     rng = np.random.default_rng(13)
     deltas = list(rng.standard_t(4, 300))
     result = paired_g.fn(
-        cells_to_dataframe(_paired_cells(deltas)),
+        to_dataframe(_paired_rows(deltas)),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
@@ -142,10 +142,10 @@ def test_dl_flags_small_g() -> None:
 
 
 def test_dl_flags_clip_artifact() -> None:
-    """G=6 with very tight cluster (low between-cell variance) →
+    """G=6 with very tight cluster (low between-row variance) →
     DL τ² lands near 0; the heuristic flags `dl_clip_artifact_possible`
     pointing readers at the max(0, ·) clip caveat."""
-    # Six cells, all with g near 0.5 and small SE → low Q → tau2 near 0.
+    # Six rows, all with g near 0.5 and small SE → low Q → tau2 near 0.
     g_se = [
         (0.50, 0.15), (0.51, 0.15), (0.49, 0.15),
         (0.50, 0.15), (0.52, 0.15), (0.48, 0.15),

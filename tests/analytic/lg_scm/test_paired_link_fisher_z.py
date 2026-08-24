@@ -2,14 +2,14 @@
 `paired_link_per_burst._pearson_r_p_slope`.
 
 The existing analytic test (`test_paired_link_per_burst.py`)
-constructs cells where Δ_Y is exactly proportional to Δ_Z under
+constructs rows where Δ_Y is exactly proportional to Δ_Z under
 shared-seed cancellation, so r ≈ ±1 and the function short-circuits
 at `if abs(r) >= 1.0: return r, 0.0, slope`. The Fisher-z, SE, and
 p-value formulas are NEVER exercised — mutation testing surfaced
 this as a coverage gap (mutations on `(1+r)/(1-r)`, `1/sqrt(n-3)`,
 and `abs(z)/se` all survive).
 
-This file fills the gap: synthetic cells where Δ_Y has a known
+This file fills the gap: synthetic rows where Δ_Y has a known
 moderate correlation with Δ_Z (target |r| ≈ 0.577 from
 `r = β_zy · sd(Δ_Z) / sqrt(β_zy²·sd(Δ_Z)² + 2·sd(ε)²)`), and the
 framework's reported r, slope, and p-value match the closed
@@ -26,7 +26,7 @@ from corroborate.analyses.link.paired_link_per_burst import (
     paired_link_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 # Construction parameters chosen so closed-form |r| sits at ~0.577
@@ -83,7 +83,7 @@ def _expected_p_value(r: float, n_pairs: int) -> float:
 
 
 def _build_moderate_r_corpus() -> list[Mapping[str, object]]:
-    """Construct per-cell `y_per_episode` and `z_per_episode`
+    """Construct per-row `y_per_episode` and `z_per_episode`
     with structural Δ_Y = β_zy · Δ_Z + Δε, where Δε is an
     arm-independent noise component. The per-burst arrays are
     length-1 lists so `reduce_axis(_, axis=-1, op='mean')` yields
@@ -91,11 +91,11 @@ def _build_moderate_r_corpus() -> list[Mapping[str, object]]:
 
     Two arms:
       treatment: per-burst Δ baseline shifted by a fixed
-                 structural offset + per-cell Δ_Z noise + per-cell ε noise.
+                 structural offset + per-row Δ_Z noise + per-row ε noise.
       baseline:  per-burst Δ baseline shifted by zero + same noise.
     """
     rng = np.random.default_rng(42)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for s in range(_N_PAIRS):
         # Per-(seed, burst) shared `z` realization for Δ.
         # Treatment z is shifted up by 1 vs baseline so mean Δ_Z > 0;
@@ -110,21 +110,21 @@ def _build_moderate_r_corpus() -> list[Mapping[str, object]]:
         y_b = _BETA_ZY * z_b + eps_b
         # 1-element-per-burst inner lists: reduce_axis(axis=-1, mean)
         # collapses to the scalar per burst.
-        cells.append({
+        rows.append({
             'env_name': 'syn',
             'arm_key': _TREATMENT,
             'seed': s,
             'z_per_episode': [[float(v)] for v in z_t],
             'y_per_episode': [[float(v)] for v in y_t],
         })
-        cells.append({
+        rows.append({
             'env_name': 'syn',
             'arm_key': _BASELINE,
             'seed': s,
             'z_per_episode': [[float(v)] for v in z_b],
             'y_per_episode': [[float(v)] for v in y_b],
         })
-    return cells
+    return rows
 
 
 def test_fisher_z_path_recovers_closed_form_r_and_p() -> None:
@@ -147,15 +147,15 @@ def test_fisher_z_path_recovers_closed_form_r_and_p() -> None:
     would breach the bound here — exactly the mutmut-surfaced
     survivors this test is designed to kill.
     """
-    cells = _build_moderate_r_corpus()
+    rows = _build_moderate_r_corpus()
     # Per-burst-mean source: 1-element inner lists make this a no-op
-    # reduction, so the per-burst array IS the cell's y_per_episode
+    # reduction, so the per-burst array IS the row's y_per_episode
     # / z_per_episode at face value.
     target = reduce_axis(from_key('y_per_episode'), axis=-1, op='mean')
     predictor = reduce_axis(from_key('z_per_episode'), axis=-1, op='mean')
 
     result = paired_link_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm=_TREATMENT,
         baseline_arm=_BASELINE,
         target=target,
@@ -234,13 +234,13 @@ def test_n_below_three_short_circuits_to_nan() -> None:
     divide by sqrt(n-3) = sqrt(-1)). Catches the boundary mutation
     `n < 3` → `n <= 3`."""
     rng = np.random.default_rng(0)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for s in range(2):  # only 2 seeds → n=2 < 3
         z_perturb = rng.normal(0.0, 1.0, size=2)
         for arm, sign in ((_TREATMENT, +1.0), (_BASELINE, -1.0)):
             z = 0.5 * sign + z_perturb
             y = _BETA_ZY * z + rng.normal(0.0, _SD_EPSILON, size=2)
-            cells.append({
+            rows.append({
                 'env_name': 'syn', 'arm_key': arm, 'seed': s,
                 'z_per_episode': [[float(v)] for v in z],
                 'y_per_episode': [[float(v)] for v in y],
@@ -248,7 +248,7 @@ def test_n_below_three_short_circuits_to_nan() -> None:
     target = reduce_axis(from_key('y_per_episode'), axis=-1, op='mean')
     predictor = reduce_axis(from_key('z_per_episode'), axis=-1, op='mean')
     result = paired_link_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm=_TREATMENT, baseline_arm=_BASELINE,
         target=target, predictor=predictor,
     )

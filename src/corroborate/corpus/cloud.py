@@ -107,7 +107,7 @@ class RemoteFile:
     archived file is a parquet carrying an `id` column (RunRow
     or TraceRow shards), the list of IDs it contains. Empty for
     non-parquet files OR parquets without an `id` column.
-    Enables `id → shard → cell address` traceability when
+    Enables `id → shard → row address` traceability when
     debugging anomalous rows in a merged corpus. JSON-omitted
     when empty to keep older manifests round-trippable."""
 
@@ -269,7 +269,7 @@ def _save_remote_manifest(
     remote_root: str, manifest: RemoteManifest,
 ) -> None:
     """Mirror the manifest to `<remote_root>/MANIFEST.json`. Used
-    after `archive()` completes to expose cell-level metadata
+    after `archive()` completes to expose row-level metadata
     without requiring local manifest state.
 
     Streams via a tempfile so the upload reuses the same fsspec
@@ -297,8 +297,8 @@ def fetch_remote_manifest(remote_root: str) -> RemoteManifest | None:
     (e.g. corpus archived before the cloud-mirror feature, or
     archive failed mid-mirror).
 
-    Used for cell-level discovery without downloading parquets:
-    `manifest.files[i].row_ids` lists exactly which cells are in
+    Used for row-level discovery without downloading parquets:
+    `manifest.files[i].row_ids` lists exactly which rows are in
     each archived file. Recovery use-case: the local
     `_remote.json` was lost but the cloud archive is intact —
     fetch the manifest, write it back as `_remote.json`, and the
@@ -440,7 +440,7 @@ SIDECAR_DIRS: tuple[str, ...] = ('q_checkpoints',)
 """Sweep-dir subdirectories whose entire contents are eligible for
 archival under the default selection. Substrate-side auxiliary
 artifacts that travel with the corpus (e.g., Q-network parameter
-checkpoints saved per cell) live here. The framework hardcodes a
+checkpoints saved per row) live here. The framework hardcodes a
 short whitelist rather than walking everything to avoid sweeping
 up scratch / tmp / log dirs that aren't part of the durable
 record."""
@@ -451,7 +451,7 @@ def _default_files(sweep_dir: Path) -> list[str]:
     pre-registration manifest sidecar
     (`pre_registration.json`) if present, plus every file under
     each `SIDECAR_DIRS` subdirectory (substrate-authored
-    per-cell sidecars like Q-network checkpoints). The `tmp/`
+    per-row sidecars like Q-network checkpoints). The `tmp/`
     shard subdirectory is intentionally excluded — when present,
     the merged top-level parquet supersedes the shards. Users
     who want shards too pass `--files tmp/<arm>...` explicitly.
@@ -464,11 +464,11 @@ def _default_files(sweep_dir: Path) -> list[str]:
     to the cloud.
 
     `SIDECAR_DIRS` whitelist (currently `q_checkpoints/`): a
-    implementation writes per-cell auxiliary artifacts here; the
+    implementation writes per-row auxiliary artifacts here; the
     archive command sweeps them up alongside the parquets so
     the cloud copy is self-contained. The walk RECURSES so
     substrate-authored nested layouts (e.g.
-    `q_checkpoints/<arm_name>/cell*.msgpack` produced by
+    `q_checkpoints/<arm_name>/row*.msgpack` produced by
     multi-arm sweeps that namespace ckpts per intervention) are
     picked up. Files are added with relpath
     `<sidecar_dir>/.../<filename>`; restore replicates the
@@ -499,7 +499,7 @@ def _warn_if_trace_schema_incomplete(traces_path: Path) -> None:
     traces lacking columns that future ingests will need (e.g. a
     new reduction was added to the implementation after this sweep
     ran), those ingests will produce all-NaN values on this
-    corpus's cells without ever surfacing why. The check makes the
+    corpus's rows without ever surfacing why. The check makes the
     gap loud at archive time so the implementation author can decide:
     re-archive after fixing, or accept the partial schema (some
     measurables won't compute on this corpus).
@@ -675,7 +675,7 @@ def archive(
         # so the sidecar rides the same archive path without a
         # spurious `ArchivePrecondition` failure. Same exception
         # applies to implementation sidecars under `SIDECAR_DIRS` (e.g.
-        # `q_checkpoints/cell000_0_final.msgpack`) — these are
+        # `q_checkpoints/row000_0_final.msgpack`) — these are
         # small msgpack files, not parquets.
         from corroborate.core.pre_registration import (
             MANIFEST_NAME as _PRE_REG_NAME,
@@ -776,7 +776,7 @@ def archive(
 
     # **Cloud-side manifest mirror**: upload the freshly-saved
     # local manifest as `<remote_root>/MANIFEST.json` so the
-    # cloud carries cell-level accountability without anyone
+    # cloud carries row-level accountability without anyone
     # downloading the parquets. Recovery becomes "fetch
     # MANIFEST.json + restore from there"; discovery becomes "list
     # buckets/MANIFEST.json blobs". Pre-fix, the local
@@ -872,10 +872,10 @@ def restore(
 
 
 DEFAULT_RESTORE_ROW_GROUP_SIZE = 2
-"""Default cells-per-row-group for `restore_columns` local rewrite.
+"""Default rows-per-row-group for `restore_columns` local rewrite.
 
 The cloud-hosted parquet may have been written as a single huge
-row group (e.g. snake_g099_canonical_3M_ckpt: 60 cells × ~30 GB
+row group (e.g. snake_g099_canonical_3M_ckpt: 60 rows × ~30 GB
 uncompressed, 1 row group). Streaming readers downstream
 (`compute_trace_measurables_streaming`, `_load_one_corpus`'s
 row-group iteration) take row groups as the atomic streaming
@@ -883,16 +883,16 @@ unit — a single row group means "stream everything at once" →
 OOM on the next ingest pass.
 
 The local file is what we control; rewriting with row groups
-sized to a small cell-count (default 2) restores the row-group
+sized to a small row-count (default 2) restores the row-group
 axis as a meaningful streaming boundary. Downstream
 `build_measurements_streaming` then iterates with bounded RAM
 regardless of the cloud writer's row-group choice.
 
-Small row groups (2 cells) keep the streaming batcher's
+Small row groups (2 rows) keep the streaming batcher's
 per-batch decompressed footprint well under
 `measurements.DEFAULT_TRACE_BYTE_BUDGET` even for the heaviest
-3M-step MinAtar per-step list columns (~183 MB/cell → ~365 MB per
-2-cell group), so the row-group batch path (which reads ONLY the
+3M-step MinAtar per-step list columns (~183 MB/row → ~365 MB per
+2-row group), so the row-group batch path (which reads ONLY the
 grouped row groups, not the whole file) handles them with low
 single-digit GB peak. Lighter substrates pack many such groups
 into one batch. Comfortable on the 12-16 GB RAM envelopes the
@@ -931,10 +931,10 @@ def restore_columns(
     The columns must be subsets of the cloud file's schema; an
     unknown column raises at scan time.
 
-    `row_group_size`: cells per row group in the LOCAL rewrite.
+    `row_group_size`: rows per row group in the LOCAL rewrite.
     Defaults to `DEFAULT_RESTORE_ROW_GROUP_SIZE` (8). Cloud files
     written by a sweep merger may have a single huge row group
-    spanning all cells; reading any subset then materialises the
+    spanning all rows; reading any subset then materialises the
     whole file (OOM on multi-GB traces). Re-chunking row groups
     at restore time gives downstream streaming primitives a
     meaningful per-batch boundary. Pass `None` to disable
@@ -1101,8 +1101,8 @@ def archived_shard_uris(
     not call-local state. Without this, paired-sweep dispatches
     that target the same `out_dir` across multiple `run_intervention`
     calls have each call's merge clobber the prior one's
-    `<out_dir>/runs.parquet` with a SUBSET of the corpus's cells.
-    Reading from the manifest accumulates cells across all calls.
+    `<out_dir>/runs.parquet` with a SUBSET of the corpus's rows.
+    Reading from the manifest accumulates rows across all calls.
 
     Returns an empty list when no manifest exists for `sweep_dir`
     (the all-local-no-cloud path; caller falls back to
@@ -1151,7 +1151,7 @@ def purge(
     cleanup wiped the per-arm sub-corpus dir that originally
     held the manifest). Looks up sub-archives at
     `<prefix>/<sweep_dir.name>/*/MANIFEST.json` via
-    `list_archives()`, builds the union of cell row_ids
+    `list_archives()`, builds the union of row row_ids
     covered by those sub-archives, and verifies each local
     parquet's row_ids are a subset of that union. Files
     without row_ids (e.g., trace-only parquets that lack the

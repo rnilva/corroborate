@@ -9,8 +9,8 @@ and `cross_stratum_property_slope._derive_per_stratum_covariate`
 implementation-author primitive would reinvent the wheel.
 
 The kernel takes a `pl.DataFrame` + structured spec and returns
-typed results. `cells_to_dataframe` is the conversion boundary
-that adapts the legacy `Iterable[Mapping]` cells input to the
+typed results. `to_dataframe` is the conversion boundary
+that adapts the legacy `Iterable[Mapping]` data input to the
 DataFrame-canonical analysis surface.
 
 Functions in this module are framework-internal stable — the
@@ -28,20 +28,20 @@ import polars as pl
 
 
 def per_stratum_aggregate(
-    cells: pl.DataFrame,
+    data: pl.DataFrame,
     *,
     column: str,
     aggregator: Literal['mean', 'std', 'median'],
     stratify_by: tuple[str, ...],
-    cell_filter: pl.Expr | None = None,
+    row_filter: pl.Expr | None = None,
     min_n: int = 1,
 ) -> Mapping[tuple[object, ...], float]:
     """Per-stratum scalar aggregate of `column` via `aggregator`,
-    optionally narrowed by `cell_filter`, keyed by the `stratify_by`
+    optionally narrowed by `row_filter`, keyed by the `stratify_by`
     columns. Returns `{stratum_id: aggregate_value}`.
 
-    Cells with non-finite `column` value are dropped before
-    aggregation. Strata with fewer than `min_n` surviving cells
+    Rows with non-finite `column` value are dropped before
+    aggregation. Strata with fewer than `min_n` surviving data
     are skipped (SD undefined at n<2; implementation-author chooses
     a higher floor for power-sensitive uses).
 
@@ -50,20 +50,20 @@ def per_stratum_aggregate(
     (Phase 2 migration target). Both call sites converge here so
     aggregator semantics can't drift across the
     Iterable[Mapping] ↔ Panel surface."""
-    if column not in cells.columns or not stratify_by:
+    if column not in data.columns or not stratify_by:
         return {}
-    if cells.height == 0:
+    if data.height == 0:
         return {}
-    if cell_filter is not None:
-        cells = cells.filter(cell_filter)
-    if cells.height == 0:
+    if row_filter is not None:
+        data = data.filter(row_filter)
+    if data.height == 0:
         return {}
     # Drop non-finite column values.
-    if cells.schema[column].is_float():
-        cells = cells.filter(pl.col(column).is_finite())
+    if data.schema[column].is_float():
+        data = data.filter(pl.col(column).is_finite())
     else:
-        cells = cells.filter(pl.col(column).is_not_null())
-    if cells.height == 0:
+        data = data.filter(pl.col(column).is_not_null())
+    if data.height == 0:
         return {}
     if aggregator == 'mean':
         agg_expr = pl.col(column).mean()
@@ -75,7 +75,7 @@ def per_stratum_aggregate(
     else:
         agg_expr = pl.col(column).median()
     grouped = (
-        cells.group_by(list(stratify_by))
+        data.group_by(list(stratify_by))
         .agg([agg_expr.alias('_agg'), pl.len().alias('_n')])
     )
     out: dict[tuple[object, ...], float] = {}
@@ -102,15 +102,15 @@ def per_stratum_aggregate(
     return out
 
 
-def cells_to_dataframe(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+def to_dataframe(
+    data: pl.DataFrame | Iterable[Mapping[str, object]],
 ) -> pl.DataFrame:
     """Materialise rows into the polars DataFrame every @analysis
     primitive takes. A DataFrame passes through unchanged.
 
     This is the ENTRY-BOUNDARY conversion, called once by whoever
     holds rows — the bridge evaluator (its gate rows), tests built
-    from `RunRow.as_dict()`, ad-hoc dict lists. The `cells` INPUT
+    from `RunRow.as_dict()`, ad-hoc dict lists. The `data` INPUT
     of a primitive is never converted inside the primitive —
     analyses are plain-DataFrame functions a polars user can call
     with no framework context; in-tree delegates that DERIVE new
@@ -119,27 +119,27 @@ def cells_to_dataframe(
 
     The two-arm input type IS the polymorphic boundary CLAUDE.md's
     "no `object` parameters" rule permits — the body narrows
-    immediately via `isinstance(cells, pl.DataFrame)` so the
+    immediately via `isinstance(data, pl.DataFrame)` so the
     `Iterable[Mapping[str, object]]` branch carries the
     fully-typed shape through.
 
     Uses `pl.from_dicts(..., infer_schema_length=None)` for the
     Iterable[Mapping] branch — scans the full input for type
-    inference. `pl.DataFrame(cells)` blows up on real-world
+    inference. `pl.DataFrame(data)` blows up on real-world
     heterogeneous schemas where row N introduces a column type
-    the first few rows didn't carry (cache cells from diagonal-
+    the first few rows didn't carry (cache data from diagonal-
     relaxed-concat'd corpora trip this regularly)."""
-    if isinstance(cells, pl.DataFrame):
-        return cells
-    cells_list: list[Mapping[str, object]] = list(cells)
-    if not cells_list:
+    if isinstance(data, pl.DataFrame):
+        return data
+    rows_list: list[Mapping[str, object]] = list(data)
+    if not rows_list:
         return pl.DataFrame()
-    _require_consistent_kinds(cells_list)
-    # Skip the `[dict(c) for c in cells_list]` copy when cells
+    _require_consistent_kinds(rows_list)
+    # Skip the `[dict(c) for c in rows_list]` copy when data
     # are already concrete dicts — polars' `from_dicts` accepts
     # any Mapping. The copy was insurance against frozen-dict
-    # subtypes but the cost was real on 8k-cell caches.
-    return pl.from_dicts(cells_list, infer_schema_length=None)
+    # subtypes but the cost was real on 8k-row caches.
+    return pl.from_dicts(rows_list, infer_schema_length=None)
 
 
 def _scalar_kind(value: object) -> str | None:
@@ -175,7 +175,7 @@ def _require_consistent_kinds(
             earlier = kinds.setdefault(key, kind)
             if earlier != kind:
                 raise ValueError(
-                    f'cells_to_dataframe: column {key!r} mixes '
+                    f'to_dataframe: column {key!r} mixes '
                     f'{earlier} and {kind} values across rows — '
                     f'polars would silently unify these to '
                     f'strings; repair the rows instead',
@@ -183,6 +183,6 @@ def _require_consistent_kinds(
 
 
 __all__ = [
-    'cells_to_dataframe',
+    'to_dataframe',
     'per_stratum_aggregate',
 ]

@@ -30,7 +30,7 @@ import polars as pl
 from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 
-from corroborate.analyses._cell_value import key_tuple, resolve_value
+from corroborate.analyses._row_value import key_tuple, resolve_value
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +44,7 @@ class ArmMeanDiffResult:
     `n_treatment` / `n_baseline` are the per-arm sample sizes
     (independent — these are not "pairs"). When the bridge ALSO
     wants per-pair coupling info, `n_paired` reports how many
-    cells actually share a pair_by key, and `pairing_rho` is the
+    rows actually share a pair_by key, and `pairing_rho` is the
     Pearson correlation between paired (treatment, baseline)
     values across those keys.
 
@@ -113,7 +113,7 @@ class ArmMeanDiffResult:
 
 @analysis
 def arm_mean_diff(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -132,10 +132,10 @@ def arm_mean_diff(
         paired_g would be more powerful — `pairing_rho` flags
         when to switch.
       - No `dedupe_strategy` parameter — the analysis is on
-        marginal arm samples, so duplicate cells per (arm,
+        marginal arm samples, so duplicate rows per (arm,
         pair_by) bucket are flat-aggregated by the same arm-mean.
         Mean-aggregating per bucket (paired_g's `'mean'` strategy)
-        and flat-mean across all cells in an arm give the same
+        and flat-mean across all rows in an arm give the same
         per-arm mean when bucket sizes are uniform.
 
     `source` resolves through the persisted-column path or the
@@ -143,35 +143,35 @@ def arm_mean_diff(
     used to compute the `pairing_rho` diagnostic; NOT used in the
     test statistic.
 
-    Honest indep-samples form: every cell that passes scope
+    Honest indep-samples form: every row that passes scope
     contributes to its arm's marginal sample, independently. We
     do NOT intersect on `pair_by` to ensure "both arms have a
     counterpart" — that would smuggle paired-sample dependence
     back into a Welch SE that assumes independence, biasing SE
     low. If asymmetric scope predicates (e.g. `jens > 0.05`
-    filtering more DDQN cells than vanilla) bias the comparison,
+    filtering more DDQN rows than vanilla) bias the comparison,
     that's a SCOPE issue to handle at the bridge level, not by
     silently filtering arm samples here."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     treatment_vals: list[float] = []
     baseline_vals: list[float] = []
     treatment_paired: dict[tuple[object, ...], list[float]] = {}
     baseline_paired: dict[tuple[object, ...], list[float]] = {}
 
-    for cell in rows:
-        arm = cell.get(arm_field)
-        v = resolve_value(cell, source)
+    for row in rows:
+        arm = row.get(arm_field)
+        v = resolve_value(row, source)
         if math.isnan(v):
             continue
         if arm == treatment_arm:
             treatment_vals.append(v)
             treatment_paired.setdefault(
-                key_tuple(cell, pair_by), [],
+                key_tuple(row, pair_by), [],
             ).append(v)
         elif arm == baseline_arm:
             baseline_vals.append(v)
             baseline_paired.setdefault(
-                key_tuple(cell, pair_by), [],
+                key_tuple(row, pair_by), [],
             ).append(v)
 
     n_t = len(treatment_vals); n_b = len(baseline_vals)

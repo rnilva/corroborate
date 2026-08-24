@@ -1,6 +1,6 @@
 """Pre-registration manifest — sweep-launch commitment to bridges.
 
-Authors who pre-register a sweep declare, BEFORE any cell runs,
+Authors who pre-register a sweep declare, BEFORE any row runs,
 which bridges they intend to evaluate against the corpus and what
 verdict they predict. The framework writes a `pre_registration.json`
 sidecar at sweep launch capturing:
@@ -116,7 +116,7 @@ class BridgeCommitment:
 
 @dataclass(frozen=True, slots=True)
 class PreRegistrationManifest:
-    """Sweep-launch manifest. Mirrored to remote alongside cells.
+    """Sweep-launch manifest. Mirrored to remote alongside rows.
 
     Immutable once written; no append after sweep starts (see
     `write_manifest`'s `FileExistsError` behaviour). The on-disk

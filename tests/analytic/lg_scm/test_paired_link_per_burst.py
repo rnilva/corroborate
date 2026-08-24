@@ -24,7 +24,7 @@ Two tests:
 
    On dormant bursts:
        sd_d_target ≈ 0 → Pearson r returns NaN by design
-       n_pairs == n_seeds (cells still match; the analysis just
+       n_pairs == n_seeds (rows still match; the analysis just
        can't compute r when target has no variance)
 
    `phase_link_consistency(expected_sign=-1, significance=0.05)`
@@ -42,7 +42,7 @@ from corroborate.analyses.link.paired_link_per_burst import (
     phase_link_consistency,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -101,21 +101,21 @@ def test_link_recovers_perfect_anticorrelation_under_shared_noise() -> None:
     floating-point noise (we allow `r < -0.999` and
     `|slope - (-beta_zy)| < 0.01`).
 
-    A regression that mispairs cells across bursts, or that
+    A regression that mispairs rows across bursts, or that
     drops the negation in the predictor, would fail this test
     immediately.
     """
     n_bursts = 5
     treatments = tuple(_scm(0.8) for _ in range(n_bursts))
     baselines = tuple(_scm(0.3) for _ in range(n_bursts))
-    cells = run_paired_phased_arms(
+    rows = run_paired_phased_arms(
         treatments_per_burst=treatments,
         baselines_per_burst=baselines,
         seeds=range(_N_PAIRS),
     )
 
     result = paired_link_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target=_PER_BURST_Y_MEAN,
@@ -182,14 +182,14 @@ def test_phase_link_consistency_reports_dormant_bursts_honestly() -> None:
         _scm(0.3, beta_zy=0.0),
     )
     n_bursts = len(treatments)
-    cells = run_paired_phased_arms(
+    rows = run_paired_phased_arms(
         treatments_per_burst=treatments,
         baselines_per_burst=baselines,
         seeds=range(_N_PAIRS),
     )
 
     result = paired_link_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target=_PER_BURST_Y_MEAN,

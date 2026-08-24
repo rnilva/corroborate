@@ -137,8 +137,8 @@ class DynamicPCResult:
     `n_bootstrap == 0` (default fast path) and populated when
     `n_bootstrap > 0`. DL's PI bounds are parametric and assume
     per-burst independence — which trajectory data violates; the
-    cluster bootstrap resamples WHOLE CELLS and is therefore
-    assumption-free under any within-cell autocorrelation
+    cluster bootstrap resamples WHOLE ROWS and is therefore
+    assumption-free under any within-row autocorrelation
     structure. `n_bootstrap=1000` is recommended for
     publication-grade CIs.
 
@@ -147,7 +147,7 @@ class DynamicPCResult:
     (`n_bursts_marginal_edge` / `n_bursts_mediator_dseparates` /
     `n_bursts_direct_edge`). Conceptually distinct from the
     ρ-pool CIs: the count CIs answer "is the edge classification
-    robust to which cells we sampled?" (a few outlier cells
+    robust to which rows we sampled?" (a few outlier rows
     flipping per-burst CI decisions widens the interval); the
     ρ-pool CIs answer "what's the average effect magnitude under
     bootstrap resampling?". Populated alongside the ρ-pool CIs
@@ -190,7 +190,7 @@ class DynamicPCResult:
 
 @analysis
 def dynamic_pc_adjacency(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     arm_field: str = 'arm_key',
     mediator_per_burst: (
@@ -209,7 +209,7 @@ def dynamic_pc_adjacency(
     """Trajectory-resolved PC-style mediation per stratum.
 
     For each stratum (tuple of values at `stratify_by` columns):
-    align the per-burst arrays across cells (ragged-tail
+    align the per-burst arrays across rows (ragged-tail
     semantics, same as the partial-Spearman sibling); at each
     burst index run two CI tests:
 
@@ -255,9 +255,9 @@ def dynamic_pc_adjacency(
     per-burst. Empty tuple raises `ValueError`.
 
     `n_bootstrap` (default 0) enables a cluster-bootstrap CI on
-    the DL pool AND on the per-burst edge-count triple. Cells
+    the DL pool AND on the per-burst edge-count triple. Rows
     are the resampling unit. For each iteration, resample
-    `n_cells` with replacement and recompute (a) the DL-pooled
+    `n_rows` with replacement and recompute (a) the DL-pooled
     per-burst ρ — empirical [α/2, 1 − α/2] percentile range
     becomes `bootstrap_marginal` / `bootstrap_partial`; (b) the
     per-burst CI decisions and their summed (marg, dsep, direct)
@@ -265,7 +265,7 @@ def dynamic_pc_adjacency(
     `bootstrap_edge_counts` (`ClusterBootstrapEdgeCounts`). The
     count CIs and the ρ-pool CIs answer structurally distinct
     questions: the count CIs ask "is the edge classification
-    robust to which cells we sampled?"; the ρ-pool CIs ask
+    robust to which rows we sampled?"; the ρ-pool CIs ask
     "what's the average effect magnitude under bootstrap
     resampling?". `n_bootstrap=1000` is the recommended
     publication-grade value; default 0 keeps the fast path
@@ -274,7 +274,7 @@ def dynamic_pc_adjacency(
     controls the percentile for both interval types.
 
     Returns a `Mapping[Stratum, DynamicPCResult]`. Strata where no
-    cell contributes (missing arm tag, malformed per-burst columns,
+    row contributes (missing arm tag, malformed per-burst columns,
     single-arm stratum) are absent from the result — the framework
     refuses to silently emit a NaN trajectory."""
     mediators_tuple: tuple[ColumnOrMeasurable, ...]
@@ -292,16 +292,16 @@ def dynamic_pc_adjacency(
     k = len(mediators_tuple)
 
     by_stratum: dict[Stratum, list[Mapping[str, object]]] = {}
-    for cell in _to_dicts(cells):
-        key = stratum_key(cell, stratify_by)
+    for row in _to_dicts(df):
+        key = stratum_key(row, stratify_by)
         if key is None:
             continue
-        by_stratum.setdefault(key, []).append(cell)
+        by_stratum.setdefault(key, []).append(row)
 
     out: dict[Stratum, DynamicPCResult] = {}
-    for stratum, stratum_cells in by_stratum.items():
+    for stratum, stratum_rows in by_stratum.items():
         result = _compute_one_stratum_pc(
-            stratum_cells,
+            stratum_rows,
             arm_field=arm_field,
             mediators_per_burst=mediators_tuple,
             outcome_per_burst=outcome_per_burst,
@@ -320,7 +320,7 @@ def dynamic_pc_adjacency(
 
 
 def _compute_one_stratum_pc(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     arm_field: str,
     mediators_per_burst: tuple[ColumnOrMeasurable, ...],
@@ -335,14 +335,14 @@ def _compute_one_stratum_pc(
     k: int,
 ) -> DynamicPCResult | None:
     """Per-stratum core for the PC primitive. Returns None when no
-    per-cell row has valid arm + per-burst columns at all.
+    per-row row has valid arm + per-burst columns at all.
 
     `k = len(mediators_per_burst)`; at k=1 the depth-1 CI machinery
     runs (closed-form `partial_spearman_rho`, Fisher-z df = n − 4)
     for bit-exact back-compat; at k≥2 the multi-Z primitive runs
     (`partial_spearman_rho_multi`, df = n − 3 − k)."""
     collected = collect_arm_and_per_burst_multi(
-        cells,
+        rows,
         arm_field=arm_field,
         mediators_per_burst=mediators_per_burst,
         outcome_per_burst=outcome_per_burst,
@@ -442,14 +442,14 @@ def _compute_one_stratum_pc(
     # count triple — both opt-in via `n_bootstrap > 0`. The k=1
     # path uses the depth-1 (closed-form) cluster-bootstrap kernel
     # for bit-exact back-compat; the k≥2 path uses the multi-Z
-    # variant. Same cell-resampling pattern for both.
+    # variant. Same row-resampling pattern for both.
     bootstrap_marg: ClusterBootstrapInterval | None = None
     bootstrap_part: ClusterBootstrapInterval | None = None
     bootstrap_counts: ClusterBootstrapEdgeCounts | None = None
     if n_bootstrap > 0:
         if k == 1:
             flat_med: list[Sequence[float]] = [
-                cell_meds[0] for cell_meds in mediator_lists
+                row_meds[0] for row_meds in mediator_lists
             ]
             bootstrap_marg = cluster_bootstrap_pool(
                 arm_codes=arm_codes,

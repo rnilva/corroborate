@@ -1,9 +1,9 @@
 """Runner: drive the LG-SCM, package each run as `RunRow` (+
 optional `TraceRow` for multi-burst phased runs).
 
-Scalar entry points (one Y-mean per cell, no per-burst structure):
+Scalar entry points (one Y-mean per row, no per-burst structure):
 
-- `run_cell(scm, *, seed, arm_key, env_name)` — one cell as a
+- `run_row(scm, *, seed, arm_key, env_name)` — one row as a
   `RunRow` whose `measurements` carry both the configurational
   leaves (β coefficients, μ, σ) and observation summaries
   (`x_mean`, `z_mean`, `y_mean`).
@@ -13,18 +13,18 @@ Scalar entry points (one Y-mean per cell, no per-burst structure):
 Phased entry points (per-burst Y matrix; for `paired_g_per_burst`
 and link analyses):
 
-- `run_phased_cell(scms_per_burst, *, seed, arm_key, env_name)` —
+- `run_phased_row(scms_per_burst, *, seed, arm_key, env_name)` —
   returns `(RunRow, TraceRow)`. RunRow carries scalar
   measurements (overall `y_mean`, `seed`, `env_name`); TraceRow
   carries the `(n_bursts, n_steps)` Y matrix at the
   author-chosen key `y_per_episode`.
-- `merge_cell(run, trace)` — flat merge of RunRow + TraceRow into
-  the cell-dict shape per-burst analyses consume. Mirrors the
+- `merge_row(run, trace)` — flat merge of RunRow + TraceRow into
+  the row-dict shape per-burst analyses consume. Mirrors the
   production polars left-join of `runs` + `traces` on `id`.
 - `run_paired_phased_arms(...)` — phased two-arm sweep returning a
-  flat list of cell-dicts.
+  flat list of row-dicts.
 
-Cells round-trip through `RunRow.as_dict()` and `TraceRow.as_dict()`,
+Rows round-trip through `RunRow.as_dict()` and `TraceRow.as_dict()`,
 the same surface real corpora go through, so analyses are
 exercised on the production data path. Provenance fields (`id`,
 `cycle_id`, `timestamp`) get filled with deterministic synthetic
@@ -60,11 +60,11 @@ _FIXED_TIMESTAMP = '2026-01-01T00:00:00Z'
 
 
 @dataclass(frozen=True, slots=True)
-class CellId:
-    """Composite cell identifier minted deterministically from
+class RowId:
+    """Composite row identifier minted deterministically from
     (arm_key, seed, env_name). Deterministic IDs let pytest
     re-runs produce byte-equal RunRows so equality-based
-    fixtures (`test_cells == fresh_cells`) stay sharp."""
+    fixtures (`test_rows == fresh_rows`) stay sharp."""
     arm_key: str
     seed: int
     env_name: str
@@ -101,19 +101,19 @@ def _observation_summaries(obs: LGSCMObservation) -> dict[str, MeasurementLeaf]:
     }
 
 
-def run_cell(
+def run_row(
     scm: LinearGaussianSCM,
     *,
     seed: int,
     arm_key: str,
     env_name: str = 'lg_scm',
 ) -> RunRow:
-    """Run one cell; return a `RunRow` with closed-form-tractable
+    """Run one row; return a `RunRow` with closed-form-tractable
     measurements.
 
     The verdict is fixed to `HELD` because the implementation emits raw
-    cells, not bridge results — the analyses under test compute
-    their own verdicts from the cell-set. A non-HELD value would
+    rows, not bridge results — the analyses under test compute
+    their own verdicts from the row-set. A non-HELD value would
     encode a bridge decision the implementation has no business making.
 
     `seed`, `env_name` and `arm_key` flow into `measurements` at
@@ -121,7 +121,7 @@ def run_cell(
     env-stratified panels work without further plumbing.
     """
     obs = simulate(scm, seed=seed)
-    cell_id = CellId(arm_key=arm_key, seed=seed, env_name=env_name)
+    row_id = RowId(arm_key=arm_key, seed=seed, env_name=env_name)
     measurements: dict[str, MeasurementLeaf] = {
         'env_name': env_name,
         'seed': seed,
@@ -129,7 +129,7 @@ def run_cell(
     measurements.update(_config_leaves(scm))
     measurements.update(_observation_summaries(obs))
     return RunRow(
-        id=cell_id.as_run_id(),
+        id=row_id.as_run_id(),
         parent_id=None,
         cycle_id=None,
         timestamp=_FIXED_TIMESTAMP,
@@ -150,7 +150,7 @@ def run_arm(
     order. The list shape (rather than a generator) is what
     paired_g and friends consume."""
     return [
-        run_cell(scm, seed=s, arm_key=arm_key, env_name=env_name)
+        run_row(scm, seed=s, arm_key=arm_key, env_name=env_name)
         for s in seeds
     ]
 
@@ -167,7 +167,7 @@ def run_paired_arms(
     """Two-arm paired sweep. Both arms run on the *same* `seeds`
     so paired-Δ noise cancels (same X realisation per seed).
 
-    Returns a flat list with treatment cells then baseline cells.
+    Returns a flat list with treatment rows then baseline rows.
     The order doesn't matter to paired_g (it pair-keys on
     `('seed',)`) but a stable order keeps fixtures readable.
     """
@@ -193,8 +193,8 @@ def run_multi_env_paired_arms(
     pair of SCMs so structural coefficients can vary across envs
     while the intervention axis is shared.
 
-    Returns a flat list of RunRows tagged with each cell's env_name.
-    Cells from different envs are independently seeded (same `seeds`
+    Returns a flat list of RunRows tagged with each row's env_name.
+    Rows from different envs are independently seeded (same `seeds`
     per env), so meta-analyses see each env as its own stratum
     with internal paired-Δ variance.
 
@@ -212,7 +212,7 @@ def run_multi_env_paired_arms(
     return rows
 
 
-# ============ Phased (multi-burst) cells ============
+# ============ Phased (multi-burst) rows ============
 
 # Author-chosen keys for the per-(burst, episode) trajectory
 # matrices on TraceRow.leaves. Substrate-named (mirrors how the
@@ -235,14 +235,14 @@ def _matrix_to_trace_leaf(
     return [list(burst) for burst in matrix]
 
 
-def run_phased_cell(
+def run_phased_row(
     scms_per_burst: tuple[LinearGaussianSCM, ...],
     *,
     seed: int,
     arm_key: str,
     env_name: str = 'lg_scm',
 ) -> tuple[RunRow, TraceRow]:
-    """Run a multi-burst cell. Returns the `(RunRow, TraceRow)`
+    """Run a multi-burst row. Returns the `(RunRow, TraceRow)`
     pair: RunRow carries scalar provenance + overall summaries
     (`y_mean` is the unconditional mean across all bursts and
     episodes); TraceRow carries the `(n_bursts, n_steps)` Y matrix
@@ -254,8 +254,8 @@ def run_phased_cell(
     `paired_g_per_burst` and the link analyses care about.
     """
     obs = simulate_phased(scms_per_burst, seed=seed)
-    cell_id = CellId(arm_key=arm_key, seed=seed, env_name=env_name)
-    run_id = cell_id.as_run_id()
+    row_id = RowId(arm_key=arm_key, seed=seed, env_name=env_name)
+    run_id = row_id.as_run_id()
     # Representative scalar leaves — first burst's coefficients.
     # When all bursts share coefficients (the constant-phase test),
     # this is just *the* configuration. Phase-flipping tests don't
@@ -295,20 +295,20 @@ def run_phased_cell(
     return run, trace
 
 
-def merge_cell(run: RunRow, trace: TraceRow) -> Mapping[str, object]:
-    """Flat merge of RunRow + TraceRow into the cell-dict shape
+def merge_row(run: RunRow, trace: TraceRow) -> Mapping[str, object]:
+    """Flat merge of RunRow + TraceRow into the row-dict shape
     per-burst analyses see. Mirrors the production polars
     left-join of runs + traces on `id`: typed RunRow fields and
     measurements at top level, plus TraceRow leaves at top level.
 
     The `id` column is shared (joined), so trace's id silently
     wins by overwriting the run's; both are equal by construction
-    in `run_phased_cell`. Other lineage fields (`cycle_id`,
+    in `run_phased_row`. Other lineage fields (`cycle_id`,
     `timestamp`) are likewise duplicated and identical.
     """
     if run.id != trace.id:
         raise ValueError(
-            f'merge_cell: id mismatch — run.id={run.id!r}, '
+            f'merge_row: id mismatch — run.id={run.id!r}, '
             f'trace.id={trace.id!r}',
         )
     out: dict[str, object] = dict(run.as_dict())
@@ -331,15 +331,15 @@ def run_multi_env_paired_phased_arms(
     tuples — each env can have its own per-burst structural
     coefficients while sharing the intervention contract.
 
-    Returns the cell-dict list `paired_g_per_burst` /
+    Returns the row-dict list `paired_g_per_burst` /
     `meta_regression_per_burst` / `mundlak_paired_g_per_burst`
     consume directly. Used to drive panel meta-regression on
     multi-env corpora where the implementation produces both per-burst
     structure (for the panel's burst dimension) AND env-level
     variation (for between-env covariates)."""
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for env_name, (treatments, baselines) in envs.items():
-        cells.extend(run_paired_phased_arms(
+        rows.extend(run_paired_phased_arms(
             treatments_per_burst=treatments,
             baselines_per_burst=baselines,
             seeds=seeds,
@@ -347,7 +347,7 @@ def run_multi_env_paired_phased_arms(
             baseline_arm=baseline_arm,
             env_name=env_name,
         ))
-    return cells
+    return rows
 
 
 def run_paired_phased_arms(
@@ -365,9 +365,9 @@ def run_paired_phased_arms(
     so paired Δ cancels every epsilon — every paired Δ is
     structurally `Delta_beta(b) * beta_zy(b) * X_avg(seed, b)`.
 
-    Returns a flat list of cell-dicts (the `Mapping[str, object]`
+    Returns a flat list of row-dicts (the `Mapping[str, object]`
     shape `paired_g_per_burst.fn(...)` expects), with treatment
-    cells first then baseline cells.
+    rows first then baseline rows.
     """
     if len(treatments_per_burst) != len(baselines_per_burst):
         raise ValueError(
@@ -375,33 +375,33 @@ def run_paired_phased_arms(
             f'treatment={len(treatments_per_burst)}, '
             f'baseline={len(baselines_per_burst)}',
         )
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for s in seeds:
-        run_t, trace_t = run_phased_cell(
+        run_t, trace_t = run_phased_row(
             treatments_per_burst,
             seed=s, arm_key=treatment_arm, env_name=env_name,
         )
-        cells.append(merge_cell(run_t, trace_t))
+        rows.append(merge_row(run_t, trace_t))
     for s in seeds:
-        run_b, trace_b = run_phased_cell(
+        run_b, trace_b = run_phased_row(
             baselines_per_burst,
             seed=s, arm_key=baseline_arm, env_name=env_name,
         )
-        cells.append(merge_cell(run_b, trace_b))
-    return cells
+        rows.append(merge_row(run_b, trace_b))
+    return rows
 
 
 __all__ = [
-    'CellId',
+    'RowId',
     'PER_BURST_X_KEY',
     'PER_BURST_Y_KEY',
     'PER_BURST_Z_KEY',
-    'merge_cell',
+    'merge_row',
     'run_arm',
-    'run_cell',
+    'run_row',
     'run_multi_env_paired_arms',
     'run_multi_env_paired_phased_arms',
     'run_paired_arms',
     'run_paired_phased_arms',
-    'run_phased_cell',
+    'run_phased_row',
 ]

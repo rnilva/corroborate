@@ -20,7 +20,7 @@ epsilon_z, epsilon_y), so per-seed:
         = (beta_xz_t - beta_xz_b) * beta_zy * X(t)
         = Delta_beta * beta_zy * X(t)
 
-The epsilon noise cancels in the paired contrast, so per-cell
+The epsilon noise cancels in the paired contrast, so per-row
 mean-Δ on `y_mean = mean_t Y(t)` has closed form:
 
     E[Delta_y_mean]  = Delta_beta * beta_zy * mu_x

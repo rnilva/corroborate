@@ -1,7 +1,7 @@
 """`pc_discovery` — @analysis wrapper around conservative-PC
 adjacency discovery + Meek/v-structure orientation.
 
-Conservative-PC (Ramsey-Zhang-Spirtes 2006) on a cell-keyed
+Conservative-PC (Ramsey-Zhang-Spirtes 2006) on a row-keyed
 joint distribution: discovers the CPDAG over named variables,
 returns surviving skeleton + directed/undirected/ambiguous
 edges + per-edge separating sets. The framework's CI primitive
@@ -26,9 +26,9 @@ common queries:
 - `separated_by(a, b)` — frozenset of all minimal sepsets
 - `is_directed(a, b)` — oriented edge present
 
-The cells iterable is projected to a polars DataFrame at the
-analysis boundary (`_cells_to_polars_dataframe`); non-finite
-values drop the cell. Stratify_by (e.g. `env_name`) becomes the
+The rows iterable is projected to a polars DataFrame at the
+analysis boundary (`_rows_to_polars_dataframe`); non-finite
+values drop the row. Stratify_by (e.g. `env_name`) becomes the
 JCI context node — NOT included in the graph, but the
 within-stratum CI tests are pooled via Fisher z.
 """
@@ -54,12 +54,12 @@ from corroborate.graph.discovery import (
 class PCDiscoveryResult:
     """Conservative-PC CPDAG + diagnostics over named variables.
 
-    `n_cells` is the row count after non-finite filtering. Bridges
-    should check `n_cells >= min_cells` before consuming the
+    `n_rows` is the row count after non-finite filtering. Bridges
+    should check `n_rows >= min_rows` before consuming the
     graph — small samples produce sparse skeletons that look like
     refutations but are actually underpowered."""
     variables: tuple[str, ...]
-    n_cells: int
+    n_rows: int
     alpha: float
     max_conditioning: int
     stratify_by: str | None
@@ -115,61 +115,61 @@ class PCDiscoveryResult:
         return frozenset({a, b}) in self.oriented.undirected_edges
 
 
-def _cells_to_polars(
-    cells: Iterable[Mapping[str, object]],
+def _rows_to_polars(
+    rows: Iterable[Mapping[str, object]],
     keys: tuple[str, ...],
     *,
     stratify_by: str | None,
     indicators: Mapping[str, tuple[str, str]] = {},
 ) -> pl.DataFrame:
-    """Project cells → polars DataFrame with one column per key
-    plus the stratifier (if any). Cells with any non-finite key
+    """Project rows → polars DataFrame with one column per key
+    plus the stratifier (if any). Rows with any non-finite key
     are dropped — closed-form CI tests need every row to carry
     every variable.
 
     `bool` is coerced to float (True → 1.0); ints stay ints
     until polars columns coerce them. Non-numeric keys (str, None)
-    drop the cell."""
+    drop the row."""
     cols_needed = list(keys)
     if stratify_by is not None and stratify_by not in cols_needed:
         cols_needed.append(stratify_by)
     indicator_outputs = set(indicators.keys())
-    rows: list[dict[str, object]] = []
-    for cell in cells:
-        row: dict[str, object] = {}
+    projected_rows: list[dict[str, object]] = []
+    for source_row in rows:
+        projected: dict[str, object] = {}
         complete = True
         for k in cols_needed:
             # Synthetic indicator column derived from a string-typed
             # source field (e.g. arm_key → arm_ddqn_indicator).
             if k in indicator_outputs:
                 source_key, match_value = indicators[k]
-                src = cell.get(source_key)
+                src = source_row.get(source_key)
                 if src is None:
                     complete = False
                     break
-                row[k] = 1.0 if src == match_value else 0.0
+                projected[k] = 1.0 if src == match_value else 0.0
                 continue
-            v = cell.get(k)
+            v = source_row.get(k)
             if k == stratify_by:
                 if v is None:
                     complete = False
                     break
-                row[k] = v
+                projected[k] = v
                 continue
             if isinstance(v, bool):
-                row[k] = float(v)
+                projected[k] = float(v)
             elif isinstance(v, (int, float)):
                 f = float(v)
                 if math.isnan(f) or math.isinf(f):
                     complete = False
                     break
-                row[k] = f
+                projected[k] = f
             else:
                 complete = False
                 break
         if complete:
-            rows.append(row)
-    if not rows:
+            projected_rows.append(projected)
+    if not projected_rows:
         # Empty df with schema — polars accepts list[dict] but
         # crashes on empty list, so build explicitly.
         schema: dict[str, pl.DataType | type[pl.DataType]] = {
@@ -178,12 +178,12 @@ def _cells_to_polars(
         if stratify_by is not None:
             schema[stratify_by] = pl.Utf8
         return pl.DataFrame(schema=schema)
-    return pl.DataFrame(rows)
+    return pl.DataFrame(projected_rows)
 
 
 @analysis
 def pc_discovery(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     nodes: tuple[str, ...],
     alpha: float = 0.05,
@@ -192,12 +192,12 @@ def pc_discovery(
     stratify_by: str | None = None,
     indicators: Mapping[str, tuple[str, str]] = {},
 ) -> PCDiscoveryResult:
-    """Run conservative-PC on the named `nodes` over the cell
+    """Run conservative-PC on the named `nodes` over the row
     collection.
 
     `nodes`: ordered tuple of column names to include as graph
     variables. Each name must be a scalar key resolvable on each
-    cell (registered measurable name or flat record key). Order
+    row (registered measurable name or flat record key). Order
     doesn't affect surviving adjacency under conservative-PC.
 
     `alpha`: significance level. Edge survives iff every tested
@@ -217,15 +217,15 @@ def pc_discovery(
 
     `indicators`: optional mapping `{output_name: (source_key,
     match_value)}` that synthesises 0/1 indicator columns from
-    string-valued cell fields. Use for arm encoding:
+    string-valued row fields. Use for arm encoding:
     `{'arm_ddqn_indicator': ('arm_key', DDQN_ARM)}` adds a float
-    column to each cell so PC can treat the categorical arm as a
+    column to each row so PC can treat the categorical arm as a
     graph node.
 
     Returns `PCDiscoveryResult` carrying the skeleton, oriented
-    CPDAG, and cell count post-finite-filtering."""
-    rows = to_dicts(cells)
-    df = _cells_to_polars(
+    CPDAG, and row count post-finite-filtering."""
+    rows = to_dicts(df)
+    df = _rows_to_polars(
         rows, nodes, stratify_by=stratify_by, indicators=indicators,
     )
     skeleton = discover_adjacency(
@@ -238,7 +238,7 @@ def pc_discovery(
     oriented = orient_adjacency(skeleton, conservative=conservative)
     return PCDiscoveryResult(
         variables=tuple(nodes),
-        n_cells=df.height,
+        n_rows=df.height,
         alpha=alpha,
         max_conditioning=max_conditioning,
         stratify_by=stratify_by,

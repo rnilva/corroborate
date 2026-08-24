@@ -28,7 +28,7 @@ from collections.abc import Mapping, Sequence
 
 from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.corpus.schema import RunRow
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_paired_arms
@@ -112,7 +112,7 @@ def test_mean_diff_recovers_closed_form_under_paired_intervention() -> None:
     This asserts paired_g's mean_diff path (raw paired-mean
     contrast) preserves the structural product. A regression that
     would silently re-pair on the wrong key, double-count
-    treatment cells, or sum instead of differ would fail the
+    treatment rows, or sum instead of differ would fail the
     bound by orders of magnitude.
     """
     n_pairs = 30
@@ -124,10 +124,10 @@ def test_mean_diff_recovers_closed_form_under_paired_intervention() -> None:
         treatment_arm='treatment',
         baseline_arm='baseline',
     )
-    cells = _as_dicts(rows)
+    rows = _as_dicts(rows)
 
     result = paired_g.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -170,7 +170,7 @@ def test_hedges_g_recovers_closed_form() -> None:
         baseline_arm='baseline',
     )
     result = paired_g.fn(
-        cells_to_dataframe(_as_dicts(rows)),
+        to_dataframe(_as_dicts(rows)),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -192,7 +192,7 @@ def test_null_contrast_returns_indistinguishable_mean_diff() -> None:
     seeds make every per-pair Delta exactly zero. paired_g must
     not invent an effect.
 
-    A pairing-key bug that sneaks unpaired cells through, or a
+    A pairing-key bug that sneaks unpaired rows through, or a
     NaN-handling bug that drops half the pairs, would let noise
     leak into mean_diff and break the assertion.
     """
@@ -205,7 +205,7 @@ def test_null_contrast_returns_indistinguishable_mean_diff() -> None:
         baseline_arm='baseline',
     )
     result = paired_g.fn(
-        cells_to_dataframe(_as_dicts(rows)),
+        to_dataframe(_as_dicts(rows)),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -238,7 +238,7 @@ def test_null_pairing_key_raises_instead_of_bucketing() -> None:
     import pytest
 
     from corroborate.analyses.paired.paired_g import paired_g
-    from corroborate.data import cells_to_dataframe
+    from corroborate.data import to_dataframe
 
     rows: list[dict[str, object]] = [
         {'id': 'a', 'arm_key': 'treatment', 'seed': 0, 'y': 1.0},
@@ -248,7 +248,7 @@ def test_null_pairing_key_raises_instead_of_bucketing() -> None:
     ]
     with pytest.raises(ValueError, match='pairing key'):
         _ = paired_g.fn(
-            cells_to_dataframe(rows),
+            to_dataframe(rows),
             source='y', treatment_arm='treatment',
             baseline_arm='baseline', pair_by=('seed',),
         )

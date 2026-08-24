@@ -5,13 +5,13 @@ The happy-path coverage of `paired_g.fn` and
 analytic implementation:
 
 - `tests/analytic/lg_scm/test_paired_g.py` — closed-form
-  `mean_diff` and Hedges' `g` recovery on real LG-SCM cells.
+  `mean_diff` and Hedges' `g` recovery on real LG-SCM rows.
 - `tests/analytic/lg_scm/test_random_effects_verdict.py` —
   `per_env_paired_g_panel` driven through the corroboration
   pipeline with closed-form pooled g check.
 
 What stays here: edge cases the analytic implementation can't
-naturally reach — empty cell-sets (NaN g/se contract) and
+naturally reach — empty row-sets (NaN g/se contract) and
 `meta_regress_panel`'s underpowered/missing-covariate dropping
 policy on hand-built panels."""
 from __future__ import annotations
@@ -19,16 +19,16 @@ from __future__ import annotations
 from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.stats import meta_regress_panel
 from corroborate.corpus.schema import StratumG
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 # ============ paired_g empty-input contract ============
 
 def test_paired_g_on_empty_subset() -> None:
-    """An empty cell-set yields n_pairs == 0 (NaN g/se). Bridges
+    """An empty row-set yields n_pairs == 0 (NaN g/se). Bridges
     that scope into an empty subset rely on this contract."""
     result = paired_g.fn(
-        cells_to_dataframe([]),
+        to_dataframe([]),
         treatment_arm='ddqn',
         baseline_arm='vanilla_dqn',
         pair_by=('seed',),

@@ -1,5 +1,5 @@
 """Closed-form assertions on `classify_variable_scope` and
-`assert_stratification_admissible` over LG-SCM cells.
+`assert_stratification_admissible` over LG-SCM rows.
 
 The framework's variable-scope primitive distinguishes:
 
@@ -13,7 +13,7 @@ The framework's variable-scope primitive distinguishes:
 
 The auto-memory `framework_variable_scope` calls this out as the
 codification of the within-vs-across-stratum admissibility rule —
-exercised here on a multi-env LG-SCM corpus where each cell-level
+exercised here on a multi-env LG-SCM corpus where each row-level
 column has a known scope under `stratify_by='env_name'`:
 
 - `mu_x` — env-level structural parameter, constant within env →
@@ -21,7 +21,7 @@ column has a known scope under `stratify_by='env_name'`:
 - `seed` — uniform seed range per env (0..29 in every env) →
   `WITHIN_STRATUM`
 - a constant column (`n_steps`) → `DEGENERATE`
-- synthetic `env_index_plus_seed_noise` (env_index + per-cell
+- synthetic `env_index_plus_seed_noise` (env_index + per-row
   uniform noise) → `BOTH`
 
 The closed-form scopes are determined entirely by the data
@@ -77,7 +77,7 @@ def _augment_with_both_column(
     rows: list[RunRow], env_index: int,
 ) -> list[RunRow]:
     """Add a synthetic `env_index_plus_seed_noise` column engineered
-    to have BOTH within-env (uniform per-cell noise) and between-env
+    to have BOTH within-env (uniform per-row noise) and between-env
     (env_index offset) variance, both above the 5% relative
     threshold. Variance match is approximate — uniform[0, 5] within
     env (var ≈ 2.08) vs env_index ∈ {0, 1, 2, 3, 4} (var = 2.0)."""
@@ -110,13 +110,13 @@ def _build_multi_env_corpus() -> list[Mapping[str, object]]:
 
 
 def _column(
-    cells: Sequence[Mapping[str, object]], key: str,
+    rows: Sequence[Mapping[str, object]], key: str,
 ) -> tuple[np.ndarray, list[object]]:
-    """Project (key, env_name) columns from cells. Returns
+    """Project (key, env_name) columns from rows. Returns
     (values_as_float_array, env_strata_list)."""
     values: list[float] = []
     strata: list[object] = []
-    for c in cells:
+    for c in rows:
         v = c.get(key)
         env = c.get('env_name')
         if not isinstance(v, (int, float)) or isinstance(v, bool):
@@ -135,8 +135,8 @@ def test_env_level_parameter_classifies_as_across_stratum() -> None:
     that env. Variance lives entirely between envs — the canonical
     `ACROSS_STRATUM` signature. Stratified analyses on `mu_x` would
     get zero within-stratum variance and silently skip."""
-    cells = _build_multi_env_corpus()
-    arr, strata = _column(cells, 'mu_x')
+    rows = _build_multi_env_corpus()
+    arr, strata = _column(rows, 'mu_x')
     scope = classify_variable_scope(arr, strata)
     assert scope is VariableScope.ACROSS_STRATUM, (
         f'mu_x scope = {scope.value!r}; expected ACROSS_STRATUM '
@@ -149,8 +149,8 @@ def test_uniform_seed_per_env_classifies_as_within_stratum() -> None:
     - within-env variance: full 0..29 range
     - between-env variance: zero (all means equal)
     → WITHIN_STRATUM. The canonical case for stratified primitives."""
-    cells = _build_multi_env_corpus()
-    arr, strata = _column(cells, 'seed')
+    rows = _build_multi_env_corpus()
+    arr, strata = _column(rows, 'seed')
     scope = classify_variable_scope(arr, strata)
     assert scope is VariableScope.WITHIN_STRATUM, (
         f'seed scope = {scope.value!r}; expected WITHIN_STRATUM '
@@ -159,28 +159,28 @@ def test_uniform_seed_per_env_classifies_as_within_stratum() -> None:
 
 
 def test_synthetic_both_column_classifies_as_both() -> None:
-    """`env_index_plus_seed_noise` mixes per-cell uniform noise
+    """`env_index_plus_seed_noise` mixes per-row uniform noise
     (within-env variance ≈ 2.08) and env_index offset (between-env
     variance = 2.0). Both above the 0.05 relative threshold → BOTH.
 
     A regression that mis-decomposed the variance (e.g., conflated
     within-stratum with total variance) would mis-classify this
     column."""
-    cells = _build_multi_env_corpus()
-    arr, strata = _column(cells, _BOTH_COLUMN)
+    rows = _build_multi_env_corpus()
+    arr, strata = _column(rows, _BOTH_COLUMN)
     scope = classify_variable_scope(arr, strata)
     assert scope is VariableScope.BOTH, (
         f'{_BOTH_COLUMN} scope = {scope.value!r}; expected BOTH '
-        f'(within: uniform per-cell noise; between: env_index offset)'
+        f'(within: uniform per-row noise; between: env_index offset)'
     )
 
 
 def test_constant_column_classifies_as_degenerate() -> None:
-    """`n_steps` is set identically on every cell — no variance
+    """`n_steps` is set identically on every row — no variance
     anywhere. The framework must classify this as DEGENERATE
     (and `assert_stratification_admissible` must refuse to use it)."""
-    cells = _build_multi_env_corpus()
-    arr, strata = _column(cells, 'n_steps')
+    rows = _build_multi_env_corpus()
+    arr, strata = _column(rows, 'n_steps')
     scope = classify_variable_scope(arr, strata)
     assert scope is VariableScope.DEGENERATE, (
         f'n_steps scope = {scope.value!r}; expected DEGENERATE '
@@ -194,8 +194,8 @@ def test_admissibility_passes_on_within_stratum_variables() -> None:
     """`seed` has within-stratum variance (uniform 0..29 per env).
     `assert_stratification_admissible` should pass and report the
     scope classification."""
-    cells = _build_multi_env_corpus()
-    df = pl.DataFrame([dict(c) for c in cells])
+    rows = _build_multi_env_corpus()
+    df = pl.DataFrame([dict(c) for c in rows])
     scopes = assert_stratification_admissible(
         df, variables=['seed'], stratify_by='env_name',
     )
@@ -212,8 +212,8 @@ def test_admissibility_raises_on_across_stratum_variable() -> None:
     This is the canonical "framework refuses the silent failure"
     case. Without it, JCI / partial-Spearman / stratified-ρ on
     env-level features silently lose power."""
-    cells = _build_multi_env_corpus()
-    df = pl.DataFrame([dict(c) for c in cells])
+    rows = _build_multi_env_corpus()
+    df = pl.DataFrame([dict(c) for c in rows])
     with pytest.raises(ValueError) as exc_info:
         _ = assert_stratification_admissible(
             df, variables=['mu_x'], stratify_by='env_name',
@@ -233,8 +233,8 @@ def test_admissibility_message_uses_comma_separator_for_multiple() -> None:
     """When multiple variables are blocked, the message joins
     them with `', '`. Pin against `'XX, XX'.join(...)` mutant
     that would emit a mangled separator."""
-    cells = _build_multi_env_corpus()
-    df = pl.DataFrame([dict(c) for c in cells])
+    rows = _build_multi_env_corpus()
+    df = pl.DataFrame([dict(c) for c in rows])
     with pytest.raises(ValueError) as exc_info:
         _ = assert_stratification_admissible(
             df, variables=['mu_x', 'beta_xz'],
@@ -254,8 +254,8 @@ def test_admissibility_raises_on_degenerate_variable() -> None:
     """A constant column (no variance anywhere) is unusable for
     any analysis. The framework must refuse it loudly rather than
     silently producing NaN downstream."""
-    cells = _build_multi_env_corpus()
-    df = pl.DataFrame([dict(c) for c in cells])
+    rows = _build_multi_env_corpus()
+    df = pl.DataFrame([dict(c) for c in rows])
     with pytest.raises(ValueError) as exc_info:
         _ = assert_stratification_admissible(
             df, variables=['n_steps'], stratify_by='env_name',
@@ -272,8 +272,8 @@ def test_admissibility_collects_all_offenders_in_one_error() -> None:
     name all of them in one message rather than raising on the
     first one. This makes upstream debugging tractable on a corpus
     with multiple legacy env-level columns."""
-    cells = _build_multi_env_corpus()
-    df = pl.DataFrame([dict(c) for c in cells])
+    rows = _build_multi_env_corpus()
+    df = pl.DataFrame([dict(c) for c in rows])
     with pytest.raises(ValueError) as exc_info:
         _ = assert_stratification_admissible(
             df,

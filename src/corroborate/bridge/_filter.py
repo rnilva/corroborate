@@ -4,8 +4,8 @@ from __future__ import annotations
 import polars as pl
 
 
-def filter_cells(df: pl.DataFrame, expr: pl.Expr) -> pl.DataFrame:
-    """Filter cells, resolving or null-padding referenced columns.
+def filter_with_measurables(df: pl.DataFrame, expr: pl.Expr) -> pl.DataFrame:
+    """Filter df, resolving or null-padding referenced columns.
 
     Registered measurable columns are computed on demand. Other missing
     columns are filled with null, so their predicate excludes rows rather
@@ -33,4 +33,4 @@ def filter_cells(df: pl.DataFrame, expr: pl.Expr) -> pl.DataFrame:
     return df.filter(expr)
 
 
-__all__ = ['filter_cells']
+__all__ = ['filter_with_measurables']

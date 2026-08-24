@@ -456,7 +456,7 @@ def transitive_measurables(name: str) -> frozenset[str]:
     visited set. Used by cache builders to materialise every
     measurable a bridge file consumes — declared name + every
     transitive measurable dep — so analyses can read pre-computed
-    scalars rather than recomputing per cell.
+    scalars rather than recomputing per row.
 
     Loud KeyError if `name` isn't registered."""
     visited: set[str] = set()
@@ -546,7 +546,7 @@ def _measurable_extra_param_names(fn: Callable[..., object]) -> tuple[str, ...]:
     Either way: the framework will raise `TypeError: missing
     required argument` at call time, but the author wants to know
     at registration time — not when the bridge eval finally
-    triggers a per-cell call months after the typo landed."""
+    triggers a per-row call months after the typo landed."""
     try:
         sig = inspect.signature(fn)
     except (ValueError, TypeError):
@@ -586,7 +586,7 @@ def audit_measurable_registry(
     3. **`reads` declares cols that aren't on any actual record
        path**: NOT flagged here (would require a corpus to test
        against). The validator catches structural drift, not
-       cell-level mismatch.
+       row-level mismatch.
 
     `strict=True` raises `ValueError` instead of returning
     warnings — useful from a CLI startup gate.
@@ -636,7 +636,7 @@ def _resolve_one(
     **P1 fix — record-as-precomputed-cache**: when a measurable's
     value is already present in `record` (e.g. a list column
     previously computed and persisted to `measurements.parquet`,
-    then joined onto the cell DataFrame), use that value rather
+    then joined onto the row DataFrame), use that value rather
     than recomputing from scratch. This is what closes the lie at
     `_missing_for_restore`: a measurable whose transitive reads
     are trace cols (cloud-evicted) but whose own value is already
@@ -651,8 +651,8 @@ def _resolve_one(
     # Record-as-precomputed-cache: prefer the persisted value when
     # present + non-missing. The `is None` short-circuit handles
     # the None-stamped case from `compute_missing_columns`'s
-    # cell-injection cascade — those entries are sentinels that
-    # the framework couldn't compute on this cell, NOT a real
+    # row-injection cascade — those entries are sentinels that
+    # the framework couldn't compute on this row, NOT a real
     # cached value.
     if name in record:
         val = record[name]
@@ -729,7 +729,7 @@ def _topo_sort_pending(
     of dep authoring: param-injection (`def fn(record, dep: T)`)
     AND `record.get('dep')`. The cascade fix targets the latter;
     param-injected deps additionally cascade via `_resolve_one`
-    in the per-cell evaluator, independent of this ordering.
+    in the per-row evaluator, independent of this ordering.
 
     Tie-breaking is alphabetical (Kahn's algorithm sorts the
     leaf-set at each step). When multiple unrelated leaves sit
@@ -787,39 +787,39 @@ def compute_missing_columns(
     names: Iterable[str],
 ) -> pl.DataFrame:
     """For each name in `names` that resolves in the @measurable
-    registry, compute the measurable per-cell. Two cases:
+    registry, compute the measurable per-row. Two cases:
 
-    - **Column missing** from `df`: compute for every cell, add as
+    - **Column missing** from `df`: compute for every row, add as
       a new column.
-    - **Column present but partially null** (some cells null,
-      others filled): compute only for the null cells, preserve
+    - **Column present but partially null** (some rows null,
+      others filled): compute only for the null rows, preserve
       existing values, replace the column. This handles the
       diagonal_relaxed-concat-of-corpora case where some
       corpora's runs.parquet pre-computes a measurable and others
-      don't — without per-cell fill, the null subset stays null
+      don't — without per-row fill, the null subset stays null
       because the column-level "have it / don't" check skips it.
 
     Names that don't resolve (or aren't registered) are silently
     skipped — callers that need null-padding for unresolvable
     names handle that themselves.
 
-    Single source of truth for the "raw cells → cached scalars"
+    Single source of truth for the "raw rows → cached scalars"
     transform: the runner uses this to populate the per-module
     cache; `claim_bridge.evaluate()` uses the same path when a
     bridge's `scope` references a measurable column the input
     DataFrame doesn't carry yet (raw runs.parquet, no cache).
 
-    Per-cell evaluator caches transitive measurables across
-    same-cell calls (one pass populates all `names` for one cell
+    Per-row evaluator caches transitive measurables across
+    same-row calls (one pass populates all `names` for one row
     before moving on), so dep-shared measurables compute once per
-    cell."""
+    row."""
     if df.height == 0:
         return df
     have = set(df.columns)
     # `pending` items: (name, measurable, existing_values).
     # `existing_values` is None when the column is fully missing
-    # (compute every cell); a list[object | None] when partially
-    # null (compute only for cells where the entry is None).
+    # (compute every row); a list[object | None] when partially
+    # null (compute only for rows where the entry is None).
     pending: list[tuple[
         str,
         Measurable[Mapping[str, object], object],
@@ -830,7 +830,7 @@ def compute_missing_columns(
     # per reference in the expression, so a scope that mentions
     # `q_divergence_score` six times yields six duplicates here.
     # Without dedup the inner loop appends the same value six
-    # times per cell, blowing the column up to 6 × df.height and
+    # times per row, blowing the column up to 6 × df.height and
     # tripping a polars ShapeError at `with_columns` time.
     for name in names:
         if name in seen:
@@ -842,12 +842,12 @@ def compute_missing_columns(
             seen.add(name)
             pending.append((name, m, None))
             continue
-        # Column already present — recompute cells with missing
+        # Column already present — recompute rows with missing
         # values (null OR NaN). NaN ≠ null in polars but both
-        # signal "no real value for this cell"; an all-NaN column
+        # signal "no real value for this row"; an all-NaN column
         # (e.g. trace-dependent measurable was added to defaults
         # AFTER a sweep ran with no traces — sweep persistence
-        # writes NaN for cells that couldn't be computed) should
+        # writes NaN for rows that couldn't be computed) should
         # be re-evaluated when the data is now available, not
         # kept as fossilised NaN. Float dtypes get the
         # null|NaN check; non-float dtypes (Int / Bool / String)
@@ -860,11 +860,11 @@ def compute_missing_columns(
         if not missing_mask.any():
             continue
         seen.add(name)
-        # `existing_values` per-cell entry is None where missing
+        # `existing_values` per-row entry is None where missing
         # (so the eval loop recomputes), original value where
         # present. NaN counts as "missing" for the recompute
         # decision; we set those entries to None so the same
-        # branch fires per-cell.
+        # branch fires per-row.
         existing_vals: list[object] = [
             None if missing else v
             for v, missing in zip(col.to_list(), missing_mask.to_list())
@@ -875,7 +875,7 @@ def compute_missing_columns(
         # compute → return the input frame WITHOUT materialising
         # `to_dicts()`. The repeated-cache-load case lands here:
         # a cache that already has every required column should
-        # not pay the cost of converting hundreds-of-cells × tens-
+        # not pay the cost of converting hundreds-of-rows × tens-
         # of-columns into Python dicts just to discover there's
         # nothing to do.
         return df
@@ -893,45 +893,45 @@ def compute_missing_columns(
     # cascade-compute in the same pass).
     #
     # Param-injected deps already cascade via `_resolve_one` per
-    # cell; this fixes the `record.get(...)` pattern too. Order
+    # row; this fixes the `record.get(...)` pattern too. Order
     # uses `m.reads` (the authored direct-reads tuple); names not
     # in pending are ignored (they're trace / runs cols already
-    # on the cell dict).
+    # on the row dict).
     pending = _topo_sort_pending(pending)
-    cells = cast(list[dict[str, object]], df.to_dicts())
+    rows = cast(list[dict[str, object]], df.to_dicts())
     new_cols: dict[str, list[object]] = {n: [] for n, _, _ in pending}
-    # Track measurables that ALWAYS failed across all cells — those
+    # Track measurables that ALWAYS failed across all rows — those
     # are authoring bugs, not "missing inputs," and should surface
-    # as a stderr warning so the implementation author sees them. Per-cell
-    # failures (legitimately missing inputs on subset of cells)
+    # as a stderr warning so the implementation author sees them. Per-row
+    # failures (legitimately missing inputs on subset of rows)
     # remain silent NaN-mapped via the existing path.
     # Counts denominator is per-measurable (full set for added cols,
-    # null-cell subset for partial cols).
+    # null-row subset for partial cols).
     fail_counts: dict[str, int] = {n: 0 for n, _, _ in pending}
     eval_counts: dict[str, int] = {n: 0 for n, _, _ in pending}
     last_exception: dict[str, BaseException] = {}
-    for i, cell in enumerate(cells):
-        per_cell_cache: dict[str, object] = {}
+    for i, row in enumerate(rows):
+        per_row_cache: dict[str, object] = {}
         for name, m, existing in pending:
             if existing is not None and existing[i] is not None:
                 # Already filled — preserve.
                 new_cols[name].append(existing[i])
                 # Cascade: downstream pending measurables that read
-                # this via `record.get(...)` need it on the cell dict.
-                cell[name] = existing[i]
+                # this via `record.get(...)` need it on the row dict.
+                row[name] = existing[i]
                 continue
             eval_counts[name] += 1
             try:
                 v = evaluate_with_measurables(
-                    m.fn, cell, cache=per_cell_cache,
+                    m.fn, row, cache=per_row_cache,
                 )
             except (KeyError, TypeError, ValueError, ZeroDivisionError) as e:
-                # Expected per-cell failure modes:
-                # - KeyError: required record key absent on this cell
+                # Expected per-row failure modes:
+                # - KeyError: required record key absent on this row
                 # - TypeError: wrong shape / type passed to numpy op
                 # - ValueError: shape mismatch / numpy-derived
                 # - ZeroDivisionError: degenerate-input arithmetic
-                # Map to None for this cell; downstream NaN-skips.
+                # Map to None for this row; downstream NaN-skips.
                 #
                 # Anything else (AttributeError, RuntimeError,
                 # NameError, etc.) propagates with full traceback
@@ -944,17 +944,17 @@ def compute_missing_columns(
                 fail_counts[name] += 1
                 last_exception[name] = e
             new_cols[name].append(v)
-            # Cascade: inject just-computed value into the cell so
+            # Cascade: inject just-computed value into the row so
             # downstream pending measurables that read it via
             # `record.get(name)` see the new value rather than the
             # pre-pass null/NaN. Param-injected deps already cascade
-            # via the per-cell evaluator cache.
-            cell[name] = v
-    # If a measurable failed for EVERY cell, that's an authoring bug
+            # via the per-row evaluator cache.
+            row[name] = v
+    # If a measurable failed for EVERY row, that's an authoring bug
     # (typo in measurable.fn body, broken signature, etc.) — not
     # "missing inputs on a subset." Emit a stderr warning so it
     # doesn't disappear into a silent all-null column.
-    if cells:
+    if rows:
         import sys as _sys
         for name, count in fail_counts.items():
             denom = eval_counts[name]
@@ -962,7 +962,7 @@ def compute_missing_columns(
                 exc = last_exception.get(name, RuntimeError('unknown'))
                 _sys.stderr.write(
                     f'WARNING: measurable {name!r} raised '
-                    f'{type(exc).__name__} on ALL {count} cells '
+                    f'{type(exc).__name__} on ALL {count} rows '
                     f'({exc}); column will be all-null. Authoring '
                     f'bug or schema mismatch?\n',
                 )
@@ -984,7 +984,7 @@ def _to_polars_series(name: str, vals: list[object]) -> pl.Series:
     consumers null-check the per-row length anyway.
 
     Multi-dimensional ndarrays (e.g. a measurable returning shape
-    `(n_bursts, n_episodes)` per cell) are converted to nested
+    `(n_bursts, n_episodes)` per row) are converted to nested
     Python lists before construction. Polars supports
     `List(List(...))` natively but its inference path can't go
     from `[ndarray2D, ndarray2D, ...]` directly — it falls back to

@@ -3,7 +3,7 @@
 Every invocation of `runner.run()` (with `write_report=True`)
 serializes a structured report to disk capturing: per-bridge verdict
 + every typed analysis-result dataclass (fields AND `@property`
-accessors) + admission-gate outcomes + cell sample sizes + execution
+accessors) + admission-gate outcomes + row sample sizes + execution
 metadata (git commit, timestamp, and the existing measurable-signature
 manifest).
 
@@ -18,7 +18,7 @@ The report is the load-bearing audit artifact:
 
 It deliberately carries no evidence digest or chronology proof. The
 git revision and `extent_hash` are execution metadata: `extent_hash`
-groups a de-duplicated set of string cell IDs and does not identify row
+groups a de-duplicated set of string row IDs and does not identify row
 contents, multiplicity, provenance, or an external data snapshot.
 
 The cache parquet (`experiments/data/cache/<short>.parquet`) remains
@@ -82,8 +82,8 @@ class BridgeReportEntry:
     predicted_direction: str | None
     scope_repr: str | None
     params: Mapping[str, object]
-    n_cells_pre_scope: int
-    n_cells_in_scope: int
+    n_rows_pre_scope: int
+    n_rows_in_scope: int
     verdict: str
     analysis_results: Mapping[str, Mapping[str, object]]
     warnings: tuple[Mapping[str, object], ...]
@@ -104,7 +104,7 @@ class RunReport:
     hypothesis_module: str
     timestamp_utc: str
     git_commit: str | None
-    n_cells_total: int
+    n_rows_total: int
     cache_path: str | None
     measurable_signatures: Mapping[str, str]
     bridges: tuple[BridgeReportEntry, ...]
@@ -352,9 +352,9 @@ def _coerce_bridge_params(
 def _build_bridge_entry(
     bridge: Bridge,
     evaluation: BridgeEvaluation,
-    n_cells_total: int,
+    n_rows_total: int,
 ) -> BridgeReportEntry:
-    """One bridge → its report entry. Reads `n_cells_in_scope`
+    """One bridge → its report entry. Reads `n_rows_in_scope`
     directly from `evaluation` (populated by `evaluate()`); does
     NOT recompute the scope filter."""
     scope_repr = str(bridge.scope) if bridge.scope is not None else None
@@ -404,8 +404,8 @@ def _build_bridge_entry(
         predicted_direction=bridge.predicted_direction,
         scope_repr=scope_repr,
         params=MappingProxyType(_coerce_bridge_params(bridge.name, bridge.params)),
-        n_cells_pre_scope=n_cells_total,
-        n_cells_in_scope=evaluation.n_cells_in_scope,
+        n_rows_pre_scope=n_rows_total,
+        n_rows_in_scope=evaluation.n_rows_in_scope,
         verdict=evaluation.verdict.value,
         analysis_results=MappingProxyType(analysis_results_dict),
         warnings=tuple(warnings_list),
@@ -454,7 +454,7 @@ def build_report(
     bridges: Sequence[Bridge],
     results: Mapping[str, BridgeEvaluation],
     errors: Mapping[str, BaseException],
-    n_cells_total: int,
+    n_rows_total: int,
     cache_path: Path | None,
     measurable_signatures: Mapping[str, str],
     repo_root: Path | None = None,
@@ -468,9 +468,9 @@ def build_report(
     both dicts are silently skipped (shouldn't happen in practice —
     `runner.run()` populates one or the other for every bridge).
 
-    `n_cells_total` is supplied separately rather than passed as a
+    `n_rows_total` is supplied separately rather than passed as a
     DataFrame because the report doesn't need the data — only the
-    height for diagnostics. `BridgeEvaluation.n_cells_in_scope`
+    height for diagnostics. `BridgeEvaluation.n_rows_in_scope`
     already carries the per-bridge size populated by `evaluate()`.
 
     `repo_root` defaults to walking up from the current file's
@@ -482,7 +482,7 @@ def build_report(
     errored_entries: list[ErroredBridgeEntry] = []
     for b in bridges:
         if b.name in results:
-            bridge_entries.append(_build_bridge_entry(b, results[b.name], n_cells_total))
+            bridge_entries.append(_build_bridge_entry(b, results[b.name], n_rows_total))
         elif b.name in errors:
             errored_entries.append(_build_errored_entry(b.name, errors[b.name]))
     cache_path_str: str | None
@@ -497,7 +497,7 @@ def build_report(
         hypothesis_module=hypothesis_module_name,
         timestamp_utc=datetime.now(tz=timezone.utc).isoformat(timespec='seconds'),
         git_commit=_git_short_sha(repo_root),
-        n_cells_total=n_cells_total,
+        n_rows_total=n_rows_total,
         cache_path=cache_path_str,
         measurable_signatures=MappingProxyType(dict(measurable_signatures)),
         bridges=tuple(bridge_entries),

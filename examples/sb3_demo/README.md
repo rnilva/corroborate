@@ -76,7 +76,7 @@ registry: config/buffer_size, config/env_id, config/exploration_fraction,
 
 ## 3. Explore
 
-`panel.cells` is an ordinary polars DataFrame; the record arrays
+`panel.df` is an ordinary polars DataFrame; the record arrays
 explode into an ordinary long frame, so the evaluation trajectory
 — not just any single point — is explorable directly:
 
@@ -159,7 +159,7 @@ evaluation = evaluate(higher_gamma_improves_return, panel)
 ```
 
 (No materialisation step: the analysis resolves the registered
-measurable per cell through the registry.)
+measurable per row through the registry.)
 
 Exact matches to 0.80 and 0.99 receive the stable symbolic arm
 identities `baseline` and `treatment`; neither membership nor
@@ -169,7 +169,7 @@ but sit outside this declared contrast, available to other
 claims over the same Panel.
 
 The admission gates then check the contrast over exactly the
-cells this claim admits. The registry is authoritative about what
+rows this claim admits. The registry is authoritative about what
 was configured: the declared source must be a registered
 configuration column (a measurement cannot be the assigned
 parameter of an intervention — BLOCK), a registered leaf that

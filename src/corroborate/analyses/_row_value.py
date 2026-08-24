@@ -1,4 +1,4 @@
-"""Shared cell-value helpers — resolve a scalar / per-burst
+"""Shared row-value helpers — resolve a scalar / per-burst
 array from a corpus row, and build a hashable key for paired /
 panel grouping.
 
@@ -21,7 +21,7 @@ from corroborate.measurables.measurable import Measurable
 
 
 def resolve_value(record: Mapping[str, object], source: str) -> float:
-    """Resolve `source` from a cell record. Tries the persisted
+    """Resolve `source` from a row record. Tries the persisted
     field-path read first; falls back to the measurable registry.
 
     Record-first matches the "persisted columns are authoritative"
@@ -39,7 +39,7 @@ def resolve_value(record: Mapping[str, object], source: str) -> float:
     (`concat_panels`, `from_corpora`) null-pads a materialised
     column onto batches whose RAW inputs are present, and
     reading the pad as a cached miss would silently drop exactly
-    the cells the growing record just gained. A cell whose
+    the rows the growing record just gained. A row whose
     inputs are genuinely absent recomputes to the same NaN it
     would have read — one registry call slower, never wronger.
     A present NON-numeric, non-null value (schema corruption)
@@ -84,25 +84,25 @@ def key_tuple(
     record: Mapping[str, object], pair_by: tuple[str, ...],
 ) -> tuple[object, ...]:
     """Build a hashable key from `record` for the columns named
-    in `pair_by`. Used by paired-analyses to group cells into
+    in `pair_by`. Used by paired-analyses to group rows into
     matched (treatment, baseline) sets and by stratum analyses
-    to group cells into per-stratum buckets."""
+    to group rows into per-stratum buckets."""
     return tuple(record[k] for k in pair_by)
 
 
 def evaluate_per_burst_source(
     source: Measurable[Mapping[str, object], npt.NDArray[np.floating]],
-    cell: Mapping[str, object],
+    row: Mapping[str, object],
 ) -> np.ndarray:
     """Per-burst value extraction with cache-first dispatch.
 
-    1. **Cache hit**: if `source.name` is a column on `cell` (the
+    1. **Cache hit**: if `source.name` is a column on `row` (the
        per-module cache materialised the composed Measurable as a
        list column at build time), read the pre-computed array.
-       Cells flagged None for that column (universal-merge corpora
+       Rows flagged None for that column (universal-merge corpora
        lacking traces for some arms) are skipped to an empty array.
-    2. **Fallback**: evaluate `source(cell)` from the raw record.
-       Used when no cache (synthetic test cells, ad-hoc analyses,
+    2. **Fallback**: evaluate `source(row)` from the raw record.
+       Used when no cache (synthetic test rows, ad-hoc analyses,
        on-the-fly bridge invocation against runs.parquet).
 
     The cache-first path is what lets the runner DROP the raw
@@ -111,8 +111,8 @@ def evaluate_per_burst_source(
     consumer needs the 2D `(n_bursts, n_episodes)` source again.
     Returns shape `(n_bursts,)` on success or `()` on missing /
     malformed input so downstream filtering naturally excludes
-    the cell."""
-    cached = cell.get(source.name)
+    the row."""
+    cached = row.get(source.name)
     if cached is not None:
         try:
             arr = np.asarray(cached, dtype=np.float64)
@@ -122,7 +122,7 @@ def evaluate_per_burst_source(
             if arr.ndim == 1:
                 return arr
     try:
-        arr = np.asarray(source(cell), dtype=np.float64)
+        arr = np.asarray(source(row), dtype=np.float64)
     except (KeyError, TypeError, ValueError):
         return np.array([], dtype=np.float64)
     if arr.ndim != 1:

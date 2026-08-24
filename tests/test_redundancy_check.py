@@ -180,14 +180,14 @@ def test_r_squared_returns_finite_at_n_equals_two() -> None:
 
 
 def test_r_squared_drops_nan_pairs_via_and_filter() -> None:
-    """Cells with NaN in either x or y are filtered. Pin
+    """Rows with NaN in either x or y are filtered. Pin
     `not isnan(xi) and not isnan(yi)` against `or` mutant
-    (which would keep cells with one NaN, then propagate NaN
+    (which would keep rows with one NaN, then propagate NaN
     through the regression).
 
     Construct: 3 valid (perfect linear) + 2 NaN-bearing pairs.
     Original keeps 3 valid → R²=1. Mutant keeps NaN-bearing
-    cells → NaN propagates."""
+    rows → NaN propagates."""
     x = [1.0, 2.0, 3.0, float('nan'), 5.0]
     y = [2.0, 4.0, 6.0, 8.0, float('nan')]
     r2 = _r_squared(x, y)
@@ -268,13 +268,13 @@ def test_hp_tautological_when_partially_correlated() -> None:
 # ============ audit_mediator_panel ============
 
 def _row(
-    cell_id: str, *, capacity: int, batch_size: int,
+    row_id: str, *, capacity: int, batch_size: int,
     mediator_outcome_taut: float,
     mediator_hp_taut: float,
     mediator_clean: float,
 ) -> RunRow:
     return RunRow(
-        id=cell_id, parent_id=None, cycle_id=None,
+        id=row_id, parent_id=None, cycle_id=None,
         timestamp='ts', verdict=Verdict.HELD, arm_key='baseline',
         measurements={
             'replay.capacity': capacity,
@@ -330,7 +330,7 @@ def test_audit_panel_flags_hp_tautological() -> None:
         del record
         return 1.0
 
-    # Per-cell mediator values: deterministic_in_hp = capacity / 2;
+    # Per-row mediator values: deterministic_in_hp = capacity / 2;
     # independent = pseudorandom independent of capacity.
     rng_vals = [3.2, 7.1, 4.5, 1.9, 8.3, 5.4, 2.7, 6.1]
     runs = []
@@ -428,7 +428,7 @@ def test_audit_panel_skips_bool_hp_values() -> None:
     `and`, bool would pass through and be converted to 1.0/0.0
     instead of being rejected.
 
-    Cells with bool HP value should produce an empty mediator_vals
+    Rows with bool HP value should produce an empty mediator_vals
     list → flagged_hp empty for that axis."""
     @measurable(reads=('online_argmax',))
     def m(record: Mapping[str, object]) -> float:
@@ -487,7 +487,7 @@ def test_audit_panel_default_path_resolves_to_mediator_dot_name() -> None:
             # we have to add it manually).
             mediator_clean=cap / 2,
         ))
-    # Augment cell measurements to ALSO have 'mediator.clean'
+    # Augment row measurements to ALSO have 'mediator.clean'
     # matching the default path lookup.
     augmented: list[RunRow] = []
     from dataclasses import replace
@@ -598,11 +598,11 @@ def test_audit_panel_returns_typed_dataclass() -> None:
 # ============ Partial-correlation tautology check ============
 
 def _row_with_outcome(
-    cell_id: str, *, capacity: int, batch_size: int,
+    row_id: str, *, capacity: int, batch_size: int,
     mediator_value: float, outcome_value: float,
 ) -> RunRow:
     return RunRow(
-        id=cell_id, parent_id=None, cycle_id=None,
+        id=row_id, parent_id=None, cycle_id=None,
         timestamp='ts', verdict=Verdict.HELD, arm_key='baseline',
         measurements={
             'replay.capacity': capacity,
@@ -615,7 +615,7 @@ def _row_with_outcome(
 
 def test_audit_stratified_rho_flags_hp_shadow_mediator() -> None:
     """A mediator HP-conditioned but uncorrelated with outcome
-    *within each stratum* gets flagged. Construction: 8 cells per
+    *within each stratum* gets flagged. Construction: 8 rows per
     HP-stratum, 8 strata. Mediator = stratum_offset + independent
     noise. Outcome = different stratum_offset + INDEPENDENT noise.
     Within each stratum, mediator and outcome are independent →
@@ -635,7 +635,7 @@ def test_audit_stratified_rho_flags_hp_shadow_mediator() -> None:
 
     runs: list[RunRow] = []
     cap_values = [5000, 10000, 15000, 20000, 30000, 40000, 50000, 70000]
-    for i, cap in enumerate(cap_values * 8):  # 64 cells, 8 strata
+    for i, cap in enumerate(cap_values * 8):  # 64 rows, 8 strata
         runs.append(_row_with_outcome(
             f'c{i}', capacity=cap, batch_size=32,
             mediator_value=cap * 0.001 + rng.gauss(0.0, 1.0),
@@ -666,7 +666,7 @@ def test_audit_stratified_rho_does_not_flag_residual_signal() -> None:
 
     runs: list[RunRow] = []
     cap_values = [5000, 10000, 15000, 20000, 30000, 40000, 50000, 70000]
-    for i, cap in enumerate(cap_values * 8):  # 64 cells, 8 strata
+    for i, cap in enumerate(cap_values * 8):  # 64 rows, 8 strata
         # mediator varies independently of capacity; outcome depends
         # on mediator beyond HP.
         mv = rng.gauss(0.0, 1.0)

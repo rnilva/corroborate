@@ -3,7 +3,7 @@
 Builds ONE per-stratum panel carrying all the per-stratum
 statistics that downstream stratified analyses need:
 
-- per-stratum, per-arm cell counts (`n_treatment`, `n_baseline`)
+- per-stratum, per-arm row counts (`n_treatment`, `n_baseline`)
 - per-stratum, per-arm means + stds for each named measurable
 - per-stratum Δ (treatment mean − baseline mean) per measurable
 - per-stratum within-stratum Spearman r for each measurable pair
@@ -22,7 +22,7 @@ Bridges wanting DerSimonian-Laird pooling on the panel should
 fixture `stratified_arm_diff_pooled` directly, which already
 embeds that path.)
 
-**Why this exists.** The previous design scattered cell→panel
+**Why this exists.** The previous design scattered row→panel
 build logic across 8+ analyses (each rolling its own
 stratify+aggregate+pool), made per-stratum data asymmetrically
 exposed (some primitives expose `per_stratum`, others only pool),
@@ -45,7 +45,7 @@ envs, or DDQN. Implementation authors pass `stratify_by` +
 two arms (treatment, baseline) and computes per-arm means/stds
 + within-stratum across-arm Spearman. Analyses on a single
 cohort without an arm distinction (e.g. `stratified_spearman` on
-all cells regardless of arm) do NOT migrate to this panel —
+all rows regardless of arm) do NOT migrate to this panel —
 they're conceptually arm-agnostic and live in
 `graph.discovery.stratified_spearman_rho` separately. The
 unification targets the cross-arm family
@@ -63,7 +63,7 @@ import numpy as np
 import polars as pl
 from scipy.stats import spearmanr
 
-from corroborate.analyses._cell_value import resolve_value
+from corroborate.analyses._row_value import resolve_value
 from corroborate.bridge.analysis import analysis
 
 
@@ -106,7 +106,7 @@ class StratumPanel:
     aggregator: StratumAggregator
 
     # Per-stratum, per-arm CELL counts (regardless of which
-    # measurables have finite values on those cells).
+    # measurables have finite values on those rows).
     n_treatment: tuple[int, ...]
     n_baseline: tuple[int, ...]
 
@@ -116,17 +116,17 @@ class StratumPanel:
     stds_baseline: Mapping[str, tuple[float, ...]]
 
     # Per-stratum, per-arm, per-measurable FINITE-VALUE counts.
-    # `n_treatment_per_measurable[m][i]` is the number of cells in
+    # `n_treatment_per_measurable[m][i]` is the number of rows in
     # (stratum i, treatment arm) where measurable `m` has a finite
     # value. This is what the existing `_cohen_d_indep_samples`
     # used for n in its SE formula — preserving verdicts across
-    # migrations requires using these counts (not the total cell
+    # migrations requires using these counts (not the total row
     # counts) in downstream Cohen's d / SE computations.
     n_treatment_per_measurable: Mapping[str, tuple[int, ...]]
     n_baseline_per_measurable: Mapping[str, tuple[int, ...]]
 
     # Per-stratum within-stratum Spearman r for each measurable
-    # pair. Pooled over both arms (rank-transform of all cells in
+    # pair. Pooled over both arms (rank-transform of all rows in
     # the stratum, regardless of arm — i.e., the marginal r).
     spearman_within: Mapping[tuple[str, str], tuple[float, ...]]
 
@@ -154,7 +154,7 @@ class StratumPanel:
         `stratified_arm_diff_pooled` — migration-compatible.
 
         n_t / n_b are the FINITE-VALUE counts for the measurable
-        (not total cell counts) — matching the existing semantics.
+        (not total row counts) — matching the existing semantics.
         NaN where pooled SD is zero or finite-n < 2 on either arm."""
         if measurable not in self.measurables:
             raise KeyError(
@@ -225,7 +225,7 @@ def _stratum_std(values: list[float]) -> float:
 
 @analysis
 def stratum_panel(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     measurables: tuple[str, ...],
     treatment_arm: str,
@@ -237,31 +237,31 @@ def stratum_panel(
 ) -> StratumPanel:
     """Build the unified per-stratum panel.
 
-    Input is a plain `pl.DataFrame` (e.g. `Panel.cells`, the
+    Input is a plain `pl.DataFrame` (e.g. `Panel.df`, the
     runner's scope-filtered frame, or any caller-built
     DataFrame); a caller holding rows converts once at its own
-    boundary via `corroborate.data.cells_to_dataframe`.
+    boundary via `corroborate.data.to_dataframe`.
 
     Algorithm:
-    1. Bucket cells by (arm, stratum_key).
+    1. Bucket rows by (arm, stratum_key).
     2. Find strata where BOTH arms have ≥ `min_seeds_per_arm`.
     3. For each valid stratum: compute per-arm means, stds, n for
        each `measurable`.
     4. For each measurable pair: compute within-stratum Spearman r
-       on the union of both arms' cells (marginal r).
+       on the union of both arms' rows (marginal r).
 
     `measurables` resolves via `resolve_value` — measurable
-    registry first, then cell field-path read.
+    registry first, then row field-path read.
 
     `aggregator='mean'` (default) gives `mean(X|T) - mean(X|B)` Δ.
     `aggregator='median'` gives median Δ — sibling for outlier-
     robust analyses; affects `means_*` slots, std slots stay as
     arithmetic sample SD."""
-    # A plain DataFrame in; the algorithm is a per-cell loop.
+    # A plain DataFrame in; the algorithm is a per-row loop.
     per_arm_stratum: dict[
         tuple[str, tuple[object, ...]], list[Mapping[str, object]],
     ] = defaultdict(list)
-    for c in cells.iter_rows(named=True):
+    for c in df.iter_rows(named=True):
         arm = c.get(arm_field)
         if not isinstance(arm, str):
             continue
@@ -276,9 +276,9 @@ def stratum_panel(
 
     valid_strata: list[tuple[object, ...]] = []
     for sk in sorted(all_strata, key=lambda s: tuple(repr(v) for v in s)):
-        t_cells = per_arm_stratum.get((treatment_arm, sk), [])
-        b_cells = per_arm_stratum.get((baseline_arm, sk), [])
-        if len(t_cells) >= min_seeds_per_arm and len(b_cells) >= min_seeds_per_arm:
+        t_rows = per_arm_stratum.get((treatment_arm, sk), [])
+        b_rows = per_arm_stratum.get((baseline_arm, sk), [])
+        if len(t_rows) >= min_seeds_per_arm and len(b_rows) >= min_seeds_per_arm:
             valid_strata.append(sk)
 
     strata = tuple(valid_strata)
@@ -307,26 +307,26 @@ def stratum_panel(
     n_b_list: list[int] = []
 
     # Also need raw within-stratum value lists for Spearman pair r
-    # (rank-transform on union of cells from both arms).
+    # (rank-transform on union of rows from both arms).
     per_stratum_raw: list[dict[str, list[float]]] = []
 
     for sk in strata:
-        t_cells = per_arm_stratum.get((treatment_arm, sk), [])
-        b_cells = per_arm_stratum.get((baseline_arm, sk), [])
-        n_t_list.append(len(t_cells))
-        n_b_list.append(len(b_cells))
-        all_cells = t_cells + b_cells
+        t_rows = per_arm_stratum.get((treatment_arm, sk), [])
+        b_rows = per_arm_stratum.get((baseline_arm, sk), [])
+        n_t_list.append(len(t_rows))
+        n_b_list.append(len(b_rows))
+        all_rows = t_rows + b_rows
         stratum_raw: dict[str, list[float]] = {}
         for m in measurables:
-            t_vals = _values(t_cells, m)
-            b_vals = _values(b_cells, m)
+            t_vals = _values(t_rows, m)
+            b_vals = _values(b_rows, m)
             n_t_per_m[m].append(len(t_vals))
             n_b_per_m[m].append(len(b_vals))
             means_t[m].append(_stratum_mean(t_vals, aggregator))
             means_b[m].append(_stratum_mean(b_vals, aggregator))
             stds_t[m].append(_stratum_std(t_vals))
             stds_b[m].append(_stratum_std(b_vals))
-            stratum_raw[m] = _values(all_cells, m)
+            stratum_raw[m] = _values(all_rows, m)
         per_stratum_raw.append(stratum_raw)
 
     # Compute per-stratum within-stratum Spearman for each pair.

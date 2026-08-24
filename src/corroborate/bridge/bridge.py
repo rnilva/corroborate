@@ -45,7 +45,7 @@ from typing import cast
 import polars as pl
 
 from corroborate._internals.introspection import get_param_default
-from corroborate.bridge._filter import filter_cells
+from corroborate.bridge._filter import filter_with_measurables
 from corroborate.bridge.deferred_scope import DeferredScope
 from corroborate.bridge.admission import (
     AUTO_GATES,
@@ -62,7 +62,7 @@ from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.core.claim import Claim
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.core.intervention import ArmRole, DoEffect
-from corroborate.data.kernel import cells_to_dataframe
+from corroborate.data.kernel import to_dataframe
 from corroborate.data.panel import Panel
 from corroborate.measurables import Measurable, register
 from corroborate.graph._extent import stable_extent_hash
@@ -123,7 +123,7 @@ def _build_invariant_measurable(
     threshold: float,
     direction: Direction,
 ) -> Measurable[Mapping[str, object], object]:
-    """Construct a per-cell verdict Measurable from a threshold
+    """Construct a per-row verdict Measurable from a threshold
     predicate. Hidden behind `Bridge.to_invariant_measurable()`;
     not a public entrypoint.
 
@@ -211,17 +211,17 @@ class Bridge:
     `Direction.AT_LEAST`). When set together with `tier=INVARIANT`,
     `direction in {AT_MOST, AT_LEAST}`, and `source_name ==
     target_name`, the bridge is a substrate-axiom claim. Use
-    `to_invariant_measurable()` to synthesize the per-cell verdict
+    `to_invariant_measurable()` to synthesize the per-row verdict
     Measurable that the cache builder evaluates and persists.
 
-    `scope: pl.Expr | None = None` filters the cell-set
+    `scope: pl.Expr | None = None` filters the row-set
     the framework hands to the analysis. The cache flows as a
     `pl.DataFrame`; `evaluate()` applies `df.filter(scope)`
     (with missing-column null-padding via
-    `filter_cells`) before converting to dicts and
+    `filter_with_measurables`) before converting to dicts and
     forwarding. `None` means "match all". Replaces the legacy
     `env_name` / `extra_filters` / `extra_min_pairs` /
-    `extra_max_pairs` / `cell_predicate` kwargs that used to
+    `extra_max_pairs` / `row_predicate` kwargs that used to
     live in the holds_when params bag — `scope` is
     structural metadata, not body argument. (Renamed from
     `scope` to disambiguate from the analytical `Scope` claim
@@ -293,7 +293,7 @@ class Bridge:
     def to_invariant_measurable(
         self,
     ) -> Measurable[Mapping[str, object], object]:
-        """Synthesize the per-cell verdict Measurable for an
+        """Synthesize the per-row verdict Measurable for an
         INVARIANT self-loop bridge with a threshold predicate.
 
         Validity preconditions (raise `ValueError` otherwise):
@@ -356,7 +356,7 @@ class Bridge:
 
 @dataclass(frozen=True, slots=True)
 class BridgeEvaluation:
-    """One bridge evaluated against one cell-set: the verdict the
+    """One bridge evaluated against one row-set: the verdict the
     `holds_when` body returned + the analysis results that
     produced it (the audit trail).
 
@@ -369,7 +369,7 @@ class BridgeEvaluation:
     `blocked_by`: set when `verdict == INADMISSIBLE` — the first
     BLOCK-level gate that vetoed the bridge. Body did not run.
 
-    `n_cells_in_scope`: row count after population scope and, for a
+    `n_rows_in_scope`: row count after population scope and, for a
     value-based DoEffect, exact declared-arm selection were applied.
     Unmatched values are outside that estimand and do not contribute.
     Used by the post-run report to surface sample-size diagnostics
@@ -393,14 +393,14 @@ class BridgeEvaluation:
     (`bridge.scope ∧ module_scope`). It is diagnostic metadata only and
     never participates in admission or verdict computation. Matching
     keys do not establish equal row contents, multiplicity, provenance,
-    chronology, or dataset identity. `n_cells_in_scope`, not this key,
+    chronology, or dataset identity. `n_rows_in_scope`, not this key,
     determines whether the admitted extent is empty."""
     bridge_name: str
     verdict: Verdict
     analysis_results: Mapping[str, object]
     warnings: tuple['GateResult', ...] = ()
     blocked_by: 'GateResult | None' = None
-    n_cells_in_scope: int = -1
+    n_rows_in_scope: int = -1
     assumption_violations: tuple[str, ...] = ()
     refutation_class: 'RefutationClass | None' = None
     source_name: str = ''
@@ -476,7 +476,7 @@ def _require_scope(
     value: object, fn_name: str,
 ) -> 'pl.Expr | DeferredScope | None':
     """Validate `scope` decorator arg. `None` → no filter;
-    a `pl.Expr` is accepted as the polars-native cell predicate,
+    a `pl.Expr` is accepted as the polars-native row predicate,
     OR a `DeferredScope` for scopes that resolve at evaluation
     time (via `scope_from_panel`). Any other value is an
     authoring mistake — fail loudly at import."""
@@ -660,7 +660,7 @@ def claim_bridge(
 
 def _stamp_value_contrast(
     bridge: Bridge,
-    filtered_cells: list[dict[str, object]],
+    filtered_rows: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Select and label rows for an explicitly declared value effect.
 
@@ -677,38 +677,38 @@ def _stamp_value_contrast(
     if not isinstance(effect, DoEffect) or not effect.is_value_based:
         raise TypeError('_stamp_value_contrast requires a value DoEffect')
     selected: list[dict[str, object]] = []
-    for cell in filtered_cells:
-        if CONTRAST_ARM_FIELD in cell:
+    for row in filtered_rows:
+        if CONTRAST_ARM_FIELD in row:
             raise ValueError(
-                f'evaluate({bridge.name!r}): cells already carry '
+                f'evaluate({bridge.name!r}): data already carry '
                 f'the reserved column {CONTRAST_ARM_FIELD!r}',
             )
-        role = effect.classify_row(cell)
+        role = effect.classify_row(row)
         if role is None:
             continue
-        cell[CONTRAST_ARM_FIELD] = role.value
-        selected.append(cell)
+        row[CONTRAST_ARM_FIELD] = role.value
+        selected.append(row)
     return selected
 
 
 def evaluate(
     bridge: Bridge,
-    cells: 'pl.DataFrame | Iterable[Mapping[str, object]] | Panel',
+    data: 'pl.DataFrame | Iterable[Mapping[str, object]] | Panel',
     *,
     claim: Claim[..., object] | None = None,
     module_scope: pl.Expr | None = None,
     leaves: frozenset[str] | None = None,
 ) -> BridgeEvaluation:
-    """Run a bridge against a cell-set: apply `bridge.scope`
+    """Run a bridge against a row-set: apply `bridge.scope`
     as a polars filter, resolve each fixture (a `holds_when` parameter
     without a default) by looking up the matching `@analysis`,
     parameterise from the bridge's structural fields + params,
-    run on the filtered cells, inject results, return verdict +
+    run on the filtered data, inject results, return verdict +
     audit trail.
 
-    Cell input may be either a `pl.DataFrame` (the canonical cache
+    Row input may be either a `pl.DataFrame` (the canonical cache
     shape — fast, vectorised filter) or an `Iterable[Mapping]`
-    (synthetic test cells, ad-hoc). Iterables are materialised
+    (synthetic test data, ad-hoc). Iterables are materialised
     into a DataFrame before filtering. The admission gates read
     per-row mappings; the analyses take a plain `pl.DataFrame`,
     materialised ONCE from the final (filtered, contrast-stamped)
@@ -733,13 +733,13 @@ def evaluate(
     `getattr(h, 'MODULE_SCOPE', None)` and threads it here. AND-
     combined with `bridge.scope` before filtering — so a bridge
     that already filters to a specific bsuite env will have its
-    cell-set zeroed out by an exclusion module_scope, and a
+    row-set zeroed out by an exclusion module_scope, and a
     bridge with `scope=None` will pick up the module_scope alone.
     Bridges that intentionally violate the module-level filter
     must move to a different hypothesis module.
 
-    `cells` may also be a `Panel` — the typed carrier run readers
-    return — in which case its `cells` frame and its `leaves`
+    `data` may also be a `Panel` — the typed carrier run readers
+    return — in which case its `data` frame and its `leaves`
     registry are used together and nothing else needs passing:
     `evaluate(claim, load_runs(dir))`.
 
@@ -769,39 +769,39 @@ def evaluate(
             f'body — @claim_bridge always populates it; constructing '
             f'a Bridge directly with holds_when=None is unsupported.',
         )
-    # A Panel is cells + facts: unwrap the frame and adopt its
+    # A Panel is data + facts: unwrap the frame and adopt its
     # registry unless the caller passed one explicitly.
-    if isinstance(cells, Panel):
+    if isinstance(data, Panel):
         if leaves is None:
-            leaves = cells.leaves
-        cells = cells.cells
+            leaves = data.leaves
+        data = data.df
     # One-shot iterables must survive both deferred-scope resolution and
     # the eventual analysis pass. Materialise them once at the boundary.
-    if not isinstance(cells, pl.DataFrame):
-        cells = [dict(cell) for cell in cells]
+    if not isinstance(data, pl.DataFrame):
+        data = [dict(row) for row in data]
     # Effective scope = bridge.scope ∧ module_scope (either may
     # be None). Polars' `&` is the framework-honest composition.
     #
     # `bridge.scope` may be a `DeferredScope` whose resolution
-    # depends on the cells themselves (e.g. scope_from_panel
+    # depends on the data themselves (e.g. scope_from_panel
     # filtering to strata where an upstream panel statistic
     # crosses a threshold). Resolve those FIRST: build the panel
-    # from raw cells (with the deferred-scope's `static_scope`
+    # from raw data (with the deferred-scope's `static_scope`
     # applied if present), extract surviving strata, produce
     # a `pl.Expr` that's AND-combined with `module_scope` like
     # any other.
     bridge_scope_expr: pl.Expr | None
     if isinstance(bridge.scope, DeferredScope):
-        # Pre-materialize cells for the panel build. The deferred
-        # scope's `resolve` runs on raw cells; static_scope inside
+        # Pre-materialize data for the panel build. The deferred
+        # scope's `resolve` runs on raw data; static_scope inside
         # the deferred scope is applied by the resolve method.
-        if isinstance(cells, pl.DataFrame):
-            cells_for_panel: Sequence[Mapping[str, object]] = (
-                cast(list[dict[str, object]], cells.to_dicts())
+        if isinstance(data, pl.DataFrame):
+            rows_for_panel: Sequence[Mapping[str, object]] = (
+                cast(list[dict[str, object]], data.to_dicts())
             )
         else:
-            cells_for_panel = list(cells)
-        bridge_scope_expr = bridge.scope.resolve(cells_for_panel)
+            rows_for_panel = list(data)
+        bridge_scope_expr = bridge.scope.resolve(rows_for_panel)
     else:
         bridge_scope_expr = bridge.scope
     effective_scope: pl.Expr | None
@@ -814,29 +814,29 @@ def evaluate(
     else:
         effective_scope = bridge_scope_expr & module_scope
 
-    filtered_cells: list[dict[str, object]]
+    filtered_rows: list[dict[str, object]]
     # The frame the analyses will receive when the gate rows pass
     # through unmutated (no value contrast stamped): kept from the
     # branch that already holds it, so the hot DataFrame path pays
     # no rebuild — gates read rows, analyses read this frame.
     analysis_frame: pl.DataFrame
     if effective_scope is None:
-        # No cell filter — decode once for the gates.
-        if isinstance(cells, pl.DataFrame):
-            filtered_cells = cast(list[dict[str, object]], cells.to_dicts())
-            analysis_frame = cells
+        # No row filter — decode once for the gates.
+        if isinstance(data, pl.DataFrame):
+            filtered_rows = cast(list[dict[str, object]], data.to_dicts())
+            analysis_frame = data
         else:
-            df = cells_to_dataframe(cells)
-            filtered_cells = cast(list[dict[str, object]], df.to_dicts())
+            df = to_dataframe(data)
+            filtered_rows = cast(list[dict[str, object]], df.to_dicts())
             analysis_frame = df
     else:
-        # Cell filter — materialise via the one entry boundary
+        # Row filter — materialise via the one entry boundary
         # (full-scan inference; bare from_dicts drops columns the
         # first 100 rows don't carry), filter, decode for gates.
-        df = cells_to_dataframe(cells)
-        df = filter_cells(df, effective_scope)
+        df = to_dataframe(data)
+        df = filter_with_measurables(df, effective_scope)
         analysis_frame = df
-        filtered_cells = (
+        filtered_rows = (
             cast(list[dict[str, object]], df.to_dicts())
             if df.height > 0 else []
         )
@@ -845,20 +845,20 @@ def evaluate(
     # column is otherwise indistinguishable from a present column
     # containing no declared values. Every other gate and the analyses
     # receive only rows belonging to this explicit effect.
-    scoped_cells_for_source_gate = filtered_cells
+    scoped_rows_for_source_gate = filtered_rows
     contrast_labels: tuple[str, ...] | None = None
     if value_contrast_active(bridge):
         if not isinstance(bridge.source, DoEffect):
             raise AssertionError('active value contrast is not a DoEffect')
-        filtered_cells = _stamp_value_contrast(bridge, filtered_cells)
+        filtered_rows = _stamp_value_contrast(bridge, filtered_rows)
         contrast_labels = bridge.source.arm_keys()
-    n_cells_in_scope = len(filtered_cells)
+    n_rows_in_scope = len(filtered_rows)
     # extent_hash: process-portable grouping key over admitted string
     # IDs. Set semantics ignore row order and duplicates. Row values,
     # multiplicity, provenance, and chronology do not participate; the
     # key is diagnostic metadata and never an admission/verdict input.
     admitted_ids: list[str] = []
-    for c in filtered_cells:
+    for c in filtered_rows:
         cid = c.get('id')
         if isinstance(cid, str):
             admitted_ids.append(cid)
@@ -872,12 +872,12 @@ def evaluate(
     warnings: list[GateResult] = []
     gate_ctx = GateContext(claim=claim, leaves=leaves)
     for gate in all_gates:
-        gate_cells = (
-            scoped_cells_for_source_gate
+        gate_rows = (
+            scoped_rows_for_source_gate
             if contrast_labels is not None and gate is resolved_source
-            else filtered_cells
+            else filtered_rows
         )
-        result = gate(bridge, gate_cells, gate_ctx)
+        result = gate(bridge, gate_rows, gate_ctx)
         if result is None or result.passed:
             continue
         if result.level is GateLevel.BLOCK:
@@ -887,7 +887,7 @@ def evaluate(
                 analysis_results=MappingProxyType({}),
                 warnings=tuple(warnings),
                 blocked_by=result,
-                n_cells_in_scope=n_cells_in_scope,
+                n_rows_in_scope=n_rows_in_scope,
                 source_name=bridge.source_name,
                 target_name=bridge.target_name,
                 extent_hash=extent_hash,
@@ -965,7 +965,7 @@ def evaluate(
         bridge.holds_when,
         (
             analysis_frame if contrast_labels is None
-            else cells_to_dataframe(filtered_cells)
+            else to_dataframe(filtered_rows)
         ),
         bridge_params,
     )
@@ -999,7 +999,7 @@ def evaluate(
         verdict=verdict,
         analysis_results=MappingProxyType(dict(analysis_results)),
         warnings=tuple(warnings),
-        n_cells_in_scope=n_cells_in_scope,
+        n_rows_in_scope=n_rows_in_scope,
         assumption_violations=tuple(assumption_flags),
         refutation_class=refutation_class,
         source_name=bridge.source_name,
@@ -1120,7 +1120,7 @@ def measurable_names_for_bridges(
         if b.scope is not None:
             # DeferredScope: pull the static_scope (its polars-Expr
             # half) if any; the dynamic part references the
-            # stratify column which is also a regular cell column.
+            # stratify column which is also a regular row column.
             if isinstance(b.scope, DeferredScope):
                 candidates.append(b.scope.stratify_column)
                 static_expr = b.scope.static_scope
@@ -1135,7 +1135,7 @@ def measurable_names_for_bridges(
                 except Exception:  # noqa: BLE001
                     # If polars metadata extraction fails, fall through
                     # — the missing-column path in
-                    # `filter_cells` will surface the error
+                    # `filter_with_measurables` will surface the error
                     # at evaluate-time instead.
                     pass
         for name in candidates:

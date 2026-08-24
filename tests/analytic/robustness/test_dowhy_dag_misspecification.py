@@ -34,7 +34,7 @@ the ATE. The silent-wrong-verdict case (#2) is the most
 dangerous because it produces a confident-looking 0 estimate.
 
 Empirical numbers anchored to deterministic seed=0 across the
-LG-SCM corpus (5 envs × 30 cells × 200 steps). Reproducible
+LG-SCM corpus (5 envs × 30 rows × 200 steps). Reproducible
 across processes.
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ from collections.abc import Mapping
 import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from corroborate.analyses.dowhy import backdoor_ate
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 # Reuse the implementation from the existing dowhy test.
 sys.path.insert(0, 'tests/analytic/lg_scm')
@@ -66,7 +66,7 @@ def test_correct_dag_recovers_structural_ate() -> None:
     Pin: |ate - 0.75| / 0.75 < 0.05. A regression in the SCM
     or DoWhy dispatch would fail this; serves as harness validation."""
     result = backdoor_ate.fn(
-        cells_to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean',
+        to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean',
         dag=[('x_mean', 'y_mean')],
     )
     assert result.identified
@@ -96,7 +96,7 @@ def test_mediator_treated_as_confounder_silently_zeroes_ate() -> None:
     include the mediator in the adjustment set when computing
     total effect."""
     result = backdoor_ate.fn(
-        cells_to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean',
+        to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean',
         dag=[
             ('z_mean', 'x_mean'),    # mediator wrongly treated as cause of X
             ('z_mean', 'y_mean'),    # mediator wrongly treated as cause of Y
@@ -125,7 +125,7 @@ def test_reversed_treatment_outcome_returns_unidentified() -> None:
     downstream, the bridge gets a clear "couldn't compute"
     signal. NOT a silent-wrong-verdict situation."""
     result = backdoor_ate.fn(
-        cells_to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean',
+        to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean',
         dag=[('y_mean', 'x_mean')],
     )
     assert not result.identified
@@ -146,7 +146,7 @@ def test_mediator_as_collider_unaffected_by_misspecification() -> None:
     implementation-author guidance: DAG correctness check should focus
     on identifying mediators."""
     result = backdoor_ate.fn(
-        cells_to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean',
+        to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean',
         dag=[
             ('x_mean', 'z_mean'),    # correct: X causes Z
             ('y_mean', 'z_mean'),    # WRONG: Y doesn't cause Z, but
@@ -201,7 +201,7 @@ def test_dag_misspecification_summary_table() -> None:
     sys.stderr.write(f'{"variant":<32}{"ate":>10}{"identified":>14}\n')
     for name, dag in variants:
         result = backdoor_ate.fn(
-            cells_to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean', dag=dag,
+            to_dataframe(_CELLS), treatment='x_mean', outcome='y_mean', dag=dag,
         )
         ate_str = (
             f'{result.ate:>10.4f}' if result.identified

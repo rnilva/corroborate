@@ -35,10 +35,10 @@ from corroborate.graph.causal import (
 
 @analysis
 def _stub_analysis(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
 ) -> object:
     """No-op fixture so the bridges below can be evaluated."""
-    del cells
+    del df
     return object()
 
 
@@ -92,7 +92,7 @@ def test_evaluated_graph_held_associational_correlational() -> None:
             '_bridge_assoc_a': PostEvalEntry(
                 verdict=Verdict.HELD,
                 extent_hash=12345,
-                n_cells_in_scope=7,
+                n_rows_in_scope=7,
             ),
         },
     )
@@ -100,7 +100,7 @@ def test_evaluated_graph_held_associational_correlational() -> None:
     assert len(edges) == 1
     assert edges[0].metadata.evidentiary_level == 'correlational'
     assert edges[0].metadata.extent_hash == 12345
-    assert edges[0].metadata.n_cells_in_scope == 7
+    assert edges[0].metadata.n_rows_in_scope == 7
 
 
 def test_evaluated_graph_held_interventional_causal_one_sided() -> None:
@@ -251,7 +251,7 @@ def _edge(
     level: str,
     extent_hash: int = 1,
     *,
-    n_cells_in_scope: int = 1,
+    n_rows_in_scope: int = 1,
 ) -> BridgeEdge:
     """Synthetic BridgeEdge for cluster_verdict tests — only
     `evidentiary_level` and `extent_hash` matter."""
@@ -261,7 +261,7 @@ def _edge(
         tier=Tier.ASSOCIATIONAL,
         evidentiary_level=level,  # pyright: ignore[reportArgumentType]
         extent_hash=extent_hash,
-        n_cells_in_scope=n_cells_in_scope,
+        n_rows_in_scope=n_rows_in_scope,
     )
 
 
@@ -302,8 +302,8 @@ def test_cluster_verdict_underpowered_mixed_unevaluated() -> None:
 def test_cluster_verdict_empty_extent_all_empty() -> None:
     """Explicit zero row counts, not an ID digest, mean empty."""
     members = (
-        _edge('correlational', n_cells_in_scope=0),
-        _edge('refuted', n_cells_in_scope=0),
+        _edge('correlational', n_rows_in_scope=0),
+        _edge('refuted', n_rows_in_scope=0),
     )
     assert cluster_verdict(members) == ClusterVerdict.EMPTY_EXTENT
 
@@ -314,7 +314,7 @@ def test_cluster_verdict_does_not_infer_empty_from_id_key() -> None:
 
     members = (
         _edge(
-            'correlational', EMPTY_EXTENT_HASH, n_cells_in_scope=2,
+            'correlational', EMPTY_EXTENT_HASH, n_rows_in_scope=2,
         ),
     )
     assert cluster_verdict(members) == ClusterVerdict.SUPPORTED
@@ -322,14 +322,14 @@ def test_cluster_verdict_does_not_infer_empty_from_id_key() -> None:
 
 def test_cluster_verdict_mixed_empty_and_nonempty_is_underpowered() -> None:
     members = (
-        _edge('correlational', n_cells_in_scope=0),
-        _edge('causal_one_sided', n_cells_in_scope=3),
+        _edge('correlational', n_rows_in_scope=0),
+        _edge('causal_one_sided', n_rows_in_scope=3),
     )
     assert cluster_verdict(members) == ClusterVerdict.UNDERPOWERED
 
 
 def test_cluster_verdict_unknown_count_is_underpowered() -> None:
-    members = (_edge('correlational', n_cells_in_scope=-1),)
+    members = (_edge('correlational', n_rows_in_scope=-1),)
     assert cluster_verdict(members) == ClusterVerdict.UNDERPOWERED
 
 

@@ -123,7 +123,7 @@ def test_assert_no_nested_corpora_lists_all_violators(
 def test_assert_no_nested_corpora_ignores_tmp_shards(
     tmp_path: Path,
 ) -> None:
-    """`tmp/cell***__...__runs.parquet` are per-arm shards from
+    """`tmp/row***__...__runs.parquet` are per-arm shards from
     the sweep, NOT corpora. CI1 must not flag a corpus dir
     just because it has un-merged shards in `tmp/`."""
     root = tmp_path / 'data'
@@ -133,7 +133,7 @@ def test_assert_no_nested_corpora_ignores_tmp_shards(
     tmp_dir = corp / 'tmp'
     tmp_dir.mkdir()
     # Per-arm shard with characteristic naming.
-    shard = tmp_dir / 'cell000__Env__baseline__runs.parquet'
+    shard = tmp_dir / 'row000__Env__baseline__runs.parquet'
     pl.DataFrame({'id': ['x'], 'env_name': ['Env']}).write_parquet(shard)
 
     # Should NOT raise — tmp/ shards aren't corpora.
@@ -375,7 +375,7 @@ def test_dedup_excludes_object_repr_string_columns() -> None:
     process-volatile memory addresses and should be EXCLUDED
     from `_dedup_by_content` content comparison.
 
-    Two cells with identical scientific content but different
+    Two rows with identical scientific content but different
     repr addresses should collapse to one row, not survive as
     two — that's the inflation pattern that hit the
     `vanilla_sync*` corpora pre-fix.
@@ -409,7 +409,7 @@ def test_dedup_keeps_distinct_content_rows() -> None:
     """**Negative control**: rows with the SAME object-repr
     column but DIFFERENT non-volatile content stay distinct.
     The volatile exclusion must not over-collapse legitimate
-    distinct cells."""
+    distinct rows."""
     from corroborate.runner.runner import _dedup_by_content
 
     df = pl.DataFrame({
@@ -481,7 +481,7 @@ def test_audit_trace_contamination_partial_coverage_ok(
     tmp_path: Path,
 ) -> None:
     """Partial trace coverage (`traces.id ⊂ runs.id`) is
-    legitimate — some cells didn't get traces archived. Not a
+    legitimate — some rows didn't get traces archived. Not a
     contamination."""
     _write_runs(tmp_path / 'runs.parquet', ['a', 'b', 'c', 'd'])
     _write_traces(tmp_path / 'traces.parquet', ['a', 'b'])  # only 2 of 4

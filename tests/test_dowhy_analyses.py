@@ -41,22 +41,22 @@ def _linear_corpus(
     noise: float = 0.5,
 ) -> list[dict[str, object]]:
     """Build a corpus where outcome = ate * treatment + noise.
-    Treatment and outcome are floats per cell; HPs are
+    Treatment and outcome are floats per row; HPs are
     constant (no real confounding) but exposed so DoWhy has
     nodes to put in the DAG."""
     rng = random.Random(0)
-    cells: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for i in range(n):
         t = float(rng.uniform(0.0, 1.0))
         y = ate * t + rng.gauss(0, noise)
-        cells.append({
+        rows.append({
             'treatment_var': t,
             'outcome_var': y,
             'capacity': float(rng.choice([10000, 50000])),
             'lr': float(rng.choice([1e-3, 1e-4])),
-            'cell_id': i,
+            'row_id': i,
         })
-    return cells
+    return rows
 
 
 SYNTHETIC_DAG: list[tuple[str, str]] = [

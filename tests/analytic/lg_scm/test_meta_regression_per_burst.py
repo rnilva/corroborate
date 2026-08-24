@@ -29,7 +29,7 @@ from corroborate.analyses.panel.meta_regression_per_burst import (
     meta_regression_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -99,12 +99,12 @@ def test_per_burst_meta_regression_recovers_closed_form_slope() -> None:
     would fail this test by changing the n_obs vs n_strata count
     or the slope value itself.
     """
-    cells = _build_phased_panel()
+    rows = _build_phased_panel()
     covariates_per_env: Mapping[str, Mapping[str, float]] = {
         f'env_mu_{mu:g}': {'mu_x': mu} for mu in _MU_X_GRID
     }
     result = meta_regression_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -137,19 +137,19 @@ def test_per_burst_meta_regression_recovers_closed_form_slope() -> None:
 
 # ============ Fallback: covariates= path also works ============
 
-def test_per_burst_meta_regression_resolves_covariates_from_cells() -> None:
+def test_per_burst_meta_regression_resolves_covariates_from_rows() -> None:
     """`covariates: tuple[str, ...]` (without explicit
     `covariates_per_env`) tells the analysis to pull covariate
-    values from the cells themselves (env-mean of the named columns).
+    values from the rows themselves (env-mean of the named columns).
 
-    Each cell carries `mu_x` in its measurements (the implementation
+    Each row carries `mu_x` in its measurements (the implementation
     stamps it). The analysis should resolve the env-level covariate
-    by averaging mu_x across each env's cells — yielding the same
+    by averaging mu_x across each env's rows — yielding the same
     panel as supplying `covariates_per_env={mu_x: ...}` explicitly.
     """
-    cells = _build_phased_panel()
+    rows = _build_phased_panel()
     result = meta_regression_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -165,19 +165,19 @@ def test_per_burst_meta_regression_resolves_covariates_from_cells() -> None:
     assert rel_err < 0.05, (
         f'slope on mu_x = {coef.coefficient:.4f}, expected '
         f'{expected_slope:.4f} (rel err {rel_err:.4f}); the '
-        f'covariates= cell-level resolution path produced a '
+        f'covariates= row-level resolution path produced a '
         f'different fit than the explicit covariates_per_env one'
     )
 
 
 def test_per_burst_meta_regression_honours_custom_arm_field() -> None:
-    cells: list[Mapping[str, object]] = []
-    for cell in _build_phased_panel():
-        row = dict(cell)
+    rows: list[Mapping[str, object]] = []
+    for row in _build_phased_panel():
+        row = dict(row)
         row['contrast_arm'] = row.pop('arm_key')
-        cells.append(row)
+        rows.append(row)
     result = meta_regression_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         arm_field='contrast_arm',

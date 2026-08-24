@@ -30,7 +30,7 @@ from corroborate.analyses.paired.arm_mean_diff import (
 from corroborate.bridge.bridge import Direction, Tier, claim_bridge, evaluate
 from corroborate.bridge.verdict import Verdict
 from corroborate.core.intervention import DoEffect
-from corroborate.data import cells_to_dataframe, config_columns, load_runs
+from corroborate.data import to_dataframe, config_columns, load_runs
 
 _BASELINE_ENT = 0.0
 _TREATMENT_ENT = 0.01
@@ -159,7 +159,7 @@ def _make_runs(
 
 def test_load_runs_derives_closed_form_columns(tmp_path: Path) -> None:
     _make_runs(tmp_path)
-    df = load_runs(tmp_path).cells
+    df = load_runs(tmp_path).df
 
     assert df.height == 4
     for row in df.to_dicts():
@@ -197,11 +197,11 @@ def test_corpus_name_defaults_to_directory_and_is_overridable(
 ) -> None:
     _make_runs(tmp_path / 'batch_a')
     assert (
-        load_runs(tmp_path / 'batch_a').cells['corpus'].unique().to_list()
+        load_runs(tmp_path / 'batch_a').df['corpus'].unique().to_list()
         == ['batch_a']
     )
     named = load_runs(tmp_path / 'batch_a', corpus='pilot-1')
-    assert named.cells['corpus'].unique().to_list() == ['pilot-1']
+    assert named.df['corpus'].unique().to_list() == ['pilot-1']
 
 
 def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
@@ -211,7 +211,7 @@ def test_single_checkpoint_auc_reduces_to_mean(tmp_path: Path) -> None:
             _BASELINE_ENT: (20,), _TREATMENT_ENT: (20,),
         },
     )
-    df = load_runs(tmp_path).cells
+    df = load_runs(tmp_path).df
     for row in df.to_dicts():
         assert row['return_auc'] == row['return_mean']
         assert row['return_mean_at_20'] == row['return_mean']
@@ -233,7 +233,7 @@ def test_ragged_grids_never_rebase_the_terminal_summary(
             _BASELINE_ENT: _CHECKPOINTS, _TREATMENT_ENT: (10,),
         },
     )
-    df = load_runs(tmp_path).cells
+    df = load_runs(tmp_path).df
     for row in df.to_dicts():
         pair_key = row['training.seed']
         assert isinstance(pair_key, int)
@@ -291,7 +291,7 @@ def test_identical_curves_at_different_horizons_yield_no_effect(
     _write_jsonl(root / 'runs.jsonl', runs)
     _write_jsonl(root / 'evaluations.jsonl', evaluations)
 
-    df = load_runs(root).cells
+    df = load_runs(root).df
     baseline_terminal = df.filter(
         pl.col('algorithm.ent_coef') == _BASELINE_ENT,
     )['return_mean'].to_list()
@@ -323,7 +323,7 @@ def test_non_finite_terminal_stays_missing(tmp_path: Path) -> None:
             row['return'] = float('nan')
     _write_jsonl(evaluations_path, rows)
 
-    df = load_runs(tmp_path).cells
+    df = load_runs(tmp_path).df
     baseline = df.filter(pl.col('id') == baseline_id).to_dicts()[0]
     assert baseline['return_mean'] is None
     assert baseline['return_terminal_n'] == 0
@@ -346,7 +346,7 @@ def test_config_flattening_is_injective_and_keeps_arrays(
         tmp_path,
         extra_config_fields={'policy_kwargs': {'net_arch': [64, 64]}},
     )
-    df = load_runs(tmp_path).cells
+    df = load_runs(tmp_path).df
     assert df['policy_kwargs.net_arch'].unique().to_list() == ['[64, 64]']
     assert 'policy_kwargs.net_arch' in config_columns(tmp_path)
 
@@ -373,7 +373,7 @@ def test_non_numeric_evaluation_fields_are_not_outcomes(
         row['note'] = 'greedy rollout'
     _write_jsonl(evaluations_path, rows)
 
-    df = load_runs(tmp_path).cells
+    df = load_runs(tmp_path).df
     assert 'note_mean' not in df.columns
     assert 'note' not in df.columns
 
@@ -387,7 +387,7 @@ def test_missing_optional_files_load_without_their_columns(
     _make_runs(
         tmp_path, write_evaluations=False, write_provenance=False,
     )
-    df = load_runs(tmp_path).cells
+    df = load_runs(tmp_path).df
     assert df.height == 4
     assert 'return_mean' not in df.columns
     assert 'program' not in df.columns
@@ -473,7 +473,7 @@ def test_conflicting_column_values_raise_and_equal_values_pass(
 
     agreeing = tmp_path / 'agreeing'
     _make_runs(agreeing, extra_run_fields={'environment.id': 'MountainCar-v0'})
-    df = load_runs(agreeing).cells
+    df = load_runs(agreeing).df
     assert df['environment.id'].unique().to_list() == ['MountainCar-v0']
 
 
@@ -528,7 +528,7 @@ def test_config_columns_derives_the_leaf_registry(tmp_path: Path) -> None:
 def test_panel_carries_the_registry_to_evaluate(tmp_path: Path) -> None:
     """The Panel is the typed carrier for what a bare frame cannot
     hold: `leaves` equals the standalone registry derivation, the
-    source records where the cells came from, and `evaluate`
+    source records where the rows came from, and `evaluate`
     consumes the Panel with nothing else passed."""
     _make_runs(tmp_path)
     panel = load_runs(tmp_path)
@@ -543,7 +543,7 @@ def test_panel_carries_the_registry_to_evaluate(tmp_path: Path) -> None:
 
 def test_batches_of_the_same_study_pool(tmp_path: Path) -> None:
     """Evidence is a live record: two batches of seeds loaded
-    separately pool into one Panel — cells diagonally, registries
+    separately pool into one Panel — rows diagonally, registries
     by union, sources by concatenation — and the same claim
     evaluates against the pool with nothing else passed: the
     run-more-seeds workflow the hypothesis layer exists for.
@@ -618,13 +618,13 @@ def test_put_column_tolerates_agreeing_nan_stamps() -> None:
 def test_loaded_frame_agrees_with_dict_rows_through_an_analysis(
     tmp_path: Path,
 ) -> None:
-    """`Analysis.__call__` materialises either cells shape, so the
+    """`Analysis.__call__` materialises either rows shape, so the
     loaded DataFrame and its dict rows agree exactly through a
     registered analysis. Welch closed form on the (7, 9) fixture:
     per-condition final means `base + 2.5 + (pair_key - 7)` →
     variance 2 at n = 2 per condition → SE = sqrt(2), df = 2."""
     _make_runs(tmp_path)
-    df = load_runs(tmp_path).cells
+    df = load_runs(tmp_path).df
     labelled = df.with_columns(
         pl.when(pl.col('algorithm.ent_coef') == _TREATMENT_ENT)
         .then(pl.lit('treatment'))
@@ -632,14 +632,14 @@ def test_loaded_frame_agrees_with_dict_rows_through_an_analysis(
         .alias('arm_key'),
     )
     from_frame = arm_mean_diff(
-        cells_to_dataframe(labelled),
+        to_dataframe(labelled),
         source='return_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('training.seed',),
     )
     from_rows = arm_mean_diff(
-        cells_to_dataframe(labelled.to_dicts()),
+        to_dataframe(labelled.to_dicts()),
         source='return_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',

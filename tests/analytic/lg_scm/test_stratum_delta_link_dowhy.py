@@ -60,7 +60,7 @@ from corroborate.analyses.dowhy.stratum_delta_link_dowhy import (
     stratum_delta_link_dowhy,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -113,11 +113,11 @@ def _scm(beta_xz: float, mu_x: float) -> LinearGaussianSCM:
     )
 
 
-def _build_phased_cells(
+def _build_phased_rows(
     *, beta_xz_t: float = _BETA_XZ_TREATMENT,
     beta_xz_b: float = _BETA_XZ_BASELINE,
 ) -> list[Mapping[str, object]]:
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for env_name, mu_x in _ENV_MU_X.items():
         treatments = tuple(
             _scm(beta_xz_t, mu_x) for _ in range(_N_BURSTS)
@@ -125,13 +125,13 @@ def _build_phased_cells(
         baselines = tuple(
             _scm(beta_xz_b, mu_x) for _ in range(_N_BURSTS)
         )
-        cells.extend(run_paired_phased_arms(
+        rows.extend(run_paired_phased_arms(
             treatments_per_burst=treatments,
             baselines_per_burst=baselines,
             seeds=tuple(range(_N_SEEDS_PER_ARM)),
             env_name=env_name,
         ))
-    return cells
+    return rows
 
 
 def _expected_link_slope() -> float:
@@ -147,10 +147,10 @@ def test_stratum_delta_link_recovers_structural_slope() -> None:
     of σ_z and σ_y streams. The DoWhy backdoor on the
     (Δ_jens=Δ_z, Δ_out=Δ_y) panel adjusting for burst dummies
     recovers β_zy = 1.5 to machine precision."""
-    cells = _build_phased_cells()
+    rows = _build_phased_rows()
 
     result = stratum_delta_link_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,
@@ -180,9 +180,9 @@ def test_stratum_delta_link_placebo_destroys_signal() -> None:
     the permuted treatment carries no information about Δ_y →
     OLS slope on permuted column = 0 exactly. Drift = original
     − refuted = β_zy exactly."""
-    cells = _build_phased_cells()
+    rows = _build_phased_rows()
     result = stratum_delta_link_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,
@@ -207,9 +207,9 @@ def test_stratum_delta_link_random_common_cause_preserves_signal() -> None:
     regression. Since Δ_y is perfectly explained by Δ_z (no
     residual to allocate to the new column), OLS preserves the
     Δ_z coefficient exactly → refuted ATE = β_zy → drift = 0."""
-    cells = _build_phased_cells()
+    rows = _build_phased_rows()
     result = stratum_delta_link_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,
@@ -241,12 +241,12 @@ def test_stratum_delta_link_null_contrast_yields_nan_or_zero() -> None:
     so panel construction is valid; only the OLS solve is
     degenerate.
     """
-    cells = _build_phased_cells(
+    rows = _build_phased_rows(
         beta_xz_t=_BETA_XZ_BASELINE,
         beta_xz_b=_BETA_XZ_BASELINE,
     )
     result = stratum_delta_link_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         link_predictor=_PER_BURST_Z_MEAN,

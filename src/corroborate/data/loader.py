@@ -2,16 +2,16 @@
 
 `load_runs` is a convenience reader, not a gatekeeper: it turns a
 directory of plain producer files into the framework's canonical
-cell shape (one row per seeded run, path-keyed scalar columns) and
+row shape (one row per seeded run, path-keyed scalar columns) and
 returns it as a `Panel` — the typed carrier for the two facts a
 bare DataFrame cannot hold: provenance (`sources`) and the
 configuration registry (`leaves`, read off the record's own
 config files). `evaluate()` accepts the Panel directly, so the
-registry travels with the cells instead of being re-derived and
+registry travels with the rows instead of being re-derived and
 hand-passed. The reader holds no opinion about study design —
 pairing, configuration isolation, and evidence quality are claims
 about a *contrast*, so they are checked by the admission gates of
-the claim being evaluated, scoped to exactly the cells that claim
+the claim being evaluated, scoped to exactly the rows that claim
 admits. A producer who already has a DataFrame skips this module
 entirely (`Panel.from_dataframe(df, leaves=...)`, or pass the
 bare frame plus `leaves=` to `evaluate`).

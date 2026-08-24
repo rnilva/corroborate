@@ -63,7 +63,7 @@ from corroborate.analyses.dowhy import (
     BackdoorResult,
     RefutationResult,
 )
-from corroborate.analyses._cell_value import evaluate_per_burst_source
+from corroborate.analyses._row_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables import Measurable
 
@@ -88,17 +88,17 @@ class StratumLinkModerationDowhyResult:
 
 
 def _env_means(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     confounder: str,
     attenuator: str,
 ) -> dict[str, float]:
     bins: dict[str, list[float]] = {}
-    for cell in cells:
-        env = cell.get(confounder)
+    for row in rows:
+        env = row.get(confounder)
         if not isinstance(env, str):
             continue
-        v = cell.get(attenuator)
+        v = row.get(attenuator)
         if not isinstance(v, (int, float)):
             continue
         f = float(v)
@@ -109,7 +109,7 @@ def _env_means(
 
 
 def _build_panel(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -138,15 +138,15 @@ def _build_panel(
         tuple[str, str],
         list[tuple[npt.NDArray[np.floating], npt.NDArray[np.floating]]],
     ] = {}
-    for cell in cells:
-        env = cell.get(confounder)
-        arm = cell.get(arm_field)
+    for row in rows:
+        env = row.get(confounder)
+        arm = row.get(arm_field)
         if not isinstance(env, str) or not isinstance(arm, str):
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
-        target_v = evaluate_per_burst_source(link_target, cell)
-        predictor_v = evaluate_per_burst_source(link_predictor, cell)
+        target_v = evaluate_per_burst_source(link_target, row)
+        predictor_v = evaluate_per_burst_source(link_predictor, row)
         if target_v.size == 0 or predictor_v.size == 0:
             continue
         if target_v.shape[0] != predictor_v.shape[0]:
@@ -156,7 +156,7 @@ def _build_panel(
         )
 
     env_atten = _env_means(
-        cells, confounder=confounder, attenuator=attenuator,
+        rows, confounder=confounder, attenuator=attenuator,
     )
     panel_envs = sorted({
         e for (e, _) in by_env_arm if e in env_atten
@@ -173,24 +173,24 @@ def _build_panel(
     for env in panel_envs:
         env_mean = env_atten[env]
         above = 1.0 if env_mean > binary_threshold else 0.0
-        t_cells = by_env_arm[(env, treatment_arm)]
-        b_cells = by_env_arm[(env, baseline_arm)]
+        t_rows = by_env_arm[(env, treatment_arm)]
+        b_rows = by_env_arm[(env, baseline_arm)]
         common_bursts = min(
-            min(c[0].shape[0] for c in t_cells),
-            min(c[0].shape[0] for c in b_cells),
+            min(c[0].shape[0] for c in t_rows),
+            min(c[0].shape[0] for c in b_rows),
         )
         for b in range(common_bursts):
             t_target = np.array(
-                [float(c[0][b]) for c in t_cells], dtype=np.float64,
+                [float(c[0][b]) for c in t_rows], dtype=np.float64,
             )
             t_pred = np.array(
-                [float(c[1][b]) for c in t_cells], dtype=np.float64,
+                [float(c[1][b]) for c in t_rows], dtype=np.float64,
             )
             b_target = np.array(
-                [float(c[0][b]) for c in b_cells], dtype=np.float64,
+                [float(c[0][b]) for c in b_rows], dtype=np.float64,
             )
             b_pred = np.array(
-                [float(c[1][b]) for c in b_cells], dtype=np.float64,
+                [float(c[1][b]) for c in b_rows], dtype=np.float64,
             )
             mt_t = float(np.nanmean(t_target))
             mt_p = float(np.nanmean(t_pred))
@@ -233,14 +233,14 @@ def _build_panel(
     })
     env_cols = [f'__env__{e}' for e in envs_in_panel[1:]]
 
-    rows: list[Mapping[str, object]] = []
+    final_rows: list[Mapping[str, object]] = []
     for r in raw_rows:
         row = dict(r)
         env_v = r[confounder]
         for c in env_cols:
             row[c] = 1.0 if c == f'__env__{env_v}' else 0.0
         row.pop('__above', None)
-        rows.append(row)
+        final_rows.append(row)
 
     dag: list[tuple[str, str]] = []
     for c in env_cols:
@@ -250,7 +250,7 @@ def _build_panel(
     dag.append((pred_col, outcome_col))
     dag.append((pred_col, interaction_col))
     dag.append((interaction_col, outcome_col))
-    return rows, dag, interaction_col, outcome_col, n_above, n_below
+    return final_rows, dag, interaction_col, outcome_col, n_above, n_below
 
 
 def _nan_backdoor(t: str, o: str, m: str) -> BackdoorResult:
@@ -270,7 +270,7 @@ def _nan_refutation(t: str, o: str, m: str, name: str) -> RefutationResult:
 
 @analysis
 def stratum_link_moderation_dowhy(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -308,7 +308,7 @@ def stratum_link_moderation_dowhy(
     `n_strata > p_covariates` and `n_envs_above ≥ 1 AND
     n_envs_below ≥ 1` for identification."""
     rows, dag, t_col, o_col, n_above, n_below = _build_panel(
-        to_dicts(cells),
+        to_dicts(df),
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         link_predictor=link_predictor,

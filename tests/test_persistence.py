@@ -243,10 +243,10 @@ def test_tighten_trace_dtypes_casts_list_columns(tmp_path: Path) -> None:
     assert tightened['series_i64'].to_list() == [[1, 2], [3, 4]]
 
 
-def test_iter_trace_records_streams_one_dict_per_cell(
+def test_iter_trace_records_streams_one_dict_per_row(
     tmp_path: Path,
 ) -> None:
-    """`iter_trace_records` yields one polars row dict per cell.
+    """`iter_trace_records` yields one polars row dict per row.
     With column projection, only the named columns + 'id' surface.
     Memory-bounded by batch_size, not corpus size."""
     import polars as pl
@@ -524,7 +524,7 @@ def test_stream_concat_atomicity_simulated_crash_leaves_no_torn_parquet(
 
 def test_stream_concat_reads_remote_uri_inputs(tmp_path: Path) -> None:
     """The manifest-driven sweep merge (SWEEP_PERSISTENCY.md I3)
-    passes `s3://…` shard URIs to `stream_concat_parquets`: cells are
+    passes `s3://…` shard URIs to `stream_concat_parquets`: rows are
     archived, then read back from cloud so paired sweeps merge every
     shard. polars' native object-store can't reach a custom-endpoint
     store (Cloudflare R2) — it derives the endpoint from region alone

@@ -187,14 +187,14 @@ class BridgeEdge:
     `feedback` — set on edges that intentionally participate in
     cycles. Graph walks use this to break cycle traversal.
 
-    `extent_hash` — `stable_extent_hash(admitted_cell_ids)` carried
+    `extent_hash` — `stable_extent_hash(admitted_row_ids)` carried
     from `BridgeEvaluation.extent_hash`. Matching values mean only
     that the edges reported the same de-duplicated string-ID set in
     the caller's current ID namespace. Row values and multiplicity
     are absent, so this is a dataset-relative grouping hint rather
     than evidence identity, provenance, or an attestation.
 
-    `n_cells_in_scope` — the admitted row count carried independently
+    `n_rows_in_scope` — the admitted row count carried independently
     from `BridgeEvaluation`. Counts, not the ID grouping key, determine
     whether an evaluated extent is empty. ``-1`` means unevaluated or
     unavailable.
@@ -213,7 +213,7 @@ class BridgeEdge:
     evidentiary_level: EvidentiaryLevel
     feedback: bool = False
     extent_hash: int = 0
-    n_cells_in_scope: int = -1
+    n_rows_in_scope: int = -1
     external_effect: bool = False
 
     @override
@@ -342,24 +342,24 @@ def is_walk(
 
 def walk_scope(bridges: 'Iterable[ClaimBridge]') -> pl.Expr:
     """AND-reduce of `bridges`' scope predicates — the joint scope
-    expression specifying the cell-set on which the entire walk
+    expression specifying the row-set on which the entire walk
     is empirically corroborable.
 
-    For a chain `b_1 → b_2 → ... → b_k`, the joint-scope cell-set
-    is the intersection of all step scopes: cells admitted by
+    For a chain `b_1 → b_2 → ... → b_k`, the joint-scope row-set
+    is the intersection of all step scopes: rows admitted by
     every step's bridge. Composition is just polars `&`-reduce;
     the result is a `pl.Expr` callable consumers can apply to a
     DataFrame to materialize the joint extent.
 
     Empty sequence returns `pl.lit(True)` (no constraint — the
     algebraic identity of AND-reduce). Bridges with `scope=None`
-    are skipped (they admit all cells, contributing the AND
+    are skipped (they admit all rows, contributing the AND
     identity).
 
     Raises `TypeError` if any bridge carries a `DeferredScope` —
     those resolve at evaluation time against the corpus, so they
     can't compose into a static expression. Resolve them via
-    `Bridge.evaluate(cells)` first, or compose joint scope at
+    `Bridge.evaluate(rows)` first, or compose joint scope at
     evaluation time."""
     exprs: list[pl.Expr] = []
     for b in bridges:
@@ -424,12 +424,12 @@ def authored_graph(
 class PostEvalEntry:
     """Per-bridge post-evaluation record: the verdict the bridge's
     `holds_when` body returned and the compact grouping key over
-    admitted string cell IDs on the dataset that produced it.
+    admitted string row IDs on the dataset that produced it.
 
     Callers construct this from either a `BridgeEvaluation`
     (`PostEvalEntry(ev.verdict, ev.extent_hash,
-    ev.n_cells_in_scope)`) or from a
-    persisted `*.run.json` snapshot. `n_cells_in_scope` is carried
+    ev.n_rows_in_scope)`) or from a
+    persisted `*.run.json` snapshot. `n_rows_in_scope` is carried
     separately because an empty set of usable string IDs does not prove
     that the evaluated frame had zero rows. Tightening the
     `evaluated_graph` signature with a typed record keeps the
@@ -438,7 +438,7 @@ class PostEvalEntry:
     breaking callers."""
     verdict: Verdict
     extent_hash: int
-    n_cells_in_scope: int = -1
+    n_rows_in_scope: int = -1
 
 
 def _stamp_level(tier: Tier, verdict: Verdict) -> EvidentiaryLevel:
@@ -494,11 +494,11 @@ def evaluated_graph(
     `evidentiary_level` (from verdict via `_stamp_level`) and
     dataset-relative extent grouping key from the `post_eval` mapping
     `{bridge_name: PostEvalEntry(verdict, extent_hash,
-    n_cells_in_scope)}`.
+    n_rows_in_scope)}`.
 
     Bridges absent from `post_eval` keep authored defaults
     (`evidentiary_level='unevaluated'`, `extent_hash=0`,
-    `n_cells_in_scope=-1`).
+    `n_rows_in_scope=-1`).
 
     Per docs/HYPOTHESIS_AS_GRAPH.md: the resulting graph IS the
     hypothesis under the principle's definition
@@ -516,7 +516,7 @@ def evaluated_graph(
             e.metadata,
             evidentiary_level=_stamp_level(e.metadata.tier, pe.verdict),
             extent_hash=pe.extent_hash,
-            n_cells_in_scope=pe.n_cells_in_scope,
+            n_rows_in_scope=pe.n_rows_in_scope,
         )
         new_edges.append(replace(e, metadata=new_meta))
     return replace(g, edges=tuple(new_edges))
@@ -532,7 +532,7 @@ class ClusterVerdict(Enum):
     the cluster level: SUPPORTED / REFUTED / UNDERPOWERED, plus
 
     - EMPTY_EXTENT for clusters whose member bridges all admit
-      zero cells on the current cache (the framework cannot
+      zero rows on the current cache (the framework cannot
       empirically distinguish them).
 
     "Named bridge missing from graph" — the case a Finding's
@@ -589,12 +589,12 @@ def cluster_verdict(
     unevaluateds)."""
     if not members:
         return ClusterVerdict.UNDERPOWERED
-    if all(m.n_cells_in_scope == 0 for m in members):
+    if all(m.n_rows_in_scope == 0 for m in members):
         return ClusterVerdict.EMPTY_EXTENT
     levels = {m.evidentiary_level for m in members}
     if 'refuted' in levels:
         return ClusterVerdict.REFUTED
-    if any(m.n_cells_in_scope <= 0 for m in members):
+    if any(m.n_rows_in_scope <= 0 for m in members):
         # A zero-row or unknown-count member cannot corroborate a
         # composite claim. The all-zero case was classified above.
         return ClusterVerdict.UNDERPOWERED

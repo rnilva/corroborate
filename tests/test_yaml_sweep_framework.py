@@ -306,7 +306,7 @@ class _NamedStub:
 def test_assert_unique_cfg_names_passes_on_unique() -> None:
     """Three distinct names → no raise. The post-expansion
     uniqueness check is what `dispatch_sweep` calls before any
-    cell runs to refuse silent overwrites at
+    row runs to refuse silent overwrites at
     `<out_dir>/<cfg.name>/`."""
     configs = (
         _NamedStub(name='vanilla'),

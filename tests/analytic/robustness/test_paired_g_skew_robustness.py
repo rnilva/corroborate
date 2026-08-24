@@ -23,7 +23,7 @@ This file empirically quantifies the bias and SE-accuracy of
   - **t-distribution(df=5)** — heavy-tailed, finite variance.
 
 Each probe runs a Monte Carlo grid of K=500 replicates per
-(distribution, n) cell. Empirical bias and Monte-Carlo SD of g
+(distribution, n) row. Empirical bias and Monte-Carlo SD of g
 are pinned as regression-style assertions — a future fix that
 narrows the bias would breach the "≥" bound; a regression that
 widens it would breach the "≤" bound.
@@ -64,7 +64,7 @@ import numpy as np
 import numpy.typing as npt
 
 from corroborate.analyses.paired.paired_g import paired_g
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -85,26 +85,26 @@ _K_REPLICATES = 500
 the empirical estimate is precise to ±0.011 (≤ 10% of bias)."""
 
 
-def _make_paired_cells(
+def _make_paired_rows(
     delta: npt.NDArray[np.float64],
 ) -> list[Mapping[str, object]]:
-    """Construct paired (treatment, baseline) cells where
+    """Construct paired (treatment, baseline) rows where
     treatment_value − baseline_value = delta[s]. Setting
     baseline_value = 0 makes Δ = treatment_value directly,
     isolating the distributional probe to the treatment-side
     draws."""
     n = len(delta)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for s in range(n):
-        cells.append({
+        rows.append({
             'arm_key': 'T', 'seed': s, 'env_name': 'X',
             'value': float(delta[s]),
         })
-        cells.append({
+        rows.append({
             'arm_key': 'B', 'seed': s, 'env_name': 'X',
             'value': 0.0,
         })
-    return cells
+    return rows
 
 
 def _measure_paired_g_bias(
@@ -128,9 +128,9 @@ def _measure_paired_g_bias(
     for k in range(n_replicates):
         rng = np.random.default_rng(_det_seed(seed_tag, n, k))
         delta = draw_delta(rng, n)
-        cells = _make_paired_cells(delta)
+        rows = _make_paired_rows(delta)
         result = paired_g.fn(
-            cells_to_dataframe(cells),
+            to_dataframe(rows),
             treatment_arm='T',
             baseline_arm='B',
             pair_by=('seed',),

@@ -252,7 +252,7 @@ def test_coerce_nested_dataclass_partial_spearman() -> None:
     )
     r = PartialSpearmanResult(
         x='bg', y='outcome', conditioning=('jensen_gap',),
-        stratify_by='env_name', granularity='per_cell',
+        stratify_by='env_name', granularity='per_row',
         rho_pooled=-0.42, p_value=0.001,
         n_obs_total=120, n_strata=4,
     )
@@ -260,7 +260,7 @@ def test_coerce_nested_dataclass_partial_spearman() -> None:
     assert isinstance(out, dict)
     assert out['rho_pooled'] == -0.42
     assert out['conditioning'] == ['jensen_gap']
-    assert out['granularity'] == 'per_cell'
+    assert out['granularity'] == 'per_row'
 
 
 def test_coerce_per_burst_result_full_panel() -> None:
@@ -371,7 +371,7 @@ def test_coerce_gate_result_to_dict() -> None:
 # ============ build_report — orchestration ============
 
 
-def _empty_cells() -> pl.DataFrame:
+def _empty_rows() -> pl.DataFrame:
     return pl.DataFrame({
         'id': ['c0'], 'env_name': ['Pong'], 'arm_key': ['baseline'],
     })
@@ -381,7 +381,7 @@ def test_build_report_with_errored_bridge_end_to_end() -> None:
     """Bridges that raise inside `runner.run()` show up in the
     report's `errored_bridges` (was previously vanishing into
     stderr). End-to-end: actually invoke `runner.run()` against a
-    cell DataFrame, including a bridge whose `holds_when` raises;
+    row DataFrame, including a bridge whose `holds_when` raises;
     confirm the report carries the error info through.
 
     This exercises the runner's exception-capture path (line ~329)
@@ -417,7 +417,7 @@ def test_build_report_with_errored_bridge_end_to_end() -> None:
         bridges=(my_bridge,),
         results={},
         errors={my_bridge.name: captured_exc},
-        n_cells_total=0,
+        n_rows_total=0,
         cache_path=None,
         measurable_signatures={},
     )
@@ -444,7 +444,7 @@ def _synthetic_report_with_floats() -> RunReport:
         hypothesis_module='exp.fake',
         timestamp_utc='2026-05-06T00:00:00+00:00',
         git_commit='abcdef123456',
-        n_cells_total=10,
+        n_rows_total=10,
         cache_path='experiments/data/cache/fake.parquet',
         measurable_signatures=MappingProxyType({'a': '1', 'b': '2'}),
         bridges=(
@@ -453,7 +453,7 @@ def _synthetic_report_with_floats() -> RunReport:
                 direction='direct', tier='associational',
                 pair_by=('seed',), predicted_direction='a_gt_b',
                 scope_repr=None, params=MappingProxyType({}),
-                n_cells_pre_scope=10, n_cells_in_scope=8,
+                n_rows_pre_scope=10, n_rows_in_scope=8,
                 verdict='held',
                 analysis_results=MappingProxyType({
                     'paired_g': _coerce_value(pg),  # type: ignore[dict-item]
@@ -507,7 +507,7 @@ def test_write_report_nan_inf_emit_json_null_not_string_sentinel(
     report = RunReport(
         hypothesis_module='exp.fake',
         timestamp_utc='2026-05-06T00:00:00+00:00',
-        git_commit=None, n_cells_total=0, cache_path=None,
+        git_commit=None, n_rows_total=0, cache_path=None,
         measurable_signatures=MappingProxyType({}),
         bridges=(
             BridgeReportEntry(
@@ -515,7 +515,7 @@ def test_write_report_nan_inf_emit_json_null_not_string_sentinel(
                 direction='direct', tier='associational',
                 pair_by=('seed',), predicted_direction=None,
                 scope_repr=None, params=MappingProxyType({}),
-                n_cells_pre_scope=0, n_cells_in_scope=0,
+                n_rows_pre_scope=0, n_rows_in_scope=0,
                 verdict='held',
                 analysis_results=MappingProxyType({
                     'paired_g': _coerce_value(pg),  # type: ignore[dict-item]
@@ -540,7 +540,7 @@ def test_write_report_nan_inf_emit_json_null_not_string_sentinel(
 def test_end_to_end_serializes_full_bridge_evaluation() -> None:
     """Mock-shaped: build a BridgeEvaluation directly, run through
     `_build_bridge_entry` + `_coerce_value`, assert the JSON shape
-    matches what reviewers will see. `n_cells_in_scope` flows from
+    matches what reviewers will see. `n_rows_in_scope` flows from
     BridgeEvaluation (not recomputed by report layer)."""
     from corroborate.bridge.bridge import claim_bridge
     from corroborate.graph.causal import Direction, Tier
@@ -566,9 +566,9 @@ def test_end_to_end_serializes_full_bridge_evaluation() -> None:
         analysis_results=MappingProxyType({'paired_g': paired_g}),
         warnings=(),
         blocked_by=None,
-        n_cells_in_scope=42,
+        n_rows_in_scope=42,
     )
-    entry = _build_bridge_entry(my_bridge, ev, n_cells_total=100)
+    entry = _build_bridge_entry(my_bridge, ev, n_rows_total=100)
     coerced = _coerce_value(entry)
     assert isinstance(coerced, dict)
     assert coerced['verdict'] == 'held'
@@ -576,8 +576,8 @@ def test_end_to_end_serializes_full_bridge_evaluation() -> None:
     assert coerced['tier'] == 'associational'
     assert coerced['predicted_direction'] == 'a_gt_b'
     assert coerced['pair_by'] == ['seed']
-    assert coerced['n_cells_in_scope'] == 42
-    assert coerced['n_cells_pre_scope'] == 100
+    assert coerced['n_rows_in_scope'] == 42
+    assert coerced['n_rows_pre_scope'] == 100
     pg = coerced['analysis_results']['paired_g']
     assert pg['g'] == 1.5
     assert 'p_value' in pg  # property included

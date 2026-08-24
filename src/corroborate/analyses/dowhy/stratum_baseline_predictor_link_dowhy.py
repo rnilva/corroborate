@@ -100,7 +100,7 @@ def _nan_refutation(
 
 @analysis
 def stratum_baseline_predictor_link_dowhy(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -122,7 +122,7 @@ def stratum_baseline_predictor_link_dowhy(
 
     Phase 6 migration (2026-05-13): delegates panel-build to
     `stratum_panel`. The per-stratum rows + env-one-hot DAG
-    construction stay; the cell→stratum aggregation moves into
+    construction stay; the row→stratum aggregation moves into
     the shared panel primitive. Result type and semantics
     unchanged — verdict-preserving.
 
@@ -143,7 +143,7 @@ def stratum_baseline_predictor_link_dowhy(
         else (predictor_col, target_col)
     )
     panel = stratum_panel.fn(
-        cells,
+        df,
         measurables=measurables_for_panel,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,

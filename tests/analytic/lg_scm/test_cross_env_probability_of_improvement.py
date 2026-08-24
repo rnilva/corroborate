@@ -20,7 +20,7 @@ Tests:
    permutation gives p ≈ 0.5 by symmetry.
 
 3. **Saturated stratum contributes neutrally**: hand-built
-   synthetic cells where one stratum has both arms drawing from
+   synthetic rows where one stratum has both arms drawing from
    the same distribution. P_stratum ≈ 0.5; the (P_stratum − 0.5)
    contribution is zero → primitive doesn't inflate p_permutation.
 
@@ -43,7 +43,7 @@ from corroborate.analyses.panel.cross_env_probability_of_improvement import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _MU_X = 1.0
@@ -64,7 +64,7 @@ def _scm(beta_xz: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells(
+def _build_rows(
     env_betas: Mapping[str, tuple[float, float]],
 ) -> list[Mapping[str, object]]:
     envs = {n: (_scm(t), _scm(b)) for n, (t, b) in env_betas.items()}
@@ -86,9 +86,9 @@ def test_p_xy_all_positive_supported_by_permutation() -> None:
     (= sum of 10 × +0.5). Sign-permutation p:
     `2 ** 10 = 1024` enumerations, only the all-flip-positive
     flip yields perm_dev ≥ +5.0, so p ≈ 1/1024."""
-    cells = _build_cells(_ALL_POSITIVE_ENVS)
+    rows = _build_rows(_ALL_POSITIVE_ENVS)
     result = cross_env_probability_of_improvement.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -121,9 +121,9 @@ def test_p_xy_mixed_direction_null() -> None:
     Observed sum = 0. By symmetry, half of the 2^10 sign-flips
     produce perm_dev ≥ 0 → p ≈ 0.5 (plus boundary contribution
     from the perm_dev = 0 cases since we use ≥)."""
-    cells = _build_cells(_MIXED_ENVS)
+    rows = _build_rows(_MIXED_ENVS)
     result = cross_env_probability_of_improvement.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -145,33 +145,33 @@ def test_p_xy_saturated_stratum_contributes_neutrally() -> None:
     samples (every tie), U = 0.5 × n_t × n_b → P_xy = 0.5
     exactly. observed_dev contribution is zero → primitive
     doesn't inflate aggregate."""
-    # Hand-build cells: 3 strata, 5 seeds each arm. Two strata
+    # Hand-build rows: 3 strata, 5 seeds each arm. Two strata
     # decisively positive (Δ ≈ +5); one stratum saturated (both
     # arms identical samples).
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for env in ('env_pos1', 'env_pos2'):
         for seed in range(5):
-            cells.append({
+            rows.append({
                 'env_name': env, 'arm_key': 'baseline',
                 'seed': seed, 'y': 1.0 + 0.1 * seed,
             })
-            cells.append({
+            rows.append({
                 'env_name': env, 'arm_key': 'treatment',
                 'seed': seed, 'y': 6.0 + 0.1 * seed,
             })
     # Saturated stratum: both arms get identical samples
     saturated_vals = [10.0, 10.5, 11.0, 11.5, 12.0]
     for seed, v in enumerate(saturated_vals):
-        cells.append({
+        rows.append({
             'env_name': 'env_sat', 'arm_key': 'baseline',
             'seed': seed, 'y': v,
         })
-        cells.append({
+        rows.append({
             'env_name': 'env_sat', 'arm_key': 'treatment',
             'seed': seed, 'y': v,
         })
     result = cross_env_probability_of_improvement.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -206,30 +206,30 @@ def test_p_xy_exact_enumeration_hand_checked() -> None:
       (-,-,+): -0.5 -0.5 +0.0 = -1.0
       (-,-,-): -0.5 -0.5 -0.0 = -1.0
     n_ge = 2 (the +1.0 cases); p_permutation = 2/8 = 0.25."""
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     # Two strata where treatment dominates entirely:
     for env in ('env_a', 'env_b'):
         for seed in range(5):
-            cells.append({
+            rows.append({
                 'env_name': env, 'arm_key': 'baseline',
                 'seed': seed, 'y': float(seed),
             })
-            cells.append({
+            rows.append({
                 'env_name': env, 'arm_key': 'treatment',
                 'seed': seed, 'y': 100.0 + float(seed),
             })
     # One saturated stratum (identical samples)
     for seed in range(5):
-        cells.append({
+        rows.append({
             'env_name': 'env_sat', 'arm_key': 'baseline',
             'seed': seed, 'y': float(seed),
         })
-        cells.append({
+        rows.append({
             'env_name': 'env_sat', 'arm_key': 'treatment',
             'seed': seed, 'y': float(seed),
         })
     result = cross_env_probability_of_improvement.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -246,32 +246,32 @@ def test_p_xy_exact_enumeration_hand_checked() -> None:
 
 
 def test_p_xy_min_seeds_filter_drops_stratum() -> None:
-    """When a stratum has fewer than `min_seeds_per_arm` cells in
+    """When a stratum has fewer than `min_seeds_per_arm` rows in
     either arm, it's dropped from the panel (not included in
     n_strata)."""
-    cells: list[Mapping[str, object]] = []
-    # Valid stratum: 5 cells per arm
+    rows: list[Mapping[str, object]] = []
+    # Valid stratum: 5 rows per arm
     for seed in range(5):
-        cells.append({
+        rows.append({
             'env_name': 'env_ok', 'arm_key': 'baseline',
             'seed': seed, 'y': 0.0,
         })
-        cells.append({
+        rows.append({
             'env_name': 'env_ok', 'arm_key': 'treatment',
             'seed': seed, 'y': 1.0,
         })
-    # Invalid stratum: only 2 cells per arm — below floor
+    # Invalid stratum: only 2 rows per arm — below floor
     for seed in range(2):
-        cells.append({
+        rows.append({
             'env_name': 'env_small', 'arm_key': 'baseline',
             'seed': seed, 'y': 0.0,
         })
-        cells.append({
+        rows.append({
             'env_name': 'env_small', 'arm_key': 'treatment',
             'seed': seed, 'y': 1.0,
         })
     result = cross_env_probability_of_improvement.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -287,19 +287,19 @@ def test_p_xy_mc_fallback_above_cap() -> None:
     the primitive switches from exact enumeration to MC
     sampling. `permutation_exact` becomes False;
     `n_permutation_effective` = `n_permutation` (not 2^n)."""
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(16):
         for seed in range(5):
-            cells.append({
+            rows.append({
                 'env_name': f'env_{i:02d}', 'arm_key': 'baseline',
                 'seed': seed, 'y': float(seed),
             })
-            cells.append({
+            rows.append({
                 'env_name': f'env_{i:02d}', 'arm_key': 'treatment',
                 'seed': seed, 'y': 100.0 + float(seed),
             })
     result = cross_env_probability_of_improvement.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y',
         treatment_arm='treatment',
         baseline_arm='baseline',

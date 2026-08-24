@@ -29,7 +29,7 @@ def _write_real_parquet(p: Path, n_rows: int = 1000) -> None:
     import polars as pl
     p.parent.mkdir(parents=True, exist_ok=True)
     df = pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(n_rows)],
+        'id': [f'row-{i}' for i in range(n_rows)],
         'x': list(range(n_rows)),
     })
     df.write_parquet(p)
@@ -176,7 +176,7 @@ def test_archive_records_row_ids_for_runrow_parquet(
     """**Invariant I5** (SWEEP_PERSISTENCY.md): when a parquet
     archived via `archive()` carries an `id` column (RunRow or
     TraceRow shards), the manifest entry records the per-shard
-    list of IDs. Enables `id → shard → cell address` traceability
+    list of IDs. Enables `id → shard → row address` traceability
     when investigating anomalous rows in a merged corpus."""
     from corroborate.bridge.verdict import Verdict
     from corroborate.corpus.persistence import write_runrows
@@ -235,7 +235,7 @@ def test_remotefile_round_trip_with_row_ids() -> None:
     """RemoteFile.from_dict / as_dict round-trip preserves
     row_ids when present."""
     f = cloud.RemoteFile(
-        relpath='tmp/cell001__runs.parquet',
+        relpath='tmp/row001__runs.parquet',
         size_bytes=100, sha256='deadbeef',
         pushed_at='2026-05-06T00:00:00Z',
         row_ids=('a', 'b', 'c'),
@@ -504,10 +504,10 @@ def test_purge_cloud_fallback_refuses_uncovered_row_ids(
     remote_prefix = f'file://{tmp_path / "remote"}'
     _ = _sweep_with_subcorpus_archived(sweep_dir, remote_prefix, 'canonical')
     # Replace top-level runs.parquet with row_ids that don't
-    # appear in the archived sub-corpus (cell-200 .. cell-399).
+    # appear in the archived sub-corpus (row-200 .. row-399).
     import polars as pl
     pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(200, 400)],
+        'id': [f'row-{i}' for i in range(200, 400)],
         'x': list(range(200)),
     }).write_parquet(sweep_dir / 'runs.parquet')
 
@@ -524,7 +524,7 @@ def test_archive_picks_up_nested_sidecar_tree(
     sweep_dir: Path, remote_root: str,
 ) -> None:
     """SIDECAR_DIRS walks recurse: nested layouts like
-    `q_checkpoints/<arm_name>/cell*.msgpack` (produced by multi-arm
+    `q_checkpoints/<arm_name>/row*.msgpack` (produced by multi-arm
     sweeps that namespace ckpts per intervention via the
     yaml_sweep.py post-merge lift) MUST be picked up by the default
     file selection, not just direct children of the sidecar dir.
@@ -532,9 +532,9 @@ def test_archive_picks_up_nested_sidecar_tree(
     Regression for the 2026-05-26 substrate-coverage gap: the
     nested layout used to be silently skipped by `is_file()` on
     iterdir entries that landed on arm-named subdirs."""
-    msgpack_a = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst00.msgpack'
-    msgpack_b = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst01.msgpack'
-    msgpack_c = sweep_dir / 'q_checkpoints' / 'arm_b' / 'cell001_0_final.msgpack'
+    msgpack_a = sweep_dir / 'q_checkpoints' / 'arm_a' / 'row000_0_burst00.msgpack'
+    msgpack_b = sweep_dir / 'q_checkpoints' / 'arm_a' / 'row000_0_burst01.msgpack'
+    msgpack_c = sweep_dir / 'q_checkpoints' / 'arm_b' / 'row001_0_final.msgpack'
     for p in (msgpack_a, msgpack_b, msgpack_c):
         p.parent.mkdir(parents=True, exist_ok=True)
         _ = p.write_bytes(b'msgpack-payload-' + p.name.encode())
@@ -545,9 +545,9 @@ def test_archive_picks_up_nested_sidecar_tree(
     relpaths = {f.relpath for f in manifest.files}
     assert 'runs.parquet' in relpaths
     assert 'traces.parquet' in relpaths
-    assert 'q_checkpoints/arm_a/cell000_0_burst00.msgpack' in relpaths
-    assert 'q_checkpoints/arm_a/cell000_0_burst01.msgpack' in relpaths
-    assert 'q_checkpoints/arm_b/cell001_0_final.msgpack' in relpaths
+    assert 'q_checkpoints/arm_a/row000_0_burst00.msgpack' in relpaths
+    assert 'q_checkpoints/arm_a/row000_0_burst01.msgpack' in relpaths
+    assert 'q_checkpoints/arm_b/row001_0_final.msgpack' in relpaths
     assert len(relpaths) == 5
 
 
@@ -559,7 +559,7 @@ def test_purge_deletes_both_parquets_and_nested_sidecars(
     the parquets AND the nested-sidecar msgpacks via the unified
     manifest. This is what makes the implementation's
     `keep_q_checkpoint_*` opt-in self-cleaning at sweep end."""
-    msgpack = sweep_dir / 'q_checkpoints' / 'arm_a' / 'cell000_0_burst00.msgpack'
+    msgpack = sweep_dir / 'q_checkpoints' / 'arm_a' / 'row000_0_burst00.msgpack'
     msgpack.parent.mkdir(parents=True, exist_ok=True)
     _ = msgpack.write_bytes(b'ckpt-bytes')
 
@@ -569,7 +569,7 @@ def test_purge_deletes_both_parquets_and_nested_sidecars(
     # Both parquets + the nested msgpack land in the deletion set.
     assert set(deleted) == {
         'runs.parquet', 'traces.parquet',
-        'q_checkpoints/arm_a/cell000_0_burst00.msgpack',
+        'q_checkpoints/arm_a/row000_0_burst00.msgpack',
     }
     assert not (sweep_dir / 'runs.parquet').exists()
     assert not msgpack.exists()
@@ -638,7 +638,7 @@ def _write_multicol_parquet(p: Path, n_rows: int = 500) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     fat = lambda: [random.random() for _ in range(300)]
     df = pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(n_rows)],
+        'id': [f'row-{i}' for i in range(n_rows)],
         'wanted_col': [random.random() for _ in range(n_rows)],
         'fat_col_a': [fat() for _ in range(n_rows)],
         'fat_col_b': [fat() for _ in range(n_rows)],

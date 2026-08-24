@@ -218,7 +218,7 @@ def test_cache_write_path_uses_atomic_helper_end_to_end(
 
     cache_path = tmp_path / 'h.parquet'
     new_data = pl.DataFrame({
-        'id': ['cell-0', 'cell-1'],
+        'id': ['row-0', 'row-1'],
         'arm_key': ['baseline', 'baseline'],
         'env_name': ['Test', 'Test'],
     })
@@ -265,7 +265,7 @@ def test_invalidate_drifted_drops_orphan_measurable_columns(
     # Cache has the orphan's column; required set is empty
     # (the bridges no longer ask for it).
     cache = pl.DataFrame({
-        'id': ['cell-0', 'cell-1'],
+        'id': ['row-0', 'row-1'],
         'arm_key': ['baseline', 'baseline'],
         'soon_to_be_orphan': [1.0, 1.0],   # the orphan column
     })
@@ -300,7 +300,7 @@ def test_estimate_max_workers_caps_by_largest_trace_size(
         'remote_root': 'file:///fake',
         'files': [
             {
-                'relpath': 'tmp/cell001__traces.parquet',
+                'relpath': 'tmp/row001__traces.parquet',
                 'size_bytes': 4 * 1024**3,   # 4 GB
                 'sha256': 'a' * 64,
                 'pushed_at': '2026-05-06T00:00:00Z',
@@ -413,7 +413,7 @@ def test_invalidate_drifted_keeps_unregistered_columns(
     from corroborate.runner.runner import _invalidate_drifted
 
     cache = pl.DataFrame({
-        'id': ['cell-0'],
+        'id': ['row-0'],
         'arm_key': ['baseline'],
         'env_name': ['CartPole-v1'],
         'raw_record_field': [42.0],   # NOT a registered measurable
@@ -451,7 +451,7 @@ def test_ingest_and_compute_directory_path_writes_cache_and_unlinks_legacy_manif
         _manifest_path,
     )
 
-    # Two corpora as subdirs of `data_dir`. Each cell carries a
+    # Two corpora as subdirs of `data_dir`. Each row carries a
     # distinct `seed` so `_dedup_by_content` doesn't collapse
     # content-equal rows.
     data_dir = tmp_path / 'corpora'
@@ -460,7 +460,7 @@ def test_ingest_and_compute_directory_path_writes_cache_and_unlinks_legacy_manif
         sub = data_dir / name
         sub.mkdir()
         df = pl.DataFrame({
-            'id': [f'{name}-cell-0', f'{name}-cell-1'],
+            'id': [f'{name}-row-0', f'{name}-row-1'],
             'arm_key': ['baseline', 'baseline'],
             'env_name': [env, env],
             'seed': [0, 1],
@@ -481,7 +481,7 @@ def test_ingest_and_compute_directory_path_writes_cache_and_unlinks_legacy_manif
     )
 
     assert merged.height == 4, (
-        f'expected 4 cells (2 corpora × 2 cells); got {merged.height}'
+        f'expected 4 rows (2 corpora × 2 rows); got {merged.height}'
     )
     assert cache_path.exists()
     assert not legacy_manifest.exists(), (

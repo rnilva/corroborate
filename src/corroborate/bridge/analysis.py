@@ -13,7 +13,7 @@ the claim's `holds_when` body consumes:
 
     @analysis
     def paired_g(
-        cells: pl.DataFrame, *,
+        df: pl.DataFrame, *,
         treatment_arm, baseline_arm, pair_by, source, ...,
     ) -> PairedGResult: ...
 
@@ -34,33 +34,33 @@ The framework reads `holds_when`'s signature, finds the
 parameter named `paired_g` (no default → fixture), looks up the
 registered analysis with that name, parameterises it from the
 bridge's structural fields + the defaulted-kwarg `params` bag,
-runs it on the cells, and injects the result.
+runs it on the df, and injects the result.
 
 Analyses are registered globally by `fn.__name__`. The naming is
 the consumption protocol: a bridge's parameter name must match a
 registered analysis name.
 
-**Canonical cells input.** Every analysis takes a plain
+**Canonical df input.** Every analysis takes a plain
 `pl.DataFrame` — the transparent currency any polars user
 already holds; no framework shape, no union, no per-primitive
 conversion. Row-holding callers (the bridge evaluator with its
 gate rows, tests built from `RunRow.as_dict()`, ad-hoc dict
 lists) convert ONCE at their own boundary via
-`corroborate.data.cells_to_dataframe`; a row-shaped analysis
-body iterates `to_dicts(cells)` internally as an implementation
+`corroborate.data.to_dataframe`; a row-shaped analysis
+body iterates `to_dicts(df)` internally as an implementation
 detail. The wrapper therefore adds no hidden conversion:
-`__call__` is pure typed delegation, and `panel.cells` works
+`__call__` is pure typed delegation, and `panel.df` works
 against the whole registry by contract rather than by dispatch.
 The contract is enforced at registration — `@analysis` rejects a
 first parameter that does not spell `pl.DataFrame` — and a
 registry-wide test proves the whole shipped surface passed it.
 
 `Analysis[C, O, **P]` preserves the wrapped fn's full surface —
-cells shape `C`, result `O`, keyword surface `P` — through the
+df shape `C`, result `O`, keyword surface `P` — through the
 wrapper (CLAUDE.md: ParamSpec preserves caller signature through
 generic wrappers), so direct exploration calls are checked
 against the analysis's real signature. Keeping `C` and `O` first
-also preserves the original public `Analysis[Cells, Result]`
+also preserves the original public `Analysis[Rows, Result]`
 annotation spelling; callers that need to spell the captured
 surface explicitly can supply `P` as the optional third argument.
 The registry stores the erased upper bound
@@ -84,11 +84,11 @@ from corroborate._internals.introspection import (
 )
 from corroborate._internals.registry import Registry
 
-_CANONICAL_CELLS = 'pl.DataFrame'
+_CANONICAL_DF = 'pl.DataFrame'
 
 
-def _require_canonical_cells(fn: Callable[..., object]) -> None:
-    """Registration gate for the canonical cells contract.
+def _require_canonical_rows(fn: Callable[..., object]) -> None:
+    """Registration gate for the canonical df contract.
 
     Every analysis declares a plain ``pl.DataFrame`` — spelled
     literally — on its first parameter (module docstring). The
@@ -109,15 +109,15 @@ def _require_canonical_cells(fn: Callable[..., object]) -> None:
         annotation = get_param_annotation(params[0])
     if (
         annotation is inspect.Parameter.empty
-        or str(annotation) != _CANONICAL_CELLS
+        or str(annotation) != _CANONICAL_DF
     ):
         raise TypeError(
-            f'@analysis {fn.__name__!r}: the first (cells) parameter '
-            f'must be annotated "{_CANONICAL_CELLS}" (spelled '
+            f'@analysis {fn.__name__!r}: the first (df) parameter '
+            f'must be annotated "{_CANONICAL_DF}" (spelled '
             f'literally). Analyses take a plain DataFrame; a '
             f'row-holding caller converts once at its own boundary '
-            f'via `corroborate.data.cells_to_dataframe`, and a '
-            f'row-shaped body iterates `to_dicts(cells)` internally; '
+            f'via `corroborate.data.to_dataframe`, and a '
+            f'row-shaped body iterates `to_dicts(df)` internally; '
             f'got {str(annotation)!r}',
         )
 
@@ -130,7 +130,7 @@ class Analysis[
 ]:
     """Typed wrapper for a registered analysis.
 
-    Generic over the wrapped fn's full surface: `C` is the cells
+    Generic over the wrapped fn's full surface: `C` is the df
     shape the fn declares for its first positional parameter, `P`
     captures the remaining (keyword) parameters, and `O` is the
     typed result the bridge `holds_when` consumes. A direct call
@@ -140,7 +140,7 @@ class Analysis[
     (= `fn.__name__`).
 
     `reads` declares record-key columns the analysis touches off
-    the cell record directly (i.e. `cell['<key>']`-style),
+    the row record directly (i.e. `row['<key>']`-style),
     BYPASSING the @measurable resolver. The runner unions these
     with bridge measurables' transitive_reads so the trace-column
     join + the no-drop set know what to bring in. Scalar fields
@@ -148,7 +148,7 @@ class Analysis[
     NOT need to be declared — they're loaded for free."""
     # `Callable[Concatenate[C, P], O]` would make the first
     # parameter positional-only even when the wrapped function
-    # declares a normal positional-or-keyword `cells` parameter.
+    # declares a normal positional-or-keyword `df` parameter.
     # Keep `.fn` gradual; `__call__` below is the surface whose
     # arguments are preserved precisely by `C` and `P`.
     fn: Callable[..., O]
@@ -157,12 +157,12 @@ class Analysis[
 
     def __call__(
         self,
-        cells: C,
+        df: C,
         /,
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> O:
-        """Run the analysis directly on a corpus or a Panel's cells.
+        """Run the analysis directly on a corpus or a Panel's df.
 
         Bridges never need this — the runner resolves analyses by
         parameter name and injects the typed result (`run_for`).
@@ -172,19 +172,19 @@ class Analysis[
 
         Pure delegation: every analysis takes a plain
         `pl.DataFrame` (see the module docstring), so the wrapper
-        performs no conversion and `panel.cells` flows through
+        performs no conversion and `panel.df` flows through
         untouched; a caller holding rows converts once via
-        `corroborate.data.cells_to_dataframe`. Unlike `run_for`,
+        `corroborate.data.to_dataframe`. Unlike `run_for`,
         kwargs are passed through unfiltered — and, via `P`,
         statically checked."""
-        return self.fn(cells, *args, **kwargs)
+        return self.fn(df, *args, **kwargs)
 
 
 type _StoredAnalysis = Analysis[object, object, ...]
 """Registry-side erasure — the generic upper bound at the
 container boundary, never at element use sites. `P = ...` keeps
 the runner's dynamically-filtered kwarg injection callable;
-`C = object` admits any cells shape; registry consumers read
+`C = object` admits any df shape; registry consumers read
 `.fn` / `.name` / `.reads`, they don't re-narrow elements."""
 
 
@@ -239,7 +239,7 @@ def analysis(
     The remaining
     parameters are captured as `P` (PEP 612 `Concatenate`) and the
     result as `O`, so a direct exploration call like
-    `paired_g(panel.cells, source=...)` is checked against the
+    `paired_g(panel.df, source=...)` is checked against the
     analysis's real signature. The bridge path is unaffected:
     `run_for` supplies kwargs dynamically through the registry's
     erased view.
@@ -247,10 +247,10 @@ def analysis(
     Two decorator forms:
 
         @analysis
-        def paired_g(cells: pl.DataFrame, *, ...) -> PairedGResult: ...
+        def paired_g(df: pl.DataFrame, *, ...) -> PairedGResult: ...
 
         @analysis(reads=('<key_a>', '<key_b>'))
-        def paired_link_per_burst(cells: pl.DataFrame, *, ...) -> ...: ...
+        def paired_link_per_burst(df: pl.DataFrame, *, ...) -> ...: ...
 
     `reads` declares trace-store record-keys the analysis touches
     directly (without going through the @measurable resolver). The
@@ -262,7 +262,7 @@ def analysis(
     def _build[**P, C, O](
         fn_inner: Callable[Concatenate[C, P], O],
     ) -> Analysis[C, O, P]:
-        _require_canonical_cells(fn_inner)
+        _require_canonical_rows(fn_inner)
         name = fn_inner.__name__
         wrapper: Analysis[C, O, P] = Analysis(
             fn=fn_inner,
@@ -311,19 +311,19 @@ def _kwargs_for(
 
 def run_for(
     analysis_obj: _StoredAnalysis,
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     bridge_params: Mapping[str, object],
 ) -> object:
-    """Invoke `analysis_obj.fn(cells, **filtered_kwargs)` where
+    """Invoke `analysis_obj.fn(df, **filtered_kwargs)` where
     `filtered_kwargs` is the subset of `bridge_params` matching
     the analysis's signature."""
     kwargs = _kwargs_for(analysis_obj, bridge_params)
-    return analysis_obj.fn(cells, **kwargs)
+    return analysis_obj.fn(df, **kwargs)
 
 
 def resolve_for_holds_when(
     holds_when: Callable[..., object],
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     bridge_params: Mapping[str, object],
 ) -> dict[str, object]:
     """Walk `holds_when`'s signature; for each parameter WITHOUT a
@@ -360,7 +360,7 @@ def resolve_for_holds_when(
                 f'known analyses: {_REGISTRY.names()}',
             )
         out[param_name] = run_for(
-            analysis_obj, cells, bridge_params,
+            analysis_obj, df, bridge_params,
         )
     return out
 

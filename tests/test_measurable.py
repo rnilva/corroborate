@@ -594,7 +594,7 @@ def test_resolve_one_skips_record_value_when_none() -> None:
 
 def test_resolve_one_skips_record_value_when_nan() -> None:
     """P1 fix — NaN scalar is treated as missing. Mirrors how
-    `_has_missing_values` classifies NaN cells as needing
+    `_has_missing_values` classifies NaN rows as needing
     recompute."""
     from corroborate.measurables import evaluate_with_measurables
 

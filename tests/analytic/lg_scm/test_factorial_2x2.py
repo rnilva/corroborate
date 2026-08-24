@@ -13,7 +13,7 @@ Four arms (using the analysis's A/B/C/D convention):
     arm_c = (xz=0.8, zy=1.0)   — flips axis A
     arm_d = (xz=0.8, zy=2.0)   — flips both
 
-Per-cell `y_mean` expectation under shared-seed cancellation:
+Per-row `y_mean` expectation under shared-seed cancellation:
 
     E[y_mean(arm)] = beta_zy(arm) * beta_xz(arm) * mu_x
 
@@ -43,7 +43,7 @@ from corroborate.analyses.paired.factorial_2x2 import (
     factorial_2x2_interaction,
 )
 from corroborate.corpus.schema import RunRow
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
@@ -74,8 +74,8 @@ def _scm(*, beta_xz: float, beta_zy: float) -> LinearGaussianSCM:
 def _build_2x2_corpus() -> list[Mapping[str, object]]:
     """Construct a 4-arm corpus for the factorial design.
 
-    All four arms use the same `seeds`, so the 4-cell paired
-    intersection per seed is fully populated. Cell.measurements
+    All four arms use the same `seeds`, so the 4-row paired
+    intersection per seed is fully populated. Row.measurements
     carry the per-arm coefficients alongside `y_mean`."""
     rows: list[RunRow] = []
     arms = (
@@ -180,9 +180,9 @@ def test_factorial_recovers_closed_form_interaction_sign_and_magnitude() -> None
     A regression that mishandled the (D-B)-(C-A) arithmetic, mixed
     arm labels, or used unpaired SD would fail by orders of magnitude
     (and even a 30% scale error would clear the bound below)."""
-    cells = _build_2x2_corpus()
+    rows = _build_2x2_corpus()
     result = factorial_2x2_interaction.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         arm_a='arm_a', arm_b='arm_b', arm_c='arm_c', arm_d='arm_d',
         source='y_mean',
         pair_by=('seed',),
@@ -217,9 +217,9 @@ def test_factorial_corner_contrasts_recover_closed_form_per_corner() -> None:
     arms. The test asserts each corner's g matches its own closed
     form to within 10% — much sharper than `g > 0.8` (which
     structural g of ~22-28 clears with a 30× margin)."""
-    cells = _build_2x2_corpus()
+    rows = _build_2x2_corpus()
     result = factorial_2x2_interaction.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         arm_a='arm_a', arm_b='arm_b', arm_c='arm_c', arm_d='arm_d',
         source='y_mean',
         pair_by=('seed',),
@@ -300,10 +300,10 @@ def test_factorial_interaction_is_null_when_axes_have_no_joint_effect() -> None:
             seeds=range(_N_PAIRS),
             arm_key=arm_key,
         ))
-    cells: Sequence[Mapping[str, object]] = [r.as_dict() for r in rows]
+    row_dicts: Sequence[Mapping[str, object]] = [r.as_dict() for r in rows]
 
     result = factorial_2x2_interaction.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(row_dicts),
         arm_a='arm_a', arm_b='arm_b', arm_c='arm_c', arm_d='arm_d',
         source='y_mean',
         pair_by=('seed',),

@@ -20,7 +20,7 @@ Why this primitive: the existing `stratum_delta_link_dowhy`
 correlates Δ_predictor with Δ_target — vulnerable to algebraic
 tautology when predictor ⊃ target (e.g., jens = Q − MC and
 target = MC). This primitive uses **one-arm scalar predictor**
-(mean over baseline-arm cells) and **cross-arm Δ target**,
+(mean over baseline-arm rows) and **cross-arm Δ target**,
 algebraically independent when the predictor doesn't share a
 constituent with the target.
 
@@ -78,7 +78,7 @@ class StratumPanelJciResult:
 
 
 def _build_panel_arrays(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -94,50 +94,50 @@ def _build_panel_arrays(
     """Build per-stratum scalars: (baseline_predictor_mean,
     delta_target, vanilla_target_mean) per row, plus the env-
     bucket key (first element of `stratify_by`, or pulled from
-    `env_name` field on the cell)."""
+    `env_name` field on the row)."""
     by_key_arm: dict[
         tuple[object, ...],
         dict[str, list[Mapping[str, object]]],
     ] = {}
-    for cell in cells:
-        arm = cell.get(arm_field)
+    for row in rows:
+        arm = row.get(arm_field)
         if not isinstance(arm, str):
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
         try:
-            key = tuple(cell.get(k) for k in stratify_by)
+            key = tuple(row.get(k) for k in stratify_by)
         except (TypeError, KeyError):
             continue
         if any(v is None for v in key):
             continue
-        by_key_arm.setdefault(key, {}).setdefault(arm, []).append(cell)
+        by_key_arm.setdefault(key, {}).setdefault(arm, []).append(row)
 
     predictor_vals: list[float] = []
     delta_target_vals: list[float] = []
     vanilla_target_vals: list[float] = []
     envs: list[object] = []
     for key, arms_dict in by_key_arm.items():
-        t_cells = arms_dict.get(treatment_arm, [])
-        b_cells = arms_dict.get(baseline_arm, [])
-        if len(t_cells) < min_seeds_per_arm:
+        t_rows = arms_dict.get(treatment_arm, [])
+        b_rows = arms_dict.get(baseline_arm, [])
+        if len(t_rows) < min_seeds_per_arm:
             continue
-        if len(b_cells) < min_seeds_per_arm:
+        if len(b_rows) < min_seeds_per_arm:
             continue
         def _finite_floats(
-            cells_in: list[Mapping[str, object]], col: str,
+            rows_in: list[Mapping[str, object]], col: str,
         ) -> list[float]:
             out: list[float] = []
-            for c in cells_in:
+            for c in rows_in:
                 v = c.get(col)
                 if isinstance(v, (int, float)):
                     f = float(v)
                     if not math.isnan(f):
                         out.append(f)
             return out
-        b_pred = _finite_floats(b_cells, predictor_col)
-        b_target = _finite_floats(b_cells, target_col)
-        t_target = _finite_floats(t_cells, target_col)
+        b_pred = _finite_floats(b_rows, predictor_col)
+        b_target = _finite_floats(b_rows, target_col)
+        t_target = _finite_floats(t_rows, target_col)
         if (
             len(b_pred) < min_seeds_per_arm
             or len(b_target) < min_seeds_per_arm
@@ -153,7 +153,7 @@ def _build_panel_arrays(
             env_idx = stratify_by.index('env_name')
             env_v = key[env_idx]
         else:
-            env_v = b_cells[0].get('env_name')
+            env_v = b_rows[0].get('env_name')
         if not isinstance(env_v, str):
             continue
         predictor_vals.append(v_pred)
@@ -185,7 +185,7 @@ def _nan_result(
 
 @analysis
 def stratum_panel_jci_spearman(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -210,10 +210,10 @@ def stratum_panel_jci_spearman(
     (JCI + partial) is the strongest empirical falsification
     surface — it controls for both env (scale confound) and
     baseline arm's outcome (config-quality confound)."""
-    rows = to_dicts(cells)
-    cells_list = list(rows)
+    rows = to_dicts(df)
+    rows_list = list(rows)
     x_arr, dy_arr, vy_arr, envs = _build_panel_arrays(
-        cells_list,
+        rows_list,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         predictor_col=predictor_col,

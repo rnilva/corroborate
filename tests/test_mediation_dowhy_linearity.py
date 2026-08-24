@@ -23,7 +23,7 @@ import pytest
 from corroborate.analyses.dowhy.mediation_dowhy import (
     LinearityStatus, _classify_linearity, mediation_dowhy,
 )
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 # ============ Classifier branches ============
@@ -160,7 +160,7 @@ def test_reliable_negative_treatment_effect() -> None:
 
 # ============ Integration: full pipeline on synthetic data ============
 
-def _build_linear_mediation_cells(
+def _build_linear_mediation_rows(
     *, n: int = 200, beta_treat_med: float = 1.0,
     beta_med_out: float = 1.0, beta_treat_out_direct: float = 0.5,
     noise_med: float = 0.3, noise_out: float = 0.3,
@@ -173,7 +173,7 @@ def _build_linear_mediation_cells(
     sign flips. This is the implementation condition CLAUDE.md says
     `mediation_dowhy` can be trusted at."""
     rng = np.random.default_rng(seed)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(n):
         t = float(rng.normal(0.0, 1.0))
         m = beta_treat_med * t + float(rng.normal(0.0, noise_med))
@@ -181,7 +181,7 @@ def _build_linear_mediation_cells(
             beta_treat_out_direct * t + beta_med_out * m
             + float(rng.normal(0.0, noise_out))
         )
-        cells.append({
+        rows.append({
             'env_name': 'lg_scm',
             'seed': i,
             'arm_key': 'treatment',
@@ -189,12 +189,12 @@ def _build_linear_mediation_cells(
             'mediator': m,
             'outcome': y,
         })
-    return cells
+    return rows
 
 
 def test_full_pipeline_reliable_under_clean_linear_dgp() -> None:
     """End-to-end: linear DGP with same-signed mediation, low
-    noise, n=200 cells, clean DAG → `linearity_status == RELIABLE`.
+    noise, n=200 rows, clean DAG → `linearity_status == RELIABLE`.
     Verifies the classifier wires correctly through the full
     `mediation_dowhy(...)` call.
 
@@ -206,14 +206,14 @@ def test_full_pipeline_reliable_under_clean_linear_dgp() -> None:
     """
     pytest.importorskip('dowhy')
     pytest.importorskip('sklearn')
-    cells = _build_linear_mediation_cells(n=200, seed=42)
+    rows = _build_linear_mediation_rows(n=200, seed=42)
     dag: list[tuple[str, str]] = [
         ('treatment', 'mediator'),
         ('mediator', 'outcome'),
         ('treatment', 'outcome'),
     ]
     result = mediation_dowhy.fn(
-        cells_to_dataframe(cells), treatment='treatment', outcome='outcome',
+        to_dataframe(rows), treatment='treatment', outcome='outcome',
         mediators=('mediator',), dag=dag,
     )
     assert result.identified
@@ -251,7 +251,7 @@ def test_full_pipeline_sign_flipped_under_high_multicollinearity() -> None:
     pytest.importorskip('sklearn')
     rng = np.random.default_rng(7)
     n = 200
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for i in range(n):
         t = float(rng.normal(0.0, 1.0))
         # Two near-identical mediators (collinearity engineered)
@@ -263,7 +263,7 @@ def test_full_pipeline_sign_flipped_under_high_multicollinearity() -> None:
         # coefficient (direct) becomes an arbitrary residual
         # subject to multicollinearity drift.
         y = 1.0 * m1 + 1.0 * m2 + float(rng.normal(0.0, 0.3))
-        cells.append({
+        rows.append({
             'env_name': 'lg_scm',
             'seed': i,
             'arm_key': 'treatment',
@@ -279,7 +279,7 @@ def test_full_pipeline_sign_flipped_under_high_multicollinearity() -> None:
         ('mediator_b', 'outcome'),
     ]
     result = mediation_dowhy.fn(
-        cells_to_dataframe(cells), treatment='treatment', outcome='outcome',
+        to_dataframe(rows), treatment='treatment', outcome='outcome',
         mediators=('mediator_a', 'mediator_b'), dag=dag,
     )
     assert result.identified
@@ -314,7 +314,7 @@ def test_empty_mediators_raises() -> None:
     rather than degenerate."""
     with pytest.raises(ValueError, match='non-empty tuple'):
         mediation_dowhy.fn(
-            cells_to_dataframe([]), treatment='t', outcome='y', mediators=(),
+            to_dataframe([]), treatment='t', outcome='y', mediators=(),
             dag=[('t', 'y')],
         )
 

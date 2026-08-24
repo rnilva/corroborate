@@ -17,34 +17,34 @@ Both surface the shared `TimeAggregationStatus` enum
 `mediation_dowhy`'s `LinearityStatus`, surfacing burst-pool
 pathologies as a typed value rather than a runtime gotcha.
 
-Inputs are PER-BURST `List(Float64)` columns on `cells` (a
+Inputs are PER-BURST `List(Float64)` columns on `rows` (a
 `pl.DataFrame`), produced by the implementation's `_per_burst`
 measurables (see e.g. `bootstrap_gap_magnitude_per_burst` in
-`corroborate_rl.dqn.measurables`). Each cell carries an array of
+`corroborate_rl.dqn.measurables`). Each row carries an array of
 length `n_bursts` at the named columns. The primitives align by
-burst index across cells within a stratum; cells with shorter
+burst index across rows within a stratum; rows with shorter
 trajectories still contribute their prefix (the per-burst valid
-count `n_per_burst[b]` grows as the longer cells continue
-contributing past shorter cells' tails — "ragged tail"
+count `n_per_burst[b]` grows as the longer rows continue
+contributing past shorter rows' tails — "ragged tail"
 semantics, the less-information-losing form vs truncating all
-cells to the shortest stratum length).
+rows to the shortest stratum length).
 
 Granularity contract (shared between primitives):
 
   - `mediator_per_burst`, `outcome_per_burst`: str column names on
-    `cells` carrying `List[Float64]` of length `n_bursts`, OR
+    `rows` carrying `List[Float64]` of length `n_bursts`, OR
     `Measurable[..., NDArray]` instances (mirroring
     `partial_spearman`'s lazy-evaluation pattern — the framework
     reads the Measurable's cached column if present, else
-    evaluates against the cell record). Scalar columns trigger a
+    evaluates against the row record). Scalar columns trigger a
     structural raise via the `_as_float_list` shape contract.
-  - `arm_field`: str column name on `cells` carrying a per-cell
+  - `arm_field`: str column name on `rows` carrying a per-row
     string arm tag. The arm is numerically encoded (sorted-unique
     → integer code) for the rank-based Spearman; only the
     *partition* between arms matters for ρ.
 
 Per-burst alignment is "ragged tail": `n_bursts = max trajectory
-length`, `n_per_burst[b]` shrinks as shorter cells drop off.
+length`, `n_per_burst[b]` shrinks as shorter rows drop off.
 
 Shared infrastructure lives in `_common.py` (classifier, encoding,
 ragged-tail extraction). The two primitives sit in their own

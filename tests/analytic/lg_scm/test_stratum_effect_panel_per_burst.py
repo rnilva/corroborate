@@ -40,7 +40,7 @@ from corroborate.analyses.panel.stratum_effect_panel_per_burst import (
     stratum_effect_panel_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -141,14 +141,14 @@ def test_per_burst_d_recovers_closed_form_under_constant_phase() -> None:
     beta_b = 0.3
     treatments = tuple(_scm(beta_t) for _ in range(n_bursts))
     baselines = tuple(_scm(beta_b) for _ in range(n_bursts))
-    cells = run_paired_phased_arms(
+    rows = run_paired_phased_arms(
         treatments_per_burst=treatments,
         baselines_per_burst=baselines,
         seeds=range(_N_SEEDS_PER_ARM),
     )
 
     result = stratum_effect_panel_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,
@@ -166,7 +166,7 @@ def test_per_burst_d_recovers_closed_form_under_constant_phase() -> None:
         s = by_b[b]
         assert s.n_treatment == _N_SEEDS_PER_ARM, (
             f'burst {b}: n_treatment = {s.n_treatment}, '
-            f'expected {_N_SEEDS_PER_ARM} — seed pooling lost cells'
+            f'expected {_N_SEEDS_PER_ARM} — seed pooling lost rows'
         )
         assert s.n_baseline == _N_SEEDS_PER_ARM, (
             f'burst {b}: n_baseline = {s.n_baseline}, '
@@ -197,14 +197,14 @@ def test_per_burst_d_unmasks_phase_flip() -> None:
     treatments = (_scm(0.8), _scm(0.8), _scm(0.3), _scm(0.3))
     baselines = (_scm(0.3), _scm(0.3), _scm(0.8), _scm(0.8))
     n_bursts = len(treatments)
-    cells = run_paired_phased_arms(
+    rows = run_paired_phased_arms(
         treatments_per_burst=treatments,
         baselines_per_burst=baselines,
         seeds=range(_N_SEEDS_PER_ARM),
     )
 
     result = stratum_effect_panel_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,
@@ -260,14 +260,14 @@ def test_per_burst_d_returns_nan_when_arm_too_small() -> None:
     measurement."""
     treatments = (_scm(0.8),)
     baselines = (_scm(0.3),)
-    cells = run_paired_phased_arms(
+    rows = run_paired_phased_arms(
         treatments_per_burst=treatments,
         baselines_per_burst=baselines,
         seeds=range(1),  # 1 seed per arm — below the n>=2 floor
     )
 
     result = stratum_effect_panel_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,

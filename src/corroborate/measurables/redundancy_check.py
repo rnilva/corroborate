@@ -12,7 +12,7 @@ Three distinct tautology kinds, each with its own check:
   aggregation, not a causal mediator. **Detection**: jaccard on the
   measurable's `reads` field vs the outcome's source columns.
 
-- **HP-deterministic** (`flagged_hp`): the mediator's per-cell value
+- **HP-deterministic** (`flagged_hp`): the mediator's per-row value
   is a deterministic function of the HP. Example: at steady state
   with uniform sampling, `mean_replay_sample_age = capacity / 2`.
   **Detection**: OLS R² of mediator on HP ≥ threshold (default 0.95).
@@ -93,7 +93,7 @@ def is_outcome_tautological(
 
     `outcome_reads` is provided by the caller — for path-keyed
     outcomes (`eval_best_burst_mean`, etc.), this is the
-    trace columns the cell-runner aggregates from to produce that
+    trace columns the row-runner aggregates from to produce that
     path. Most RL outcome paths derive from `mc_return` per eval
     episode."""
     return jaccard(frozenset(mediator.reads), outcome_reads) >= threshold
@@ -133,8 +133,8 @@ def _r_squared(
 
 
 def is_hp_tautological(
-    mediator_per_cell: Sequence[float],
-    hp_per_cell: Sequence[float],
+    mediator_per_row: Sequence[float],
+    hp_per_row: Sequence[float],
     *,
     threshold: float = 0.95,
 ) -> bool:
@@ -146,7 +146,7 @@ def is_hp_tautological(
     in two HPs jointly (`f(lr, batch)`) won't be caught by checking
     each axis individually. For multi-axis joint R², use the audit
     panel."""
-    r2 = _r_squared(hp_per_cell, mediator_per_cell)
+    r2 = _r_squared(hp_per_row, mediator_per_row)
     if math.isnan(r2):
         return False
     return r2 >= threshold
@@ -212,19 +212,19 @@ def audit_mediator_panel(
     `outcome_reads` — trace-column names the outcome aggregates from.
       Used for the structural jaccard check.
     `hp_axes` — `RunRow.measurements` keys naming the HPs.
-    `outcome_path` — flat path to a per-cell outcome scalar. When
+    `outcome_path` — flat path to a per-row outcome scalar. When
       provided alongside `hp_stratum_axis`, the audit computes
       stratified Spearman ρ(mediator, outcome | hp_stratum) for
       each measurable.
     `hp_stratum_axis` — single HP axis to stratify by for the
       partial-correlation check. Defaults to the first axis in
       `hp_axes`. (Multi-axis stratification means more strata with
-      fewer cells each — typically not power-feasible.)
+      fewer rows each — typically not power-feasible.)
     `mediator_path_for` — optional override mapping
       `measurable.name → RunRow.measurements key`.
     `stratified_rho_threshold` — `|ρ| < threshold` flags HP-shadow.
     `stratified_alpha` — significance threshold for the test.
-    `stratified_min_stratum_size` — strata with fewer cells are
+    `stratified_min_stratum_size` — strata with fewer rows are
       skipped (Fisher-z floor at n=4).
 
     Three flags per measurable:

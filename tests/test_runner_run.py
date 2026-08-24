@@ -44,7 +44,7 @@ from corroborate.runner.runner import (
 
 def _trivial_doeffect() -> DoEffect:
     """Stub DoEffect — used only for Protocol shape; never
-    evaluates against cells in these tests."""
+    evaluates against rows in these tests."""
     from corroborate.core.claim import claim
 
     @claim
@@ -198,7 +198,7 @@ def test_load_data_dispatches_sequence_path_to_named_corpora(
     named-corpora ingest (via `_load_directory(corpus_dirs=...)`),
     not the directory-walk path. `_load_data` returns just the
     named subset; the cache-side append (preserves other
-    corpora's cells) happens in `_ingest_and_compute` —
+    corpora's rows) happens in `_ingest_and_compute` —
     separately covered by the named-append test."""
     # Force sequential processing — the parallel ProcessPoolExecutor
     # path uses fork() and stalls under pytest's stderr capture.
@@ -232,7 +232,7 @@ def test_load_data_dispatches_sequence_path_to_named_corpora(
     assert out_df is not None
     ids = sorted(out_df['id'].to_list())
     assert ids == ['a-0', 'a-1', 'b-0', 'b-1'], (
-        f'expected only a + b cells; got {ids}. CA3 may have '
+        f'expected only a + b rows; got {ids}. CA3 may have '
         f'fallen through to a directory walk.'
     )
     # walk_root should be the parent of the named corpora (the
@@ -258,9 +258,9 @@ def test_named_ingest_appends_to_existing_cache_preserving_others(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """**CA3 additivity**: `--ingest <named>` must update only the
-    named corpora's cells in the cache and leave every other
-    corpus's cells alone. Pre-fix the named-ingest path overwrote
-    the cache with just the named corpora's cells, silently
+    named corpora's rows in the cache and leave every other
+    corpus's rows alone. Pre-fix the named-ingest path overwrote
+    the cache with just the named corpora's rows, silently
     dropping the rest."""
     monkeypatch.setenv('CORROBORATE_CACHE_WORKERS', '1')
     import polars as pl
@@ -268,7 +268,7 @@ def test_named_ingest_appends_to_existing_cache_preserving_others(
 
     root = tmp_path / 'data'
     cache_path = tmp_path / 'cache.parquet'
-    # Seed a cache with cells from corpora a, b, c.
+    # Seed a cache with rows from corpora a, b, c.
     seed = pl.DataFrame({
         'id': ['a-0', 'b-0', 'c-0'],
         'env_name': ['Env_a', 'Env_b', 'Env_c'],
@@ -278,8 +278,8 @@ def test_named_ingest_appends_to_existing_cache_preserving_others(
     })
     seed.write_parquet(cache_path)
 
-    # Materialise corpus `b` with NEW cell id (`b-1`) — simulating
-    # a second sweep that produced a fresh cell. Other corpora
+    # Materialise corpus `b` with NEW row id (`b-1`) — simulating
+    # a second sweep that produced a fresh row. Other corpora
     # (a, c) only exist in the cache, not on disk.
     b_dir = root / 'b'
     b_dir.mkdir(parents=True)
@@ -307,13 +307,13 @@ def test_named_ingest_appends_to_existing_cache_preserving_others(
     )
     by_name = {row['corpus']: row['len'] for row in refreshed_corpora}
     assert by_name.get('a') == 1, (
-        f'corpus a should be preserved (had 1 cell); got {by_name}'
+        f'corpus a should be preserved (had 1 row); got {by_name}'
     )
     assert by_name.get('c') == 1, (
-        f'corpus c should be preserved (had 1 cell); got {by_name}'
+        f'corpus c should be preserved (had 1 row); got {by_name}'
     )
     assert by_name.get('b') == 1, (
-        f'corpus b should have its 1 new cell; got {by_name}'
+        f'corpus b should have its 1 new row; got {by_name}'
     )
     refreshed_ids = sorted(refreshed['id'].to_list())
     assert refreshed_ids == ['a-0', 'b-1', 'c-0'], (
@@ -416,7 +416,7 @@ def test_named_ingest_nested_colliding_leaf_names_no_eviction(
     assert sorted(cache_after_a['id'].to_list()) == ['a-0', 'a-1']
 
     # Ingest sub_b. Pre-fix this would have evicted sub_a's
-    # cells (both stamped `shared_leaf_name`); post-fix the
+    # rows (both stamped `shared_leaf_name`); post-fix the
     # distinct `parent_*/shared_leaf_name` stamps prevent the
     # collision.
     _ingest_and_compute(

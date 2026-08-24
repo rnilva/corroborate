@@ -40,7 +40,7 @@ from corroborate.analyses.dowhy.paired_continuous_do_dowhy import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_paired_arms
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _MU_X = 1.0
@@ -69,7 +69,7 @@ def _scm(beta_xz: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells() -> list[Mapping[str, object]]:
+def _build_rows() -> list[Mapping[str, object]]:
     rows = run_paired_arms(
         treatment=_scm(_BETA_XZ_T),
         baseline=_scm(_BETA_XZ_B),
@@ -92,9 +92,9 @@ def test_paired_continuous_do_recovers_attenuated_slope() -> None:
     """Slope of Δ_y on z_mean_baseline = (β_t − β_b)·β_zy/β_b ·
     attenuation_factor. At σ_z = 0.01, attenuation ≈ 0.996, so
     slope ≈ 1.992 (vs structural 2.000)."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = paired_continuous_do_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         treatment_var='z_mean',
@@ -121,9 +121,9 @@ def test_paired_continuous_do_placebo_destroys_signal() -> None:
     """Placebo permutes z_mean across pairs → structural link to
     Δ_y breaks → refuted ATE ≈ 0 (within permutation MC noise),
     drift ≈ expected slope."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = paired_continuous_do_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         treatment_var='z_mean',
@@ -145,9 +145,9 @@ def test_paired_continuous_do_placebo_destroys_signal() -> None:
 def test_paired_continuous_do_rcc_drift_small() -> None:
     """Random common cause: adding a column orthogonal-in-
     expectation to z_b preserves the slope on z_b. Drift ≈ 0."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = paired_continuous_do_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         treatment_var='z_mean',

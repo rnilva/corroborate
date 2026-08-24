@@ -26,7 +26,7 @@ When to use:
   - When the bridge's claim is "treatment helps in MOST pairs"
     rather than "the average effect size is large." Magnitude-
     independent semantics — useful when reward scales differ
-    across cells.
+    across df.
 
 When NOT to use:
   - Bridges that assert standardized magnitude ("g > 0.5"). Cliff's
@@ -45,7 +45,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.analyses._cell_value import key_tuple, resolve_value
+from corroborate.analyses._row_value import key_tuple, resolve_value
 from corroborate.bridge.analysis import analysis
 
 
@@ -87,7 +87,7 @@ class CliffDeltaResult:
 
 @analysis
 def cliff_delta_paired(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -101,12 +101,12 @@ def cliff_delta_paired(
     The pairing surface mirrors `paired_g`: same `pair_by`,
     `arm_field`, `dedupe_strategy` semantics (defaults to `'mean'`
     aggregation; pass `'raise'` to error on duplicate
-    `(arm, pair_by)` cells). Bridges authored to consume both
+    `(arm, pair_by)` rows). Bridges authored to consume both
     primitives can swap kwargs between them without further
     translation.
 
     See module docstring for when to use Cliff's δ vs paired_g."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
             f'cliff_delta_paired: unknown dedupe_strategy '
@@ -114,26 +114,26 @@ def cliff_delta_paired(
         )
     treatment_buckets: dict[tuple[object, ...], list[float]] = {}
     baseline_buckets: dict[tuple[object, ...], list[float]] = {}
-    for cell in rows:
-        arm = cell.get(arm_field)
+    for row in rows:
+        arm = row.get(arm_field)
         if arm == treatment_arm:
-            key = key_tuple(cell, pair_by)
+            key = key_tuple(row, pair_by)
             bucket = treatment_buckets.setdefault(key, [])
             if bucket and dedupe_strategy == 'raise':
                 raise ValueError(
-                    f'cliff_delta_paired: duplicate cell for '
+                    f'cliff_delta_paired: duplicate row for '
                     f'{treatment_arm!r} at pair_by={pair_by} key={key}.',
                 )
-            bucket.append(resolve_value(cell, source))
+            bucket.append(resolve_value(row, source))
         elif arm == baseline_arm:
-            key = key_tuple(cell, pair_by)
+            key = key_tuple(row, pair_by)
             bucket = baseline_buckets.setdefault(key, [])
             if bucket and dedupe_strategy == 'raise':
                 raise ValueError(
-                    f'cliff_delta_paired: duplicate cell for '
+                    f'cliff_delta_paired: duplicate row for '
                     f'{baseline_arm!r} at pair_by={pair_by} key={key}.',
                 )
-            bucket.append(resolve_value(cell, source))
+            bucket.append(resolve_value(row, source))
 
     treatment: dict[tuple[object, ...], float] = {
         k: (

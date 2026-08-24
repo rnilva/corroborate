@@ -45,20 +45,20 @@ def test_static_scope_is_applied_before_panel_and_in_final_expr() -> None:
     """The static predicate shapes the panel's input first, and is
     still ANDed into the returned expression so an excluded row in
     a surviving stratum cannot leak back into evaluation. The probe
-    follows the canonical-union convention: it accepts either cells
+    follows the canonical-union convention: it accepts either rows
     shape and normalises at its own entry.
     """
     panel_inputs: list[list[Mapping[str, object]]] = []
 
     @analysis
     def _row_consuming_panel(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
     ) -> StratumPanel:
-        rows = list(to_dicts(cells))
+        rows = list(to_dicts(df))
         panel_inputs.append(rows)
         return _empty_panel(rows)
 
-    cells: list[dict[str, object]] = [
+    rows: list[dict[str, object]] = [
         {'id': 1, 'env_name': 'A', 'eligible': True},
         {'id': 2, 'env_name': 'A', 'eligible': False},
         {'id': 3, 'env_name': 'B', 'eligible': False},
@@ -70,10 +70,10 @@ def test_static_scope_is_applied_before_panel_and_in_final_expr() -> None:
         static_scope=pl.col('eligible'),
     )
 
-    resolved = scope.resolve(cells)
+    resolved = scope.resolve(rows)
 
-    assert panel_inputs == [[cells[0]]]
-    admitted = pl.from_dicts(cells).filter(resolved)
+    assert panel_inputs == [[rows[0]]]
+    admitted = pl.from_dicts(rows).filter(resolved)
     assert admitted['id'].to_list() == [1]
 
 
@@ -86,11 +86,11 @@ def test_panel_analysis_receives_prefiltered_dataframe() -> None:
 
     @analysis
     def _dataframe_panel(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
     ) -> StratumPanel:
-        seen.append(type(cells))
-        assert isinstance(cells, pl.DataFrame)
-        return _empty_panel(cells.to_dicts())
+        seen.append(type(df))
+        assert isinstance(df, pl.DataFrame)
+        return _empty_panel(df.to_dicts())
 
     scope = scope_from_panel(
         panel_analysis=_dataframe_panel,
@@ -110,10 +110,10 @@ def test_panel_builder_receives_a_dataframe_without_static_scope() -> None:
 
     @analysis
     def _identity_probe_panel(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
     ) -> StratumPanel:
-        received.append(cells)
-        return _empty_panel(to_dicts(cells))
+        received.append(df)
+        return _empty_panel(to_dicts(df))
 
     scope = scope_from_panel(
         panel_analysis=_identity_probe_panel,
@@ -133,9 +133,9 @@ def test_missing_static_column_is_null_padded_before_panel() -> None:
 
     @analysis
     def _missing_column_panel(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
     ) -> StratumPanel:
-        rows = list(to_dicts(cells))
+        rows = list(to_dicts(df))
         panel_inputs.append(rows)
         return _empty_panel(rows)
 
@@ -160,10 +160,10 @@ def test_late_appearing_column_reaches_the_panel_builder() -> None:
 
     @analysis
     def _late_column_panel(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
     ) -> StratumPanel:
-        received.append(cells)
-        return _empty_panel(list(to_dicts(cells)))
+        received.append(df)
+        return _empty_panel(list(to_dicts(df)))
 
     scope = scope_from_panel(
         panel_analysis=_late_column_panel,
@@ -182,18 +182,18 @@ def test_late_appearing_column_reaches_the_panel_builder() -> None:
     assert frame['metric'].drop_nulls().len() == 10
 
 
-def test_generator_cells_survive_deferred_scope_and_analysis() -> None:
+def test_generator_rows_survive_deferred_scope_and_analysis() -> None:
     @analysis
-    def _count_deferred_cells(
-        cells: pl.DataFrame,
+    def _count_deferred_rows(
+        df: pl.DataFrame,
     ) -> int:
-        return len(list(to_dicts(cells)))
+        return len(list(to_dicts(df)))
 
     @analysis
     def _all_strata_panel(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
     ) -> StratumPanel:
-        return _empty_panel(to_dicts(cells))
+        return _empty_panel(to_dicts(df))
 
     scope = scope_from_panel(
         panel_analysis=_all_strata_panel,
@@ -202,10 +202,10 @@ def test_generator_cells_survive_deferred_scope_and_analysis() -> None:
     )
 
     @claim_bridge(source='x', target='x', scope=scope)
-    def generator_bridge(_count_deferred_cells: int) -> Verdict:
+    def generator_bridge(_count_deferred_rows: int) -> Verdict:
         return (
             Verdict.HELD
-            if _count_deferred_cells == 2
+            if _count_deferred_rows == 2
             else Verdict.POWER_INSUFFICIENT
         )
 
@@ -214,5 +214,5 @@ def test_generator_cells_survive_deferred_scope_and_analysis() -> None:
         {'id': 'b', 'env_name': 'A', 'x': 2.0},
     ]
     result = evaluate(generator_bridge, (row for row in rows))
-    assert result.n_cells_in_scope == 2
+    assert result.n_rows_in_scope == 2
     assert result.verdict is Verdict.HELD

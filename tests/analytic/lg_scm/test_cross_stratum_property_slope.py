@@ -31,7 +31,7 @@ from corroborate.analyses.link.cross_stratum_property_slope import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _SIGMA_X = 0.5
@@ -65,7 +65,7 @@ def _scm(mu_x: float, beta_xz: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells() -> list[Mapping[str, object]]:
+def _build_rows() -> list[Mapping[str, object]]:
     envs = {
         env: (
             _scm(mu_x, _BETA_XZ_T), _scm(mu_x, _BETA_XZ_B),
@@ -83,7 +83,7 @@ def test_cross_stratum_property_slope_monotone_in_mu_x() -> None:
     scales linearly with μ_x (Δ_y ∝ μ_x; pooled SD μ_x-
     independent at fixed β_xz). Spearman ρ across strata should
     be ≈ +1.0 (no ties — μ_x values are strictly monotone)."""
-    cells = _build_cells()
+    rows = _build_rows()
     # Key type `object`: the analysis accepts heterogeneous stratum
     # keys (`Mapping[object, ...]`), and Mapping is invariant in its
     # key parameter.
@@ -92,7 +92,7 @@ def test_cross_stratum_property_slope_monotone_in_mu_x() -> None:
         for env, mu_x in _ENV_MU_X.items()
     }
     result = cross_stratum_property_slope.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',
@@ -100,7 +100,7 @@ def test_cross_stratum_property_slope_monotone_in_mu_x() -> None:
         covariates_per_key=covariates_per_key,
         covariate_key_field='env_name',
         # scope_predictor defaults to 'jensen_gap' which doesn't
-        # exist in LG-SCM cells. Use z_mean (always positive in
+        # exist in LG-SCM rows. Use z_mean (always positive in
         # LG-SCM at β_xz_b · μ_x ≥ 0.3·0.5 = 0.15 > 0). Set the
         # floor to 0 so all strata pass.
         scope_predictor='z_mean',
@@ -133,7 +133,7 @@ def test_cross_stratum_property_slope_monotone_in_mu_x() -> None:
 
 def test_cross_stratum_property_slope_below_min_strata_returns_nan() -> None:
     """Setting min_strata above n_envs forces NaN return."""
-    cells = _build_cells()
+    rows = _build_rows()
     # Key type `object`: the analysis accepts heterogeneous stratum
     # keys (`Mapping[object, ...]`), and Mapping is invariant in its
     # key parameter.
@@ -142,7 +142,7 @@ def test_cross_stratum_property_slope_below_min_strata_returns_nan() -> None:
         for env, mu_x in _ENV_MU_X.items()
     }
     result = cross_stratum_property_slope.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',
@@ -162,7 +162,7 @@ def test_cross_stratum_property_slope_missing_covariates_dropped() -> None:
     """Strata with no covariate entry drop before the slope
     calculation; this catches a regression where the primitive
     might fill missing covariates with NaN or zero."""
-    cells = _build_cells()
+    rows = _build_rows()
     # Drop 3 envs from the covariate map → only 5 strata survive
     # → < min_strata=8 → NaN.
     partial_covariates: dict[object, dict[str, float]] = {
@@ -170,7 +170,7 @@ def test_cross_stratum_property_slope_missing_covariates_dropped() -> None:
         for env, mu_x in list(_ENV_MU_X.items())[:5]
     }
     result = cross_stratum_property_slope.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',
@@ -188,13 +188,13 @@ def test_cross_stratum_property_slope_missing_covariates_dropped() -> None:
 def test_cross_stratum_property_slope_honours_custom_arm_field() -> None:
     """Both the effect panel and an arm-filtered derived covariate
     use the caller-selected arm column."""
-    cells: list[Mapping[str, object]] = []
-    for cell in _build_cells():
-        row = dict(cell)
+    rows: list[Mapping[str, object]] = []
+    for row in _build_rows():
+        row = dict(row)
         row['contrast_arm'] = row.pop('arm_key')
-        cells.append(row)
+        rows.append(row)
     result = cross_stratum_property_slope.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         arm_field='contrast_arm',

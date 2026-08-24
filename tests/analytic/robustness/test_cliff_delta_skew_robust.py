@@ -24,7 +24,7 @@ import numpy as np
 
 from corroborate.analyses.paired.cliff_delta_paired import cliff_delta_paired
 from corroborate.analyses.paired.paired_g import paired_g
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -34,12 +34,12 @@ def _det_seed(*parts: object) -> int:
 _K_REPLICATES = 300
 
 
-def _make_paired_cells(deltas: list[float]) -> list[dict[str, object]]:
-    cells: list[dict[str, object]] = []
+def _make_paired_rows(deltas: list[float]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
     for s, d in enumerate(deltas):
-        cells.append({'arm_key': 'T', 'seed': s, 'value': float(d)})
-        cells.append({'arm_key': 'B', 'seed': s, 'value': 0.0})
-    return cells
+        rows.append({'arm_key': 'T', 'seed': s, 'value': float(d)})
+        rows.append({'arm_key': 'B', 'seed': s, 'value': 0.0})
+    return rows
 
 
 def test_cliff_delta_unbiased_under_lognormal_where_paired_g_inflates() -> None:
@@ -74,14 +74,14 @@ def test_cliff_delta_unbiased_under_lognormal_where_paired_g_inflates() -> None:
     for k in range(K):
         rng = np.random.default_rng(_det_seed('cross_lognorm', k))
         deltas = rng.lognormal(0.0, 0.7, n).tolist()
-        cells = _make_paired_cells(deltas)
+        rows = _make_paired_rows(deltas)
         pg_result = paired_g.fn(
-            cells_to_dataframe(cells),
+            to_dataframe(rows),
             treatment_arm='T', baseline_arm='B',
             pair_by=('seed',), source='value',
         )
         cd_result = cliff_delta_paired.fn(
-            cells_to_dataframe(cells),
+            to_dataframe(rows),
             treatment_arm='T', baseline_arm='B',
             pair_by=('seed',), source='value',
         )
@@ -139,14 +139,14 @@ def test_cliff_delta_and_paired_g_agree_on_sign_under_normal() -> None:
     n = 30
     rng = np.random.default_rng(_det_seed('agree', n))
     deltas = rng.normal(1.0, 2.0, n).tolist()
-    cells = _make_paired_cells(deltas)
+    rows = _make_paired_rows(deltas)
     pg = paired_g.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )
     cd = cliff_delta_paired.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='T', baseline_arm='B',
         pair_by=('seed',), source='value',
     )

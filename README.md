@@ -51,7 +51,7 @@ column names predate them and are kept for compatibility:
 | condition (one algorithm variant under study) | `arm`, `arm_key` |
 | evaluation window (block of greedy eval episodes) | `burst` (e.g. `eval_best_burst_raw_mean`) |
 | run set (the logged collection of runs) | corpus (`runs.parquet` + sidecars) |
-| seeded run at an environment–condition pair | cell |
+| seeded run at an environment–condition pair | a row carrying env/seed/condition columns |
 | metric | `@measurable` |
 | the implementation under study | "substrate" (e.g. the `--substrate` CLI flag) |
 
@@ -108,7 +108,7 @@ files on the producer's side. For stable-baselines3,
 `corroborate_rl.sb3_logger.load_sb3_logger_runs` reads the
 output SB3's own `Logger` writes (`progress.json` /
 `progress.csv`) into a `Panel`: one row per log in
-`panel.cells` — `config/*` keys the producer recorded become
+`panel.df` — `config/*` keys the producer recorded become
 scalar columns and the configuration registry (`leaves`), every
 other key stays a record: an array column with one slot per
 Logger dump, aligned by `time/total_timesteps` — plus provenance

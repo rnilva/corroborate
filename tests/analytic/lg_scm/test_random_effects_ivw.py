@@ -169,7 +169,7 @@ def test_pooled_g_recovers_ivw_closed_form_under_heterogeneous_se() -> None:
     tau_sq = _dl_tau_sq(Q=Q, df=df, ws=ws)
 
     pooled = random_effects_summary(pairs)
-    assert pooled.n_cells == 3
+    assert pooled.n_rows == 3
 
     if tau_sq == 0.0:
         # FE and RE pools coincide.

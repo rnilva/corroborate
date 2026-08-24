@@ -18,7 +18,7 @@ Fisher-z CI test) BOTH need:
     invariant under monotone transform; only the *partition*
     matters).
   - `_as_float_list` / `_resolve_per_burst` / `source_name` —
-    cell-record → per-burst array adapter. Mirrors the static
+    row-record → per-burst array adapter. Mirrors the static
     `partial_spearman`'s cache-first dispatch pattern via
     `evaluate_per_burst_source`.
   - `stratum_key` — stratify-by tuple builder.
@@ -48,7 +48,7 @@ from typing import Literal
 import numpy as np
 import numpy.typing as npt
 
-from corroborate.analyses._cell_value import evaluate_per_burst_source
+from corroborate.analyses._row_value import evaluate_per_burst_source
 from corroborate.graph.discovery import (
     _spearman_marginal as _graph_spearman_marginal,  # pyright: ignore[reportPrivateUsage]
     partial_spearman_rho,
@@ -66,7 +66,7 @@ type ColumnOrMeasurable = str | _PerBurstMeasurable
 
 # Stratum identity is a hashable tuple of the values at
 # `stratify_by` columns, in declaration order. `tuple[object,
-# ...]` is the upper bound because polars cells can carry str /
+# ...]` is the upper bound because polars rows can carry str /
 # int / float at stratify keys (e.g. `env_name: str`, `gamma:
 # float`).
 type Stratum = tuple[object, ...]
@@ -117,7 +117,7 @@ def encode_arm(arms: Sequence[str]) -> npt.NDArray[np.float64]:
     encoding doesn't matter — only the *partition* between arms.
 
     Sorted-unique keeps the encoding deterministic across
-    re-orderings of the cells list (vs `dict.fromkeys` which leaks
+    re-orderings of the rows list (vs `dict.fromkeys` which leaks
     insertion order)."""
     unique = sorted(set(arms))
     code: dict[str, int] = {a: i for i, a in enumerate(unique)}
@@ -125,16 +125,16 @@ def encode_arm(arms: Sequence[str]) -> npt.NDArray[np.float64]:
 
 
 def stratum_key(
-    cell: Mapping[str, object], stratify_by: tuple[str, ...],
+    row: Mapping[str, object], stratify_by: tuple[str, ...],
 ) -> Stratum | None:
-    """Build the stratum-key tuple for `cell`. Returns None when
-    any key is missing or null — the cell is dropped from
+    """Build the stratum-key tuple for `row`. Returns None when
+    any key is missing or null — the row is dropped from
     analysis (matches the static primitive's behaviour)."""
     key: list[object] = []
     for k in stratify_by:
-        if k not in cell:
+        if k not in row:
             return None
-        v = cell[k]
+        v = row[k]
         if v is None:
             return None
         key.append(v)
@@ -142,17 +142,17 @@ def stratum_key(
 
 
 def _as_float_list(value: object) -> list[float] | None:
-    """Coerce a per-burst column cell to a list of floats. The
-    column is `List(Float64)` after polars `to_dicts`; the cell
+    """Coerce a per-burst column row to a list of floats. The
+    column is `List(Float64)` after polars `to_dicts`; the row
     value is therefore a `list[float | None]`. Returns None when
     the value isn't list-shaped (silent structural mismatch — the
     bridge author passed a scalar column name where per-burst was
     expected)."""
     if not isinstance(value, list):
         return None
-    # Cells inside the list may be None (polars null inside list) —
+    # Rows inside the list may be None (polars null inside list) —
     # surface as NaN so the burst-level NaN filter sees them.
-    # `list[object]` upper bound on the polars list-cell value
+    # `list[object]` upper bound on the polars list-row value
     # because polars stores heterogeneous null+float arrays.
     items: list[object] = list(value)
     out: list[float] = []
@@ -169,25 +169,25 @@ def _as_float_list(value: object) -> list[float] | None:
 
 
 def _resolve_per_burst(
-    cell: Mapping[str, object],
+    row: Mapping[str, object],
     source: ColumnOrMeasurable,
 ) -> list[float] | None:
     """Resolve a per-burst source to `list[float]`, dispatching on
     whether the caller passed a column name (str) or a Measurable
     instance. Mirrors `partial_spearman`'s lazy-evaluation pattern:
 
-      - str → read the named `List(Float64)` column from the cell
+      - str → read the named `List(Float64)` column from the row
         record via `_as_float_list`.
       - Measurable → cache-first via `evaluate_per_burst_source`;
         falls back to evaluating the Measurable against the raw
         record if the cache column isn't present.
 
     Returns None on shape mismatch so the calling stratum-loop can
-    skip the cell silently — the same behaviour as the column-name
+    skip the row silently — the same behaviour as the column-name
     path's `_as_float_list` returning None for non-list inputs."""
     if isinstance(source, str):
-        return _as_float_list(cell.get(source))
-    arr = evaluate_per_burst_source(source, cell)
+        return _as_float_list(row.get(source))
+    arr = evaluate_per_burst_source(source, row)
     if arr.size == 0:
         return None
     return [float(v) for v in arr]
@@ -264,16 +264,16 @@ def classify_status(
 
 
 def _collect_arm_and_per_burst(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     arm_field: str,
     mediator_per_burst: ColumnOrMeasurable,
     outcome_per_burst: ColumnOrMeasurable,
 ) -> tuple[list[str], list[list[float]], list[list[float]]] | None:
-    """Shared first-pass cell-record extractor.
+    """Shared first-pass row-record extractor.
 
-    Walks `cells` once; for each cell collects (arm-tag string,
-    mediator-array, outcome-array). Cells that don't have a string
+    Walks `rows` once; for each row collects (arm-tag string,
+    mediator-array, outcome-array). Rows that don't have a string
     arm value or whose mediator / outcome resolves to None
     (shape mismatch) are silently dropped — the calling primitive's
     stratum loop sees only well-shaped rows.
@@ -285,12 +285,12 @@ def _collect_arm_and_per_burst(
     arms: list[str] = []
     mediator_lists: list[list[float]] = []
     outcome_lists: list[list[float]] = []
-    for cell in cells:
-        arm = cell.get(arm_field)
+    for row in rows:
+        arm = row.get(arm_field)
         if not isinstance(arm, str):
             continue
-        med = _resolve_per_burst(cell, mediator_per_burst)
-        out_arr = _resolve_per_burst(cell, outcome_per_burst)
+        med = _resolve_per_burst(row, mediator_per_burst)
+        out_arr = _resolve_per_burst(row, outcome_per_burst)
         if med is None or out_arr is None:
             continue
         arms.append(arm)
@@ -306,14 +306,14 @@ def _n_bursts(
     outcome_lists: Sequence[Sequence[float]],
 ) -> int:
     """Ragged-tail burst-axis length: max trajectory length across
-    cells. Cells with shorter trajectories contribute only their
+    df. Rows with shorter trajectories contribute only their
     prefix; the per-burst NaN filter naturally excludes them past
     their tail.
 
-    Picks max(mediator_len, outcome_len) per cell to handle the
+    Picks max(mediator_len, outcome_len) per row to handle the
     rare case where the two are unaligned (implementation bug or
     Measurable-fallback corner case); in well-formed input the two
-    are equal per cell."""
+    are equal per row."""
     return max(
         max(len(m), len(o))
         for m, o in zip(mediator_lists, outcome_lists)
@@ -321,7 +321,7 @@ def _n_bursts(
 
 
 def collect_arm_and_per_burst_multi(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     arm_field: str,
     mediators_per_burst: Sequence[ColumnOrMeasurable],
@@ -329,16 +329,16 @@ def collect_arm_and_per_burst_multi(
 ) -> tuple[
     list[str], list[list[list[float]]], list[list[float]],
 ] | None:
-    """Multi-mediator first-pass cell-record extractor.
+    """Multi-mediator first-pass row-record extractor.
 
     Same role as `_collect_arm_and_per_burst` but extracts k
-    mediator trajectories per cell. Returns
+    mediator trajectories per row. Returns
     `(arms, mediator_lists, outcome_lists)` where
     `mediator_lists[i]` is a list of length `k` of per-burst
-    arrays for cell `i`. A cell is dropped iff ANY mediator
+    arrays for row `i`. A row is dropped iff ANY mediator
     resolves to None or the outcome resolves to None — the
     multi-mediator CI test requires all k mediators to be
-    well-shaped on the same cell.
+    well-shaped on the same row.
 
     The depth-1 sibling `_collect_arm_and_per_burst` is the thin
     `k=1` case of this; both coexist because the depth-1
@@ -347,17 +347,17 @@ def collect_arm_and_per_burst_multi(
     arms: list[str] = []
     mediator_lists: list[list[list[float]]] = []
     outcome_lists: list[list[float]] = []
-    for cell in cells:
-        arm = cell.get(arm_field)
+    for row in rows:
+        arm = row.get(arm_field)
         if not isinstance(arm, str):
             continue
-        out_arr = _resolve_per_burst(cell, outcome_per_burst)
+        out_arr = _resolve_per_burst(row, outcome_per_burst)
         if out_arr is None:
             continue
         meds: list[list[float]] = []
         skip = False
         for m_src in mediators_per_burst:
-            med = _resolve_per_burst(cell, m_src)
+            med = _resolve_per_burst(row, m_src)
             if med is None:
                 skip = True
                 break
@@ -378,15 +378,15 @@ def n_bursts_multi(
 ) -> int:
     """Ragged-tail burst-axis length under multi-mediator shape.
 
-    Each cell's mediator entry is a list of `k` per-burst arrays;
+    Each row's mediator entry is a list of `k` per-burst arrays;
     pick the longest across (all k mediators, the outcome) for
-    each cell; ragged-tail max across cells. Matches the depth-1
+    each row; ragged-tail max across df. Matches the depth-1
     `_n_bursts` semantics at `k=1`."""
-    def _cell_len(meds: Sequence[Sequence[float]], o: Sequence[float]) -> int:
+    def _row_len(meds: Sequence[Sequence[float]], o: Sequence[float]) -> int:
         med_max = max((len(m) for m in meds), default=0)
         return max(med_max, len(o))
     return max(
-        _cell_len(m, o)
+        _row_len(m, o)
         for m, o in zip(mediator_lists, outcome_lists)
     )
 
@@ -403,7 +403,7 @@ def gather_burst_b_multi(
 ]:
     """Multi-mediator burst-b gather. Returns
     `(arm_b, outcome_b, mediator_matrix_b)` where the matrix has
-    shape `(n_b, k)`. Cells that don't have a `b`-th entry in
+    shape `(n_b, k)`. Rows that don't have a `b`-th entry in
     ANY of the k mediator arrays or the outcome are dropped (the
     multi-Z OLS-residual computation needs aligned observations
     across all conditioning vars).
@@ -415,10 +415,10 @@ def gather_burst_b_multi(
     takes a 1-D z)."""
     xs: list[float] = []
     ys: list[float] = []
-    n_cells = len(arm_codes)
+    n_rows = len(arm_codes)
     k = max((len(m) for m in mediator_lists), default=0)
     zs_per_k: list[list[float]] = [[] for _ in range(k)]
-    for i in range(n_cells):
+    for i in range(n_rows):
         if b >= len(outcome_lists[i]):
             continue
         meds_i = mediator_lists[i]
@@ -456,9 +456,9 @@ def _gather_burst_b(
     npt.NDArray[np.float64],
 ]:
     """Collect (arm, outcome, mediator) triples at burst index `b`
-    across cells. Cells whose trajectory is shorter than `b + 1`
+    across df. Rows whose trajectory is shorter than `b + 1`
     don't have an entry (treated as missing, NOT NaN
-    propagation); cells with NaN at either per-burst value are
+    propagation); rows with NaN at either per-burst value are
     skipped. Returns three parallel float64 arrays of equal
     length `n_b`."""
     xs: list[float] = []
@@ -525,7 +525,7 @@ class FisherZDLPool:
         bursts contributing.
       - `assumption_violations` — DL small-G regime warnings
         passed through from `PooledStats.assumption_violations`
-        (n_cells < 5 unreliable inference, etc.).
+        (n_rows < 5 unreliable inference, etc.).
 
     Behavior under `TimeAggregationStatus`:
 
@@ -634,25 +634,25 @@ def fisher_z_dl_pool(
 
 @dataclass(frozen=True, slots=True)
 class ClusterBootstrapInterval:
-    """Empirical CI from a cluster bootstrap over cells.
+    """Empirical CI from a cluster bootstrap over df.
 
     DerSimonian-Laird's PI bounds are *parametric*: they assume
     per-burst observations are independent. In trajectory data
-    bursts within one cell share network state, dynamics, and
+    bursts within one row share network state, dynamics, and
     replay buffer — they are NOT independent. The cluster
-    bootstrap is the standard fix: resample whole cells (each
-    cell = one training trajectory = one independent unit) with
+    bootstrap is the standard fix: resample whole rows (each
+    row = one training trajectory = one independent unit) with
     replacement, recompute the per-burst ρ + pooled estimate per
     resample, and take the empirical [α/2, 1−α/2] percentile
     range as the CI. This is *assumption-free* under any
-    within-cell autocorrelation structure — the resampling
+    within-row autocorrelation structure — the resampling
     preserves whatever dependence exists.
 
     Field semantics:
 
       - `rho_lower` / `rho_upper` — empirical α/2 and 1 − α/2
         percentiles of the pooled ρ across `n_resamples`
-        cell-resampled panels.
+        row-resampled panels.
       - `rho_median` — median of the bootstrap distribution; a
         more robust point estimate than mean when the
         distribution is asymmetric.
@@ -663,7 +663,7 @@ class ClusterBootstrapInterval:
     See Pustejovsky & Tipton (2022) on CHE/RVE and Deen & de
     Rooij (2020) on ClusterBootstrap for the methodological
     background. Distinguishes from DL's parametric PI (over-
-    confident under within-cell autocorrelation); pair the two
+    confident under within-row autocorrelation); pair the two
     pools: DL for the heterogeneity diagnostic, cluster bootstrap
     for the publication-grade CI."""
     rho_lower: float
@@ -681,7 +681,7 @@ def _pool_rhos_dl(
     via `fisher_z_dl_pool`. Returns the inverse-Fisher-z'd point
     estimate (`rho_pooled`). NaN propagates when DL is undefined
     (fewer than 2 valid bursts). Bootstrap iterations that
-    resample to a degenerate panel (e.g. all-same-cell after
+    resample to a degenerate panel (e.g. all-same-row after
     replacement) get NaN, which the percentile reducer filters
     out."""
     dl = fisher_z_dl_pool(rhos, ns, df_offset)
@@ -693,16 +693,16 @@ def _per_burst_rhos_from_subset(
     arm_codes: npt.NDArray[np.float64],
     mediator_lists: Sequence[Sequence[float]],
     outcome_lists: Sequence[Sequence[float]],
-    cell_idx: npt.NDArray[np.intp],
+    row_idx: npt.NDArray[np.intp],
     n_bursts: int,
     min_n_per_burst: int,
     kind: Literal['marginal', 'partial'],
 ) -> tuple[list[float], list[int]]:
-    """Compute per-burst ρ + n on a subset of cells (given by
-    `cell_idx`). The subset is built by indexing the parallel
-    arrays; resampling-with-replacement repeats the same cell
-    multiple times in `cell_idx`, which is the cluster-bootstrap
-    semantics (a duplicated cell contributes all its bursts to
+    """Compute per-burst ρ + n on a subset of rows (given by
+    `row_idx`). The subset is built by indexing the parallel
+    arrays; resampling-with-replacement repeats the same row
+    multiple times in `row_idx`, which is the cluster-bootstrap
+    semantics (a duplicated row contributes all its bursts to
     each replica).
 
     `kind` selects which ρ to compute: 'marginal' calls
@@ -712,16 +712,16 @@ def _per_burst_rhos_from_subset(
     — guarantees the bootstrap distribution centres on the
     point estimate by construction."""
     # Build subsetted arm-code vector + per-burst lookups.
-    # Using lists-of-lists indexed by `cell_idx` to mirror the
+    # Using lists-of-lists indexed by `row_idx` to mirror the
     # `_gather_burst_b` shape without materialising NumPy 2-D
     # matrices (mediator_lists / outcome_lists are ragged-length
     # in the general case).
-    sub_arm_codes = arm_codes[cell_idx]
+    sub_arm_codes = arm_codes[row_idx]
     sub_mediator: list[Sequence[float]] = [
-        mediator_lists[int(i)] for i in cell_idx
+        mediator_lists[int(i)] for i in row_idx
     ]
     sub_outcome: list[Sequence[float]] = [
-        outcome_lists[int(i)] for i in cell_idx
+        outcome_lists[int(i)] for i in row_idx
     ]
 
     rho_list: list[float] = []
@@ -737,7 +737,7 @@ def _per_burst_rhos_from_subset(
             continue
         # Spearman is invariant to monotone transforms but degenerate
         # when arm has no variance — the cluster bootstrap CAN sample
-        # all-treatment / all-baseline cells when n_cells is small.
+        # all-treatment / all-baseline rows when n_rows is small.
         # Guard explicitly: NaN-out the burst when single-arm.
         if float(np.std(x_np)) == 0.0:
             rho_list.append(float('nan'))
@@ -755,7 +755,7 @@ def _per_burst_rhos_from_subset_multi(
     arm_codes: npt.NDArray[np.float64],
     mediator_lists: Sequence[Sequence[Sequence[float]]],
     outcome_lists: Sequence[Sequence[float]],
-    cell_idx: npt.NDArray[np.intp],
+    row_idx: npt.NDArray[np.intp],
     n_bursts: int,
     min_n_per_burst: int,
     kind: Literal['marginal', 'partial'],
@@ -774,12 +774,12 @@ def _per_burst_rhos_from_subset_multi(
     Mirrors the depth-1 `_per_burst_rhos_from_subset`'s zero-arm-
     variance NaN guard for the bootstrap path (cluster-resampling
     can give all-treatment / all-baseline replicas at small n)."""
-    sub_arm_codes = arm_codes[cell_idx]
+    sub_arm_codes = arm_codes[row_idx]
     sub_mediator: list[Sequence[Sequence[float]]] = [
-        mediator_lists[int(i)] for i in cell_idx
+        mediator_lists[int(i)] for i in row_idx
     ]
     sub_outcome: list[Sequence[float]] = [
-        outcome_lists[int(i)] for i in cell_idx
+        outcome_lists[int(i)] for i in row_idx
     ]
 
     rho_list: list[float] = []
@@ -817,12 +817,12 @@ def cluster_bootstrap_pool(
     alpha: float,
     seed: int,
 ) -> ClusterBootstrapInterval:
-    """Cluster bootstrap CI over the DL pool. Cells are the
-    resampling unit (each cell = one training trajectory = one
-    independent unit); bursts within a cell stay together. For
+    """Cluster bootstrap CI over the DL pool. Rows are the
+    resampling unit (each row = one training trajectory = one
+    independent unit); bursts within a row stay together. For
     each of `n_resamples` iterations:
 
-      1. Sample `n_cells` cell indices with replacement.
+      1. Sample `n_rows` row indices with replacement.
       2. Recompute per-burst ρ (and n) from the resampled panel.
       3. Pool the per-burst ρ via DL → one bootstrap-replica ρ.
 
@@ -830,21 +830,21 @@ def cluster_bootstrap_pool(
     bootstrap-replica ρ distribution is the CI; the median is the
     point estimate (more robust than mean under asymmetric
     bootstrap distributions). NaN replicas (bootstrap panels too
-    degenerate to compute DL — e.g. all-same-cell or single-arm
+    degenerate to compute DL — e.g. all-same-row or single-arm
     under replacement) are filtered before the percentile call so
     they don't bias the bounds.
 
     Deterministic given `seed` via `np.random.default_rng`."""
-    n_cells = arm_codes.size
+    n_rows = arm_codes.size
     rng = np.random.default_rng(seed)
     replicas: list[float] = []
     for _ in range(n_resamples):
-        idx = rng.integers(0, n_cells, size=n_cells)
+        idx = rng.integers(0, n_rows, size=n_rows)
         rhos, ns = _per_burst_rhos_from_subset(
             arm_codes=arm_codes,
             mediator_lists=mediator_lists,
             outcome_lists=outcome_lists,
-            cell_idx=idx,
+            row_idx=idx,
             n_bursts=n_bursts,
             min_n_per_burst=min_n_per_burst,
             kind=kind,
@@ -894,7 +894,7 @@ def cluster_bootstrap_pool_multi(
     seed: int,
 ) -> ClusterBootstrapInterval:
     """Multi-mediator cluster bootstrap CI over the DL pool. Same
-    cell-resampling pattern as `cluster_bootstrap_pool` but
+    row-resampling pattern as `cluster_bootstrap_pool` but
     `kind='partial'` recomputes ρ via `partial_spearman_rho_multi`
     on the (n_b, k) z-matrix per burst per replica. `df_offset`
     should be `3 + k` to match the multi-Z Fisher-z df accounting
@@ -904,16 +904,16 @@ def cluster_bootstrap_pool_multi(
     depth-1 sibling (mediators don't enter the marginal ρ); we
     keep the parameter so consumers don't fork their bootstrap
     plumbing by depth."""
-    n_cells = arm_codes.size
+    n_rows = arm_codes.size
     rng = np.random.default_rng(seed)
     replicas: list[float] = []
     for _ in range(n_resamples):
-        idx = rng.integers(0, n_cells, size=n_cells)
+        idx = rng.integers(0, n_rows, size=n_rows)
         rhos, ns = _per_burst_rhos_from_subset_multi(
             arm_codes=arm_codes,
             mediator_lists=mediator_lists,
             outcome_lists=outcome_lists,
-            cell_idx=idx,
+            row_idx=idx,
             n_bursts=n_bursts,
             min_n_per_burst=min_n_per_burst,
             kind=kind,
@@ -949,23 +949,23 @@ def cluster_bootstrap_pool_multi(
 @dataclass(frozen=True, slots=True)
 class ClusterBootstrapEdgeCounts:
     """Empirical CIs on PC edge-classification counts from a cluster
-    bootstrap over cells.
+    bootstrap over df.
 
     Conceptually DISTINCT from `ClusterBootstrapInterval` on the
     ρ-pool: the ρ-pool interval answers "what's the average effect
     magnitude under bootstrap resampling?" (a continuous quantity);
     the edge-count interval answers "is the edge classification
-    *robust* to which cells we sampled?" (an integer-count
+    *robust* to which rows we sampled?" (an integer-count
     quantity over the per-burst Fisher-z CI decision). A wide CI
     on the dsep / direct / marginal counts means the verdict is
-    driven by which subset of cells happened to land in the panel
-    — a few outlier cells flip the per-burst CI test from "edge
+    driven by which subset of rows happened to land in the panel
+    — a few outlier rows flip the per-burst CI test from "edge
     present" to "edge absent" at multiple bursts, so the count
     triple drifts across resamples.
 
     Each count's lower / upper bound is the empirical α/2 and
     1 − α/2 percentile of the count across `n_resamples`
-    cell-resampled panels. `median` is the bootstrap
+    row-resampled panels. `median` is the bootstrap
     distribution's median (robust integer point estimate). Counts
     on a resample replica are *that replica's* per-burst CI
     decisions, recomputed from the resampled per-burst (ρ, n)
@@ -973,9 +973,9 @@ class ClusterBootstrapEdgeCounts:
     so the bootstrap distribution centres on the original count
     by construction.
 
-    Assumption-free under any within-cell autocorrelation
-    structure — the cluster bootstrap resamples whole cells, so
-    bursts within one cell stay together. Same methodological
+    Assumption-free under any within-row autocorrelation
+    structure — the cluster bootstrap resamples whole rows, so
+    bursts within one row stay together. Same methodological
     foundation as `ClusterBootstrapInterval` (Deen & de Rooij
     2020; cluster-robust SE under within-cluster dependence).
     """
@@ -1005,13 +1005,13 @@ def _per_burst_edge_counts_from_subset(
     arm_codes: npt.NDArray[np.float64],
     mediator_lists: Sequence[Sequence[float]],
     outcome_lists: Sequence[Sequence[float]],
-    cell_idx: npt.NDArray[np.intp],
+    row_idx: npt.NDArray[np.intp],
     n_bursts: int,
     min_n_per_burst: int,
     alpha: float,
 ) -> tuple[int, int, int]:
     """Recompute the PC edge-classification count triple on a
-    resampled subset of cells. Reuses the SAME primitives the
+    resampled subset of df. Reuses the SAME primitives the
     non-bootstrap path uses (`_spearman_marginal` for the depth-0
     p-value via scipy's `spearmanr` t-approximation;
     `partial_spearman_rho` for the depth-1 p-value via the
@@ -1025,12 +1025,12 @@ def _per_burst_edge_counts_from_subset(
     be asserted). Single-arm bursts (zero variance on arm under
     resampling) contribute nothing — `_spearman_marginal` returns
     (NaN, NaN) at zero variance."""
-    sub_arm_codes = arm_codes[cell_idx]
+    sub_arm_codes = arm_codes[row_idx]
     sub_mediator: list[Sequence[float]] = [
-        mediator_lists[int(i)] for i in cell_idx
+        mediator_lists[int(i)] for i in row_idx
     ]
     sub_outcome: list[Sequence[float]] = [
-        outcome_lists[int(i)] for i in cell_idx
+        outcome_lists[int(i)] for i in row_idx
     ]
     n_marg, n_dsep, n_direct = 0, 0, 0
     for b in range(n_bursts):
@@ -1063,7 +1063,7 @@ def _per_burst_edge_counts_from_subset_multi(
     arm_codes: npt.NDArray[np.float64],
     mediator_lists: Sequence[Sequence[Sequence[float]]],
     outcome_lists: Sequence[Sequence[float]],
-    cell_idx: npt.NDArray[np.intp],
+    row_idx: npt.NDArray[np.intp],
     n_bursts: int,
     min_n_per_burst: int,
     alpha: float,
@@ -1076,12 +1076,12 @@ def _per_burst_edge_counts_from_subset_multi(
     df = n − 3 − k). Calling the same primitives guarantees the
     bootstrap distribution centres on the original count by
     construction."""
-    sub_arm_codes = arm_codes[cell_idx]
+    sub_arm_codes = arm_codes[row_idx]
     sub_mediator: list[Sequence[Sequence[float]]] = [
-        mediator_lists[int(i)] for i in cell_idx
+        mediator_lists[int(i)] for i in row_idx
     ]
     sub_outcome: list[Sequence[float]] = [
-        outcome_lists[int(i)] for i in cell_idx
+        outcome_lists[int(i)] for i in row_idx
     ]
     n_marg, n_dsep, n_direct = 0, 0, 0
     for b in range(n_bursts):
@@ -1119,22 +1119,22 @@ def cluster_bootstrap_edge_counts_multi(
 ) -> ClusterBootstrapEdgeCounts:
     """Multi-mediator sibling of `cluster_bootstrap_edge_counts`.
 
-    Cell-resampling pattern identical; per-replica edge-count
+    Row-resampling pattern identical; per-replica edge-count
     triple is recomputed via the multi-Z CI primitive. The "joint
     mediator set d-separates arm from outcome" interpretation is
     the depth-k generalisation of the depth-1 semantics."""
-    n_cells = arm_codes.size
+    n_rows = arm_codes.size
     rng = np.random.default_rng(seed)
     marg_counts: list[int] = []
     dsep_counts: list[int] = []
     direct_counts: list[int] = []
     for _ in range(n_resamples):
-        idx = rng.integers(0, n_cells, size=n_cells)
+        idx = rng.integers(0, n_rows, size=n_rows)
         n_m, n_d, n_dir = _per_burst_edge_counts_from_subset_multi(
             arm_codes=arm_codes,
             mediator_lists=mediator_lists,
             outcome_lists=outcome_lists,
-            cell_idx=idx,
+            row_idx=idx,
             n_bursts=n_bursts,
             min_n_per_burst=min_n_per_burst,
             alpha=alpha,
@@ -1190,12 +1190,12 @@ def cluster_bootstrap_edge_counts(
     seed: int,
 ) -> ClusterBootstrapEdgeCounts:
     """Cluster bootstrap CI on the PC edge-classification count
-    triple. Cells are the resampling unit (each cell = one
+    triple. Rows are the resampling unit (each row = one
     training trajectory = one independent unit); bursts within a
-    cell stay together.
+    row stay together.
 
     For each of `n_resamples` iterations:
-      1. Sample `n_cells` cell indices with replacement.
+      1. Sample `n_rows` row indices with replacement.
       2. Recompute per-burst CI decisions on the resampled subset
          using the SAME machinery (`_spearman_marginal` +
          `partial_spearman_rho`) the non-bootstrap path uses; sum
@@ -1209,23 +1209,23 @@ def cluster_bootstrap_edge_counts(
     interpolation can land between integer counts).
 
     Sibling to `cluster_bootstrap_pool` (the ρ-pool variant);
-    same cell-resampling pattern, different inner computation. The
+    same row-resampling pattern, different inner computation. The
     two are independent — consumers that want both pay for both
     via two passes over the resampled panels.
 
     Deterministic given `seed` via `np.random.default_rng`."""
-    n_cells = arm_codes.size
+    n_rows = arm_codes.size
     rng = np.random.default_rng(seed)
     marg_counts: list[int] = []
     dsep_counts: list[int] = []
     direct_counts: list[int] = []
     for _ in range(n_resamples):
-        idx = rng.integers(0, n_cells, size=n_cells)
+        idx = rng.integers(0, n_rows, size=n_rows)
         n_m, n_d, n_dir = _per_burst_edge_counts_from_subset(
             arm_codes=arm_codes,
             mediator_lists=mediator_lists,
             outcome_lists=outcome_lists,
-            cell_idx=idx,
+            row_idx=idx,
             n_bursts=n_bursts,
             min_n_per_burst=min_n_per_burst,
             alpha=alpha,

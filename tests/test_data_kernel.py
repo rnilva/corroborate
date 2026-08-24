@@ -6,7 +6,7 @@ takes a polars DataFrame + structured spec and returns
 {stratum_id: aggregate}. Tests cover:
 
 - The three aggregators (mean / std / median).
-- `cell_filter` narrowing.
+- `row_filter` narrowing.
 - `min_n` floor (skip strata too small).
 - Empty-input early returns.
 - The Panel.derive ↔ kernel delegation: identical outputs on
@@ -20,13 +20,13 @@ import polars as pl
 
 from corroborate.data import DerivedSpec, Panel
 from corroborate.data.kernel import (
-    cells_to_dataframe,
+    to_dataframe,
     per_stratum_aggregate,
 )
 
 
-def _make_cells() -> pl.DataFrame:
-    """3 envs × 2 arms × 3 seeds = 18 cells; column `v` with
+def _make_rows() -> pl.DataFrame:
+    """3 envs × 2 arms × 3 seeds = 18 rows; column `v` with
     one NaN per (env, arm) stratum (so each stratum has 2
     finite + 1 NaN value)."""
     return pl.DataFrame({
@@ -48,10 +48,10 @@ def _make_cells() -> pl.DataFrame:
 
 
 def test_per_stratum_aggregate_mean() -> None:
-    """Per-stratum mean drops NaN cells before aggregation;
+    """Per-stratum mean drops NaN rows before aggregation;
     each stratum has 2 finite values."""
     out = per_stratum_aggregate(
-        _make_cells(),
+        _make_rows(),
         column='v',
         aggregator='mean',
         stratify_by=('env_name', 'arm_key'),
@@ -65,7 +65,7 @@ def test_per_stratum_aggregate_std_sample_ddof() -> None:
     """Per-stratum SD uses ddof=1 (sample SD). With values
     [1.0, 2.0], ddof=1 SD = sqrt(0.5)."""
     out = per_stratum_aggregate(
-        _make_cells(),
+        _make_rows(),
         column='v',
         aggregator='std',
         stratify_by=('env_name', 'arm_key'),
@@ -78,7 +78,7 @@ def test_per_stratum_aggregate_std_sample_ddof() -> None:
 def test_per_stratum_aggregate_median() -> None:
     """Median of [1.0, 2.0] = 1.5."""
     out = per_stratum_aggregate(
-        _make_cells(),
+        _make_rows(),
         column='v',
         aggregator='median',
         stratify_by=('env_name', 'arm_key'),
@@ -86,15 +86,15 @@ def test_per_stratum_aggregate_median() -> None:
     assert math.isclose(out[('env1', 'baseline')], 1.5)
 
 
-def test_per_stratum_aggregate_cell_filter() -> None:
-    """`cell_filter` narrows BEFORE aggregation. Filter to
+def test_per_stratum_aggregate_row_filter() -> None:
+    """`row_filter` narrows BEFORE aggregation. Filter to
     baseline arm only — DDQN strata vanish."""
     out = per_stratum_aggregate(
-        _make_cells(),
+        _make_rows(),
         column='v',
         aggregator='mean',
         stratify_by=('env_name', 'arm_key'),
-        cell_filter=pl.col('arm_key') == 'baseline',
+        row_filter=pl.col('arm_key') == 'baseline',
     )
     assert set(out.keys()) == {
         ('env1', 'baseline'),
@@ -104,11 +104,11 @@ def test_per_stratum_aggregate_cell_filter() -> None:
 
 
 def test_per_stratum_aggregate_min_n_floors() -> None:
-    """`min_n` skips strata with too few surviving cells.
+    """`min_n` skips strata with too few surviving rows.
     With NaN drop, each stratum has 2 finite values; `min_n=3`
     skips all."""
     out = per_stratum_aggregate(
-        _make_cells(),
+        _make_rows(),
         column='v',
         aggregator='mean',
         stratify_by=('env_name', 'arm_key'),
@@ -117,8 +117,8 @@ def test_per_stratum_aggregate_min_n_floors() -> None:
     assert out == {}
 
 
-def test_per_stratum_aggregate_empty_cells_returns_empty() -> None:
-    """Empty cells DataFrame → empty output, no error."""
+def test_per_stratum_aggregate_empty_rows_returns_empty() -> None:
+    """Empty rows DataFrame → empty output, no error."""
     out = per_stratum_aggregate(
         pl.DataFrame(),
         column='v',
@@ -129,9 +129,9 @@ def test_per_stratum_aggregate_empty_cells_returns_empty() -> None:
 
 
 def test_per_stratum_aggregate_missing_column_returns_empty() -> None:
-    """Column not present in cells → empty output."""
+    """Column not present in rows → empty output."""
     out = per_stratum_aggregate(
-        _make_cells(),
+        _make_rows(),
         column='nonexistent_col',
         aggregator='mean',
         stratify_by=('env_name', 'arm_key'),
@@ -141,43 +141,43 @@ def test_per_stratum_aggregate_missing_column_returns_empty() -> None:
 
 def test_panel_derive_delegates_to_kernel() -> None:
     """Panel.derive(spec) MUST produce the same output as
-    per_stratum_aggregate(panel.cells, ...) — the kernel is
+    per_stratum_aggregate(panel.df, ...) — the kernel is
     the single source of truth. If this test ever diverges,
     the delegation broke."""
-    cells = _make_cells()
-    panel = Panel.from_dataframe(cells, stratify_by=('env_name', 'arm_key'))
+    rows = _make_rows()
+    panel = Panel.from_dataframe(rows, stratify_by=('env_name', 'arm_key'))
     spec = DerivedSpec(column='v', aggregator='mean')
     via_panel = panel.derive(spec)
     via_kernel = per_stratum_aggregate(
-        cells,
+        rows,
         column='v',
         aggregator='mean',
         stratify_by=('env_name', 'arm_key'),
-        cell_filter=None,
+        row_filter=None,
         min_n=spec.effective_min_n,
     )
     assert dict(via_panel) == dict(via_kernel)
 
 
-def test_cells_to_dataframe_passthrough() -> None:
+def test_rows_to_dataframe_passthrough() -> None:
     """When passed a DataFrame, return as-is (zero-copy)."""
-    df = _make_cells()
-    out = cells_to_dataframe(df)
+    df = _make_rows()
+    out = to_dataframe(df)
     assert out is df
 
 
-def test_cells_to_dataframe_from_iterable_of_mappings() -> None:
+def test_rows_to_dataframe_from_iterable_of_mappings() -> None:
     """Convert a list of dict-rows to DataFrame."""
     rows = [
         {'env_name': 'env1', 'arm_key': 'baseline', 'v': 1.0},
         {'env_name': 'env1', 'arm_key': 'ddqn', 'v': 2.0},
     ]
-    out = cells_to_dataframe(rows)
+    out = to_dataframe(rows)
     assert out.height == 2
     assert set(out.columns) >= {'env_name', 'arm_key', 'v'}
 
 
-def test_cells_to_dataframe_empty_returns_empty() -> None:
+def test_rows_to_dataframe_empty_returns_empty() -> None:
     """Empty iterable → empty DataFrame."""
-    out = cells_to_dataframe([])
+    out = to_dataframe([])
     assert out.height == 0

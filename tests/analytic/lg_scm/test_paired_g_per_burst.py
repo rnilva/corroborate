@@ -36,7 +36,7 @@ from corroborate.analyses.paired.paired_g_per_burst import (
     paired_g_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -145,14 +145,14 @@ def test_per_burst_recovers_closed_form_g_under_constant_phase() -> None:
     n_bursts = 5
     treatments = tuple(_scm(0.8) for _ in range(n_bursts))
     baselines = tuple(_scm(0.3) for _ in range(n_bursts))
-    cells = run_paired_phased_arms(
+    rows = run_paired_phased_arms(
         treatments_per_burst=treatments,
         baselines_per_burst=baselines,
         seeds=range(_N_PAIRS),
     )
 
     result = paired_g_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,
@@ -196,7 +196,7 @@ def test_per_burst_unmasks_phase_flip_that_scalar_paired_g_hides() -> None:
     treatments = (_scm(0.8), _scm(0.8), _scm(0.3), _scm(0.3))
     baselines = (_scm(0.3), _scm(0.3), _scm(0.8), _scm(0.8))
     n_bursts = len(treatments)
-    cells = run_paired_phased_arms(
+    rows = run_paired_phased_arms(
         treatments_per_burst=treatments,
         baselines_per_burst=baselines,
         seeds=range(_N_PAIRS),
@@ -204,7 +204,7 @@ def test_per_burst_unmasks_phase_flip_that_scalar_paired_g_hides() -> None:
 
     # ============ Per-burst sees the phase ============
     per_burst = paired_g_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,
@@ -245,7 +245,7 @@ def test_per_burst_unmasks_phase_flip_that_scalar_paired_g_hides() -> None:
     )
     bound = 4.0 * se
     scalar = paired_g.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',
@@ -265,7 +265,7 @@ def test_per_burst_unmasks_phase_flip_that_scalar_paired_g_hides() -> None:
     # both inflated-g and SE-collapse regressions on the masking case.
     assert scalar.se > 0.0, (
         f'scalar.se = {scalar.se}; framework should report finite '
-        f'SE on n_pairs=60 cells'
+        f'SE on n_pairs=60 rows'
     )
     z_score = abs(scalar.g) / scalar.se
     assert z_score < 2.5, (

@@ -5,11 +5,11 @@ import hashlib
 from collections.abc import Iterable
 
 
-def stable_extent_hash(cell_ids: Iterable[str]) -> int:
-    """Return a compact grouping key for string cell identifiers.
+def stable_extent_hash(row_ids: Iterable[str]) -> int:
+    """Return a compact grouping key for string row identifiers.
 
     Python's built-in hash of strings is intentionally salted per
-    interpreter process, so ``hash(frozenset(cell_ids))`` cannot be
+    interpreter process, so ``hash(frozenset(row_ids))`` cannot be
     compared across processes. This function preserves set semantics
     with a domain-separated BLAKE2b digest. Each UTF-8 identifier is
     length-prefixed, avoiding delimiter ambiguities, and duplicates do
@@ -25,8 +25,8 @@ def stable_extent_hash(cell_ids: Iterable[str]) -> int:
         digest_size=16,
         person=b'corroborate-ext',
     )
-    for cell_id in sorted(frozenset(cell_ids)):
-        encoded = cell_id.encode('utf-8')
+    for row_id in sorted(frozenset(row_ids)):
+        encoded = row_id.encode('utf-8')
         digest.update(len(encoded).to_bytes(8, byteorder='big'))
         digest.update(encoded)
     return int.from_bytes(digest.digest(), byteorder='big')

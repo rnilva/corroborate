@@ -7,7 +7,7 @@ iterates the Cartesian product of the exogenous grid, and
 dispatches both arms per grid point. Pairing is intrinsic.
 
 These tests use a synthetic implementation: a tiny `base` callable
-plus a stub Runner that produces deterministic SweepCellResults.
+plus a stub Runner that produces deterministic SweepRowResults.
 The framework's job (claim composition, arm_key derivation,
 parquet persistence) gets exercised end-to-end without an RL
 substrate."""
@@ -156,9 +156,9 @@ def _stub_runner(
 def test_run_intervention_pairs_arms_at_each_grid_point(
     tmp_path: Path,
 ) -> None:
-    """A 2-grid sweep produces 4 cells: 2 grid points × 2 arms
+    """A 2-grid sweep produces 4 rows: 2 grid points × 2 arms
     (treatment, baseline). Each grid point has a paired
-    (treatment, baseline) cell with matching grid keys."""
+    (treatment, baseline) row with matching grid keys."""
     runs_path, _ = run_intervention(
         _StubHypothesis.INTERVENTION,
         base=_base_theory,
@@ -182,7 +182,7 @@ def test_run_intervention_pairs_arms_at_each_grid_point(
 def test_run_intervention_arm_keys_from_canonical_str(
     tmp_path: Path,
 ) -> None:
-    """`arm_key` on emitted cells comes from
+    """`arm_key` on emitted rows comes from
     `combined_arm_key(intervention_tuple)` — the canonical
     fingerprint of the typed Intervention. Treatment carries the
     structural delta's fingerprint; baseline (empty tuple) is
@@ -207,7 +207,7 @@ def test_run_intervention_arm_keys_from_canonical_str(
 def test_run_intervention_single_empty_grid_point_runs_once_per_arm(
     tmp_path: Path,
 ) -> None:
-    """`grid_points=[{}]` → one cell per arm = 2 cells (treatment +
+    """`grid_points=[{}]` → one row per arm = 2 rows (treatment +
     baseline)."""
     runs_path, _ = run_intervention(
         _StubHypothesis.INTERVENTION,
@@ -222,7 +222,7 @@ def test_run_intervention_single_empty_grid_point_runs_once_per_arm(
 
 
 def test_run_intervention_three_arm_dose_response(tmp_path: Path) -> None:
-    """N=3 DoEffect dispatches 3 cells per grid point. Verifies
+    """N=3 DoEffect dispatches 3 rows per grid point. Verifies
     that `run_intervention`'s arms-loop generalizes beyond the
     binary case. Arms: empty-tuple control + two interventional
     levels (different replacements on the same slot)."""
@@ -240,7 +240,7 @@ def test_run_intervention_three_arm_dose_response(tmp_path: Path) -> None:
         out_dir=tmp_path,
     )
     rows = read_runrows(runs_path)
-    # 2 grid points × 3 arms = 6 cells.
+    # 2 grid points × 3 arms = 6 rows.
     assert len(rows) == 6
     arm_keys = {r.arm_key for r in rows}
     expected_keys = set(three_arm.arm_keys())
@@ -256,18 +256,18 @@ def test_run_intervention_three_arm_dose_response(tmp_path: Path) -> None:
 # ============ I3: manifest-driven merge across multiple calls ============
 
 
-def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
+def test_two_run_intervention_calls_share_out_dir_merge_includes_all_rows(
     tmp_path: Path,
 ) -> None:
     """**Invariant I3** (SWEEP_PERSISTENCY.md): when two
     `run_intervention` calls target the same `out_dir` with the
     same `archive_remote`, the final `<out_dir>/runs.parquet`
-    must contain the UNION of cells from both calls.
+    must contain the UNION of rows from both calls.
 
     Pre-fix bug: `run_intervention`'s merge step used
     `archived_runs_uris` populated only from THIS call's iteration.
     The second call clobbered the first call's merged output with
-    a SUBSET (only its own cells). This was the
+    a SUBSET (only its own rows). This was the
     `minatar_sync_curve_resume` data-loss incident.
 
     Post-fix: the merge reads URIs from the manifest, which
@@ -275,7 +275,7 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
 
     Construction: archive_remote is a file:// URI so fsspec uploads
     locally without S3 credentials. Two grid_points per call, two
-    arms per grid_point → 4 cells per call → 8 cells in the final
+    arms per grid_point → 4 rows per call → 8 rows in the final
     union.
 
     `archive_remote` lives in a sibling of `out_dir` (not inside
@@ -287,7 +287,7 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
     out_dir.mkdir()
     archive_remote = (tmp_path / 'remote').as_uri()
 
-    # Tag includes replicate so each call's cells have distinct
+    # Tag includes replicate so each call's rows have distinct
     # relpaths (otherwise the resume-skip path triggers on call 2,
     # masking the I3 bug). The I1 invariant is what protects against
     # this in production via per-arm-config namespacing; for this
@@ -321,11 +321,11 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
     )
 
     rows = read_runrows(runs_path)
-    # 4 cells per call × 2 calls = 8 cells total. Pre-fix: 4
-    # (only the second call's cells; the first call's merged
+    # 4 rows per call × 2 calls = 8 rows total. Pre-fix: 4
+    # (only the second call's rows; the first call's merged
     # output was clobbered).
     assert len(rows) == 8, (
-        f'expected 8 cells across 2 calls (4 each), got {len(rows)}. '
+        f'expected 8 rows across 2 calls (4 each), got {len(rows)}. '
         f'Pre-fix bug: per-call merge clobbered the prior call s '
         f'merged file. Post-fix: manifest-driven merge reads from '
         f'the accumulated manifest.'
@@ -355,10 +355,10 @@ def test_two_run_intervention_calls_share_out_dir_merge_includes_all_cells(
 # ============ Resume robustness: stale 0-byte tmp parquets ============
 
 
-def test_run_intervention_reruns_cell_when_tmp_parquet_is_zero_bytes(
+def test_run_intervention_reruns_row_when_tmp_parquet_is_zero_bytes(
     tmp_path: Path,
 ) -> None:
-    """When a previous sweep crashed mid-write of a cell's parquet
+    """When a previous sweep crashed mid-write of a row's parquet
     (e.g. SIGKILL during stream_concat), the leftover 0-byte file
     poisons subsequent merges with a polars
     `File out of specification: must contain a header and footer
@@ -366,7 +366,7 @@ def test_run_intervention_reruns_cell_when_tmp_parquet_is_zero_bytes(
 
     Pre-fix: the resume-skip check was `runs_path.exists() and
     traces_path.exists()` — `Path.exists()` returns True on a
-    0-byte file, so the runner happily skipped the cell, then the
+    0-byte file, so the runner happily skipped the row, then the
     merge step tried to read the corrupt parquet and crashed.
 
     Post-fix: the skip-cached check requires `stat().st_size > 0`
@@ -375,10 +375,10 @@ def test_run_intervention_reruns_cell_when_tmp_parquet_is_zero_bytes(
     traces_path.exists():` branch.
 
     Reproduces the metamaze_g099_1M_postfix incident
-    (2026-05-09): cell002 traces.parquet was 0 bytes, finalize
+    (2026-05-09): row002 traces.parquet was 0 bytes, finalize
     sweep crashed in merge.
     """
-    # Run a 2-grid sweep to produce 4 cells normally.
+    # Run a 2-grid sweep to produce 4 rows normally.
     run_intervention(
         _StubHypothesis.INTERVENTION,
         base=_base_theory,
@@ -388,17 +388,17 @@ def test_run_intervention_reruns_cell_when_tmp_parquet_is_zero_bytes(
         out_dir=tmp_path,
     )
 
-    # Simulate a crashed mid-write: truncate one cell's traces to 0.
-    # The framework writes per-cell parquets under
-    # `<out_dir>/<arm_tag>/tmp/cell<N>__<tag>__traces.parquet`.
-    tmp_files = list(tmp_path.rglob('cell*__traces.parquet'))
-    assert tmp_files, 'expected per-cell tmp traces.parquet to exist'
+    # Simulate a crashed mid-write: truncate one row's traces to 0.
+    # The framework writes per-row parquets under
+    # `<out_dir>/<arm_tag>/tmp/row<N>__<tag>__traces.parquet`.
+    tmp_files = list(tmp_path.rglob('row*__traces.parquet'))
+    assert tmp_files, 'expected per-row tmp traces.parquet to exist'
     poisoned = tmp_files[0]
     poisoned.write_bytes(b'')  # 0-byte corruption
     assert poisoned.stat().st_size == 0
 
     # Re-run the same sweep. The skip-cached path should detect the
-    # poisoned parquet, clean it, and re-run that cell — NOT skip
+    # poisoned parquet, clean it, and re-run that row — NOT skip
     # and choke later in the merge.
     runs_path, _ = run_intervention(
         _StubHypothesis.INTERVENTION,
@@ -410,11 +410,11 @@ def test_run_intervention_reruns_cell_when_tmp_parquet_is_zero_bytes(
     )
 
     # Merge succeeded → final runs.parquet exists and contains all
-    # 4 cells.
+    # 4 rows.
     rows = read_runrows(runs_path)
     assert len(rows) == 4
     # And the previously-poisoned tmp file is now non-zero (re-
-    # written by the cell runner).
+    # written by the row runner).
     assert poisoned.stat().st_size > 0
 
 
@@ -427,7 +427,7 @@ def test_merge_integrity_check_raises_when_manifest_filter_drops_shards(
 ) -> None:
     """**Cross-check for I3 + force=True risk**: if
     `archived_shard_uris` returns a SUBSET of the manifest's
-    cell shards (e.g., a regression in the prefix/suffix filter),
+    row shards (e.g., a regression in the prefix/suffix filter),
     the merged parquet has fewer rows than the manifest's
     `row_ids` would predict. The integrity check must raise
     BEFORE the corrupt merged output is uploaded.
@@ -453,7 +453,7 @@ def test_merge_integrity_check_raises_when_manifest_filter_drops_shards(
         rep = gp.get('replicate', '?')
         return f'{arm_key}__rep{rep}'
 
-    # Run a 4-cell sweep to populate the manifest.
+    # Run a 4-row sweep to populate the manifest.
     run_intervention(
         _StubHypothesis.INTERVENTION,
         base=_base_theory,

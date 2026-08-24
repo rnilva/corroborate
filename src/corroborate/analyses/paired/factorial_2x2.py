@@ -28,7 +28,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.analyses._cell_value import resolve_value
+from corroborate.analyses._row_value import resolve_value
 from corroborate.bridge.analysis import analysis
 from corroborate.stats import hedges_g_paired
 
@@ -87,7 +87,7 @@ def _g_paired_from_two_arms(
 
 @analysis
 def factorial_2x2_interaction(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     arm_a: str,
     arm_b: str,
@@ -107,57 +107,57 @@ def factorial_2x2_interaction(
     Pairs are formed on the intersection of `pair_by` keys
     present in all 4 arms — a seed missing from any one arm
     drops the pair entirely (the factorial design needs all 4
-    cells for that seed).
+    rows for that seed).
 
     `source` resolves through the measurable registry first,
-    falling back to a direct field-path read on the cell record
+    falling back to a direct field-path read on the row record
     (same convention as `paired_g.source` via
     `paired_g.resolve_value`).
 
     `dedupe_strategy` mirrors `paired_g`: defaults to `'mean'`
-    (per-cell aggregation within each `(env, arm, pair_by)`
+    (per-row aggregation within each `(env, arm, pair_by)`
     bucket); pass `'raise'` to error on duplicates. Pre-fix this
     primitive silently overwrote duplicates via dict assignment;
     `'raise'` is the safer choice when the corpus is supposed to
-    have one cell per `(env, arm, seed)`."""
-    rows = to_dicts(cells)
+    have one row per `(env, arm, seed)`."""
+    rows = to_dicts(df)
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
             f'factorial_2x2_interaction: unknown dedupe_strategy '
             f'{dedupe_strategy!r}; expected "raise" or "mean"',
         )
-    cells_list = list(rows)
+    rows_list = list(rows)
     if total_steps_filter is not None:
-        cells_list = [
-            c for c in cells_list
+        rows_list = [
+            c for c in rows_list
             if c.get(total_steps_field) == total_steps_filter
         ]
 
-    # Per-cell collected values, keyed by (env, arm, pair_by_tuple),
+    # Per-row collected values, keyed by (env, arm, pair_by_tuple),
     # then collapsed to scalar per dedupe_strategy.
     by_env_arm_buckets: dict[
         tuple[str, str, tuple[object, ...]], list[float],
     ] = {}
     envs_seen: set[str] = set()
-    for cell in cells_list:
-        env_v = cell.get('env_name')
-        arm_v = cell.get(arm_field)
+    for row in rows_list:
+        env_v = row.get('env_name')
+        arm_v = row.get(arm_field)
         if not isinstance(env_v, str):
             continue
         envs_seen.add(env_v)
         if arm_v not in (arm_a, arm_b, arm_c, arm_d):
             continue
         try:
-            fv = resolve_value(cell, source)
+            fv = resolve_value(row, source)
         except (KeyError, TypeError):
             continue
         if math.isnan(fv):
             continue
-        key = tuple(cell[k] for k in pair_by)
+        key = tuple(row[k] for k in pair_by)
         bucket = by_env_arm_buckets.setdefault((env_v, arm_v, key), [])
         if bucket and dedupe_strategy == 'raise':
             raise ValueError(
-                f'factorial_2x2_interaction: duplicate cell at '
+                f'factorial_2x2_interaction: duplicate row at '
                 f'(env={env_v!r}, arm={arm_v!r}, pair_by={pair_by}, '
                 f'key={key}). Tighten `pair_by` to a discriminating '
                 f'tuple, or pass `dedupe_strategy="mean"` to aggregate.'
