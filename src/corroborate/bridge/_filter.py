@@ -12,6 +12,11 @@ def filter_cells(df: pl.DataFrame, expr: pl.Expr) -> pl.DataFrame:
     than raising. Repeated references are deduplicated before materializing
     missing columns.
     """
+    if df.height == 0:
+        # A schema-less empty frame must stay empty: the null-pad
+        # path below would otherwise fabricate a phantom row via
+        # `with_columns` on a zero-row frame.
+        return df
     referenced = list(dict.fromkeys(expr.meta.root_names()))
     missing = [column for column in referenced if column not in df.columns]
     if not missing:

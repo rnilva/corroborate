@@ -50,7 +50,7 @@ should check `n_envs_above >= 1 AND n_envs_below >= 1` and
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -58,13 +58,10 @@ import numpy.typing as npt
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses.dowhy import (
     BackdoorResult,
     RefutationResult,
-    backdoor_ate,
-    placebo_refutation,
-    random_common_cause_refutation,
 )
 from corroborate.analyses._cell_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
@@ -273,7 +270,7 @@ def _nan_refutation(t: str, o: str, m: str, name: str) -> RefutationResult:
 
 @analysis
 def stratum_link_moderation_dowhy(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -310,10 +307,8 @@ def stratum_link_moderation_dowhy(
     strata) yields NaN-everywhere. Bridges should check
     `n_strata > p_covariates` and `n_envs_above ≥ 1 AND
     n_envs_below ≥ 1` for identification."""
-    cells = as_rows(cells)
-    cells_list = list(cells)
     rows, dag, t_col, o_col, n_above, n_below = _build_panel(
-        cells_list,
+        to_dicts(cells),
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         link_predictor=link_predictor,
@@ -344,18 +339,24 @@ def stratum_link_moderation_dowhy(
             outcome_col=o_col,
         )
 
-    backdoor = backdoor_ate.fn(
+    # Rows-level throughout: the derived per-stratum panel rows
+    # go straight to the DoWhy cores — a frame here would only
+    # be decoded again by each of the three calls.
+    from corroborate.analyses.dowhy.dowhy import (
+        backdoor_ate_rows, run_refuter,
+    )
+    backdoor = backdoor_ate_rows(
         rows, treatment=t_col, outcome=o_col,
         dag=dag, method_name=method_name,
     )
-    placebo = placebo_refutation.fn(
-        rows, treatment=t_col, outcome=o_col,
-        dag=dag, method_name=method_name,
+    placebo = run_refuter(
+        rows, t_col, o_col, dag, method_name,
+        refuter_method='placebo_treatment_refuter',
         random_state=random_state,
     )
-    rcc = random_common_cause_refutation.fn(
-        rows, treatment=t_col, outcome=o_col,
-        dag=dag, method_name=method_name,
+    rcc = run_refuter(
+        rows, t_col, o_col, dag, method_name,
+        refuter_method='random_common_cause',
         random_state=random_state,
     )
     return StratumLinkModerationDowhyResult(

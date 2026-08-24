@@ -42,6 +42,7 @@ import math
 from collections.abc import Mapping
 
 from corroborate.analyses.panel.stratum_panel import stratum_panel
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm._closed_form import y_mean_arm_sd
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
@@ -113,7 +114,7 @@ def _expected_y_arm_sd(beta_xz: float) -> float:
 
 def test_stratum_panel_strata_indexing_and_counts() -> None:
     panel = stratum_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         measurables=('x_mean', 'z_mean', 'y_mean'),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -133,7 +134,7 @@ def test_stratum_panel_strata_indexing_and_counts() -> None:
 
 def test_stratum_panel_per_arm_means_recover_closed_form() -> None:
     panel = stratum_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -162,7 +163,7 @@ def test_stratum_panel_per_arm_means_recover_closed_form() -> None:
 
 def test_stratum_panel_deltas_recover_structural_contrast() -> None:
     panel = stratum_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -193,7 +194,7 @@ def test_stratum_panel_deltas_recover_structural_contrast() -> None:
 
 def test_stratum_panel_within_stratum_spearman_recovers_closed_form() -> None:
     panel = stratum_panel.fn(
-        _build_cells(),
+        cells_to_dataframe(_build_cells()),
         measurables=('x_mean', 'y_mean'),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -223,53 +224,6 @@ def test_stratum_panel_within_stratum_spearman_recovers_closed_form() -> None:
         assert not math.isnan(rho)
 
 
-def test_stratum_panel_dataframe_input_identical_to_iterable_input() -> None:
-    """Canonical-input invariant: `stratum_panel` called with
-    `cells: pl.DataFrame` (the canonical shape — what
-    `panel.cells` provides) must produce the same StratumPanel
-    as called with `cells: Iterable[Mapping]` (the back-compat
-    shape for synthetic test fixtures).
-
-    Guards against the DataFrame branch diverging from the
-    Iterable branch — both materialise to per-cell rows and
-    feed the same algorithm."""
-    import polars as pl
-
-    cells = _build_cells()
-    panel_via_cells = stratum_panel.fn(
-        cells,
-        measurables=('y_mean',),
-        treatment_arm='treatment',
-        baseline_arm='baseline',
-    )
-    panel_via_panel = stratum_panel.fn(
-        pl.DataFrame(cells),
-        measurables=('y_mean',),
-        treatment_arm='treatment',
-        baseline_arm='baseline',
-    )
-    # Strata order must match (both use the same algorithm).
-    assert panel_via_cells.strata == panel_via_panel.strata
-    # Per-arm n_treatment / n_baseline match.
-    assert panel_via_cells.n_treatment == panel_via_panel.n_treatment
-    assert panel_via_cells.n_baseline == panel_via_panel.n_baseline
-    # Per-measurable means/stds match bit-for-bit.
-    for m in ('y_mean',):
-        assert (
-            panel_via_cells.means_treatment[m]
-            == panel_via_panel.means_treatment[m]
-        )
-        assert (
-            panel_via_cells.stds_treatment[m]
-            == panel_via_panel.stds_treatment[m]
-        )
-    # Per-stratum Cohen's d match.
-    assert (
-        panel_via_cells.cohen_d('y_mean')
-        == panel_via_panel.cohen_d('y_mean')
-    )
-
-
 def test_stratum_panel_default_stratify_by_is_env_name() -> None:
     """The analysis's canonical default `stratify_by=('env_name',)`
     is the right grouping for cross-arm contrast — arm_key is
@@ -282,7 +236,7 @@ def test_stratum_panel_default_stratify_by_is_env_name() -> None:
 
     cells = _build_cells()
     result = stratum_panel.fn(
-        pl.DataFrame(cells),
+        cells_to_dataframe(pl.DataFrame(cells)),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',

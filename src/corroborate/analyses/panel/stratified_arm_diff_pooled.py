@@ -29,7 +29,6 @@ heterogeneous; obscuring it via per-pair pooling was misleading.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import polars as pl
@@ -154,7 +153,7 @@ class StratifiedArmDiffPooledResult:
 
 @analysis
 def stratified_arm_diff_pooled(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,

@@ -27,12 +27,12 @@ sees the cells. Analyses pair, never scope.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses._cell_value import key_tuple, resolve_value
 from corroborate.analyses.panel import per_stratum_panel
 from corroborate.bridge.analysis import analysis
@@ -110,7 +110,7 @@ class PairedGResult:
 
 @analysis
 def paired_g(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -141,7 +141,7 @@ def paired_g(
     `pl.Expr`; `claim_bridge.evaluate()` filters before this
     analysis sees the cells. The analysis itself does not scope.
 
-    `dedupe_strategy` controls the policy when multiple cells share
+    `dedupe_strategy` controls the policy when multiple rows share
     the same `(arm, pair_by)` tuple:
     - `'mean'` (default): average the per-cell `source` values
       within each `(arm, pair_by)` bucket, then run paired-g on
@@ -181,7 +181,45 @@ def paired_g(
     `cliff_delta_paired` (when available) on small-n skewed-Δ
     corpora. `result.assumption_violations` flags inputs that
     cross the empirically-derived skew/kurtosis thresholds."""
-    cells = as_rows(cells)
+    return _paired_g_rows(
+        to_dicts(cells), source=source, treatment_arm=treatment_arm,
+        baseline_arm=baseline_arm, pair_by=pair_by,
+        arm_field=arm_field, dedupe_strategy=dedupe_strategy,
+    )
+
+
+def _require_complete_pair_key(
+    key: tuple[object, ...],
+    pair_by: tuple[str, ...],
+    cell: Mapping[str, object],
+) -> None:
+    """A null pairing-unit key silently merges unrelated rows into
+    one `(None, ...)` bucket — after frame materialisation, rows
+    that never carried the key are indistinguishable from rows
+    carrying an explicit null, so the loud check lives here."""
+    if any(v is None for v in key):
+        raise ValueError(
+            f'paired_g: pairing key {pair_by} is null on row '
+            f'id={cell.get("id")!r} — a null unit key would merge '
+            f'unrelated rows into one bucket; scope the claim to '
+            f'rows carrying the key, or repair the record',
+        )
+
+
+def _paired_g_rows(
+    rows: Sequence[Mapping[str, object]],
+    *,
+    source: str,
+    treatment_arm: str,
+    baseline_arm: str,
+    pair_by: tuple[str, ...],
+    arm_field: str,
+    dedupe_strategy: str,
+) -> PairedGResult:
+    """Rows-level core of `paired_g` — in-tree per-stratum
+    delegates (`per_env_paired_g_panel`) call this directly so a
+    per-env subset never round-trips through a frame; the public
+    `@analysis` wraps it behind the plain-DataFrame boundary."""
     from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):
@@ -190,10 +228,10 @@ def paired_g(
             f'expected "raise" or "mean"',
         )
 
-    # Collect cells alongside values so duplicate-bucket inspection
-    # can call `distinguishing_columns` on the actual cells (not
+    # Collect rows alongside values so duplicate-bucket inspection
+    # can call `distinguishing_columns` on the actual rows (not
     # just values). Under `dedupe_strategy='raise'`, a duplicate
-    # bucket whose cells differ ONLY on framework-provenance tags
+    # bucket whose rows differ ONLY on framework-provenance tags
     # / None-vs-explicit-default columns is a TRUE replicate — the
     # raise would be a false positive. Defer the check to the
     # post-collection pass below; pre-fix this fired on the bucket-
@@ -208,15 +246,17 @@ def paired_g(
     baseline_buckets: dict[
         tuple[object, ...], list[tuple[Mapping[str, object], float]],
     ] = {}
-    for cell in cells:
+    for cell in rows:
         arm = cell.get(arm_field)
         if arm == treatment_arm:
             key = key_tuple(cell, pair_by)
+            _require_complete_pair_key(key, pair_by, cell)
             treatment_buckets.setdefault(key, []).append(
                 (cell, resolve_value(cell, source)),
             )
         elif arm == baseline_arm:
             key = key_tuple(cell, pair_by)
+            _require_complete_pair_key(key, pair_by, cell)
             baseline_buckets.setdefault(key, []).append(
                 (cell, resolve_value(cell, source)),
             )
@@ -242,7 +282,7 @@ def paired_g(
                 # drift) — silently fall through to mean below.
                 continue
             raise ValueError(
-                f'paired_g: duplicate cells for {arm!r} at '
+                f'paired_g: duplicate rows for {arm!r} at '
                 f'pair_by={pair_by} key={key} are not replicates — '
                 f'they differ on: {format_diff(diff)}. Tighten '
                 f'`pair_by` to a discriminating tuple, scope the '
@@ -272,7 +312,7 @@ def paired_g(
     }
 
     paired_keys = sorted(set(treatment) & set(baseline))
-    # NaN-skip pairs where either side is missing (e.g. cells from
+    # NaN-skip pairs where either side is missing (e.g. rows from
     # corpora that didn't carry the source column, surfacing as
     # NaN through `resolve_value`'s present-but-None path). The
     # statistics primitives reject NaN-containing inputs; better
@@ -412,7 +452,10 @@ def per_env_paired_g_panel(
     )
 
     def _analyze(subset: Sequence[Mapping[str, object]]) -> PairedGResult:
-        return paired_g.fn(
+        # Re-entry at a stratum subset: straight into the rows
+        # core — a per-env subset never round-trips through a
+        # frame just to be decoded again.
+        return _paired_g_rows(
             subset,
             treatment_arm=treatment_arm,
             baseline_arm=baseline_arm,

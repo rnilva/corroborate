@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -56,7 +56,7 @@ import numpy as np
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses._cell_value import resolve_value
 from corroborate.bridge.analysis import analysis
 
@@ -94,7 +94,7 @@ class StratumEffectPanel:
 
 @analysis
 def stratum_effect_panel(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -131,12 +131,12 @@ def stratum_effect_panel(
     is plausibly bimodal — together they characterize the
     population mean and the typical case.
     """
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     # Group by (arm, stratum).
     per_arm_stratum: dict[
         tuple[str, tuple[object, ...]], list[Mapping[str, object]],
     ] = defaultdict(list)
-    for c in cells:
+    for c in rows:
         arm = c.get(arm_field)
         if not isinstance(arm, str) or arm not in (treatment_arm, baseline_arm):
             continue

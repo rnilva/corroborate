@@ -34,7 +34,13 @@ from corroborate.analyses.link.cross_stratum_arm_diff_partial_spearman import (
 )
 
 
-# Resolve the bare callable through the @analysis decorator.
+from corroborate.data import cells_to_dataframe
+
+
+# The analysis itself takes a plain DataFrame; fixture rows route
+# through the entry boundary at each call site, keeping every
+# kwarg statically checked against the analysis signature (a
+# `**kwargs: object` shim would erase them all).
 _fn = cross_stratum_arm_diff_partial_spearman.fn
 
 
@@ -117,7 +123,7 @@ def test_shadow_predictor_collapses_to_zero_under_partial() -> None:
         n_per_arm=20,
     )
     result = _fn(
-        cells, treatment_arm='treatment', baseline_arm='baseline',
+        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -156,7 +162,7 @@ def test_independent_predictor_keeps_partial_near_marginal() -> None:
         n_per_arm=20,
     )
     result = _fn(
-        cells, treatment_arm='treatment', baseline_arm='baseline',
+        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -186,7 +192,7 @@ def test_marginal_rho_alongside_partial_rho() -> None:
         n_per_arm=10,
     )
     result = _fn(
-        cells, treatment_arm='treatment', baseline_arm='baseline',
+        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -215,7 +221,7 @@ def test_min_strata_floor_returns_nan() -> None:
         n_per_arm=10,
     )
     result = _fn(
-        cells, treatment_arm='treatment', baseline_arm='baseline',
+        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -251,7 +257,7 @@ def test_per_arm_seed_floor_drops_stratum() -> None:
         if c['env_name'] == 'e3' and c['arm_key'] == 'treatment'
     ][:3])
     result = _fn(
-        pruned, treatment_arm='treatment', baseline_arm='baseline',
+        cells_to_dataframe(pruned), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -277,7 +283,7 @@ def test_monotone_rank_rho_marginal_exact() -> None:
         n_per_arm=10,
     )
     result = _fn(
-        cells, treatment_arm='treatment', baseline_arm='baseline',
+        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,

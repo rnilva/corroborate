@@ -36,6 +36,7 @@ from corroborate.analyses.paired.paired_g_per_burst import (
     paired_g_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -151,7 +152,7 @@ def test_per_burst_recovers_closed_form_g_under_constant_phase() -> None:
     )
 
     result = paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,
@@ -203,7 +204,7 @@ def test_per_burst_unmasks_phase_flip_that_scalar_paired_g_hides() -> None:
 
     # ============ Per-burst sees the phase ============
     per_burst = paired_g_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=_PER_BURST_Y_MEAN,
@@ -244,7 +245,7 @@ def test_per_burst_unmasks_phase_flip_that_scalar_paired_g_hides() -> None:
     )
     bound = 4.0 * se
     scalar = paired_g.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source='y_mean',

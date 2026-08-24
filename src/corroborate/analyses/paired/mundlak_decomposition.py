@@ -34,7 +34,8 @@ about, rather than mixing aggregations and getting Simpson
 artifacts."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping, Sequence
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -43,7 +44,7 @@ import scipy.stats as ss
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 
 
@@ -95,7 +96,7 @@ class MundlakResult:
 
 @analysis
 def mundlak_decomposition(
-    panel: pl.DataFrame | Iterable[Mapping[str, object]],
+    panel: pl.DataFrame,
     *,
     stratum_key: str = 'stratum_id',
     x_key: str = 'x',
@@ -126,10 +127,34 @@ def mundlak_decomposition(
     panel-data target where the predictor has both env-level and
     within-env variation. Forces an explicit choice of which
     level is being claimed about."""
-    panel = as_rows(panel)
-    panel_list = [dict(p) for p in panel]
+    return mundlak_rows(
+        to_dicts(panel), stratum_key=stratum_key, x_key=x_key,
+        y_key=y_key, se_key=se_key, alpha=alpha,
+        cluster_robust=cluster_robust,
+    )
+
+
+def mundlak_rows(
+    panel_rows: Sequence[Mapping[str, object]],
+    *,
+    stratum_key: str,
+    x_key: str,
+    y_key: str,
+    se_key: str,
+    alpha: float,
+    cluster_robust: bool,
+) -> MundlakResult:
+    """Rows-level core of `mundlak_decomposition` — the in-tree
+    per-burst delegate hands its freshly built panel rows straight
+    here instead of encoding a frame the core would immediately
+    decode; the public `@analysis` wraps it behind the
+    plain-DataFrame boundary."""
+    panel_list = list(panel_rows)
     if not panel_list:
-        raise ValueError('panel must contain at least one observation')
+        raise ValueError(
+            'mundlak_decomposition: empty panel — at least one '
+            'observation is required',
+        )
 
     # Extract typed columns
     strata: list[object] = []
@@ -193,7 +218,7 @@ def mundlak_decomposition(
         raise ValueError(
             f'Mundlak design matrix is rank-deficient '
             f'(rank={rank}, expected {design.shape[1]}); the '
-            f'panel may have zero within-env variance in `x` '
+            f'rows may have zero within-env variance in `x` '
             f'(every stratum has exactly one observation, or x '
             f'is constant within stratum). Use a non-stratified '
             f'analysis when x is purely env-level.',

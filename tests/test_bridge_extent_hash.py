@@ -14,7 +14,6 @@ These tests lock the five invariants the design relies on:
 5. Disjoint scopes admit disjoint cells → distinct hashes."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -23,7 +22,7 @@ import sys
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 from corroborate.bridge.bridge import claim_bridge, evaluate
 from corroborate.bridge.verdict import Verdict
@@ -39,12 +38,12 @@ class _NoopResult:
 
 @analysis
 def _noop_analysis(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
 ) -> _NoopResult:
     """No-op analysis — returns admitted count. The extent_hash
     tests don't care about the result content; they read
     `BridgeEvaluation.extent_hash` directly."""
-    return _NoopResult(admitted=len(list(as_rows(cells))))
+    return _NoopResult(admitted=len(list(to_dicts(cells))))
 
 
 def _cells(*ids: str, x: tuple[float, ...] | None = None) -> list[dict[str, object]]:

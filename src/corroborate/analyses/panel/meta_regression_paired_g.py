@@ -17,11 +17,11 @@ result via `meta_regress_panel`. Both helpers are shared with
 `meta_regression_per_burst` and other panel-shape primitives."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.analyses.paired.paired_g import per_env_paired_g_panel
 from corroborate.bridge.analysis import analysis
 from corroborate.stats import (
@@ -32,7 +32,7 @@ from corroborate.stats.meta_regression import Pool
 
 @analysis
 def meta_regression_paired_g(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -60,9 +60,9 @@ def meta_regression_paired_g(
     via tuple-search naturally fall through to POW_INSUF. The
     underlying `meta_regress_panel` still fail-loud raises for
     direct callers that haven't opted into this graceful shape."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     panel = per_env_paired_g_panel(
-        list(cells),
+        list(rows),
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         arm_field=arm_field,

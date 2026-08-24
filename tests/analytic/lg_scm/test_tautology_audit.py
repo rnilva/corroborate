@@ -37,6 +37,7 @@ from dataclasses import replace
 from corroborate.analyses.diagnostic.tautology_audit import tautology_audit
 from corroborate.corpus.schema import MeasurementLeaf, RunRow
 from corroborate.measurables.redundancy_check import TautologyReport
+from corroborate.data import cells_to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
@@ -154,7 +155,7 @@ def _audit() -> dict[str, TautologyReport]:
     one consistent picture."""
     cells = _build_audit_corpus()
     result = tautology_audit.fn(
-        cells,
+        cells_to_dataframe(cells),
         measurables=_MEDIATOR_SPECS,
         outcome_path='y_mean',
         outcome_reads=('y_per_episode',),
@@ -293,7 +294,7 @@ def test_clean_names_returns_only_the_clean_mediator() -> None:
     consume `clean_names` to filter their candidate list."""
     cells = _build_audit_corpus()
     result = tautology_audit.fn(
-        cells,
+        cells_to_dataframe(cells),
         measurables=_MEDIATOR_SPECS,
         outcome_path='y_mean',
         outcome_reads=('y_per_episode',),
@@ -344,7 +345,7 @@ def test_tautology_audit_forwards_mediator_path_for_to_audit_panel() -> None:
     # Without forwarding: audit looks at `mediator.clean_z`, finds
     # nothing, returns degenerate report (all NaN signals).
     no_forward = tautology_audit.fn(
-        bare_cells,
+        cells_to_dataframe(bare_cells),
         measurables=bare_specs,
         outcome_path='y_mean',
         outcome_reads=('y_per_episode',),
@@ -369,7 +370,7 @@ def test_tautology_audit_forwards_mediator_path_for_to_audit_panel() -> None:
     # three checks (matches the `mediator.clean` case in the
     # existing test_clean_mediator_passes_all_three_checks test).
     forwarded = tautology_audit.fn(
-        bare_cells,
+        cells_to_dataframe(bare_cells),
         measurables=bare_specs,
         outcome_path='y_mean',
         outcome_reads=('y_per_episode',),

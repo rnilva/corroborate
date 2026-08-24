@@ -35,6 +35,7 @@ from corroborate.analyses.spearman.stratum_panel_jci_spearman import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
+from corroborate.data import cells_to_dataframe
 
 
 _SIGMA_X = 0.5
@@ -92,7 +93,7 @@ def test_stratum_panel_jci_marginal_rho_high() -> None:
     at each of the 4 μ_x levels. Empirically ρ ≈ 0.994."""
     cells = _build_cells()
     result = stratum_panel_jci_spearman.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -129,7 +130,7 @@ def test_stratum_panel_jci_stratified_rho_high() -> None:
     """
     cells = _build_cells()
     result = stratum_panel_jci_spearman.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -167,7 +168,7 @@ def test_stratum_panel_jci_partial_rho_collapses_under_full_mediation() -> None:
     to handle the singular case explicitly."""
     cells = _build_cells()
     result = stratum_panel_jci_spearman.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -191,7 +192,7 @@ def test_stratum_panel_jci_partial_rho_collapses_under_full_mediation() -> None:
 def test_stratum_panel_jci_returns_nan_when_no_strata() -> None:
     """Empty corpus → NaN throughout."""
     result = stratum_panel_jci_spearman.fn(
-        [],
+        cells_to_dataframe([]),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',

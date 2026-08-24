@@ -38,6 +38,7 @@ from corroborate.analyses.panel.cross_env_consistency_binomial import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
+from corroborate.data import cells_to_dataframe
 
 
 _MU_X = 1.0
@@ -81,7 +82,7 @@ def test_consistency_binomial_all_positive_supported() -> None:
     one-tailed p = 0.5**10 = 0.000977. SUPPORTED."""
     cells = _build_cells(_ALL_POSITIVE_ENVS)
     result = cross_env_consistency_binomial.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -117,7 +118,7 @@ def test_consistency_binomial_mixed_direction_null() -> None:
     distinguishable from chance."""
     cells = _build_cells(_MIXED_DIRECTION_ENVS)
     result = cross_env_consistency_binomial.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -142,7 +143,7 @@ def test_consistency_binomial_null_floor_drops_small_d() -> None:
     than any plausible LG-SCM Cohen's d."""
     cells = _build_cells(_ALL_POSITIVE_ENVS)
     result = cross_env_consistency_binomial.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -170,7 +171,7 @@ def test_consistency_binomial_either_two_tailed() -> None:
     than one-tailed."""
     cells = _build_cells(_ALL_POSITIVE_ENVS)
     result = cross_env_consistency_binomial.fn(
-        cells,
+        cells_to_dataframe(cells),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',

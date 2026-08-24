@@ -23,12 +23,11 @@ Why this primitive exists:
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 
 from corroborate.analyses._cell_value import key_tuple, resolve_value
@@ -114,7 +113,7 @@ class ArmMeanDiffResult:
 
 @analysis
 def arm_mean_diff(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -153,13 +152,13 @@ def arm_mean_diff(
     filtering more DDQN cells than vanilla) bias the comparison,
     that's a SCOPE issue to handle at the bridge level, not by
     silently filtering arm samples here."""
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     treatment_vals: list[float] = []
     baseline_vals: list[float] = []
     treatment_paired: dict[tuple[object, ...], list[float]] = {}
     baseline_paired: dict[tuple[object, ...], list[float]] = {}
 
-    for cell in cells:
+    for cell in rows:
         arm = cell.get(arm_field)
         v = resolve_value(cell, source)
         if math.isnan(v):
@@ -211,7 +210,7 @@ def arm_mean_diff(
     else:
         welch_df = float('nan')
 
-    # Pairing diagnostic (NOT used in test stat): align cells that
+    # Pairing diagnostic (NOT used in test stat): align rows that
     # share a pair_by key, take per-key arm means, compute ρ. This
     # tells the bridge author whether seed-pairing would gain power
     # over the indep-samples Welch's used here. CI excluding 0

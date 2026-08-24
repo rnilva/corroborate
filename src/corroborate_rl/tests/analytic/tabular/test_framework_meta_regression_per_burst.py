@@ -65,6 +65,7 @@ from corroborate.analyses.panel.meta_regression_per_burst import (
     meta_regression_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
+from corroborate.data import cells_to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -170,7 +171,7 @@ def test_meta_regression_per_burst_slope_p_value_tight() -> None:
     the t-test→p-value computation."""
     cells = _generate_per_burst_panel_cells()
     result = meta_regression_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='slow',
         baseline_arm='fast',
         pair_by=('seed',),
@@ -196,7 +197,7 @@ def test_meta_regression_per_burst_panel_size() -> None:
     """
     cells = _generate_per_burst_panel_cells()
     result = meta_regression_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='slow',
         baseline_arm='fast',
         pair_by=('seed',),
@@ -230,7 +231,7 @@ def test_meta_regression_per_burst_r_squared_in_closed_form_band() -> None:
     """
     cells = _generate_per_burst_panel_cells()
     result = meta_regression_per_burst.fn(
-        cells,
+        cells_to_dataframe(cells),
         treatment_arm='slow',
         baseline_arm='fast',
         pair_by=('seed',),

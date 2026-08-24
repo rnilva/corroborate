@@ -64,6 +64,7 @@ import numpy as np
 import numpy.typing as npt
 
 from corroborate.analyses.paired.paired_g import paired_g
+from corroborate.data import cells_to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -129,7 +130,7 @@ def _measure_paired_g_bias(
         delta = draw_delta(rng, n)
         cells = _make_paired_cells(delta)
         result = paired_g.fn(
-            cells,
+            cells_to_dataframe(cells),
             treatment_arm='T',
             baseline_arm='B',
             pair_by=('seed',),

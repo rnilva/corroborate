@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -225,7 +225,7 @@ def _stratum_std(values: list[float]) -> float:
 
 @analysis
 def stratum_panel(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     measurables: tuple[str, ...],
     treatment_arm: str,
@@ -237,12 +237,10 @@ def stratum_panel(
 ) -> StratumPanel:
     """Build the unified per-stratum panel.
 
-    Canonical input is `pl.DataFrame` (e.g. `Panel.cells`, the
-    runner's scope-filtered cells frame, or any caller-built
-    DataFrame). `Iterable[Mapping[str, object]]` is accepted as
-    a back-compat fallback for synthetic test cells + ad-hoc
-    dict lists; converted to DataFrame at entry via
-    `corroborate.data.kernel.cells_to_dataframe`.
+    Input is a plain `pl.DataFrame` (e.g. `Panel.cells`, the
+    runner's scope-filtered frame, or any caller-built
+    DataFrame); a caller holding rows converts once at its own
+    boundary via `corroborate.data.cells_to_dataframe`.
 
     Algorithm:
     1. Bucket cells by (arm, stratum_key).
@@ -259,17 +257,11 @@ def stratum_panel(
     `aggregator='median'` gives median Δ — sibling for outlier-
     robust analyses; affects `means_*` slots, std slots stay as
     arithmetic sample SD."""
-    # Canonical: pl.DataFrame in, per-cell-loop algorithm.
-    # Iterable[Mapping] fallback for back-compat with synthetic
-    # tests + non-Panel ad-hoc callers.
-    from corroborate.data.kernel import cells_to_dataframe
-    if not isinstance(cells, pl.DataFrame):
-        cells = cells_to_dataframe(cells)
-    cells = cells.iter_rows(named=True)
+    # A plain DataFrame in; the algorithm is a per-cell loop.
     per_arm_stratum: dict[
         tuple[str, tuple[object, ...]], list[Mapping[str, object]],
     ] = defaultdict(list)
-    for c in cells:
+    for c in cells.iter_rows(named=True):
         arm = c.get(arm_field)
         if not isinstance(arm, str):
             continue

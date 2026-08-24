@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -33,7 +33,7 @@ import scipy.stats as stats
 
 import polars as pl
 
-from corroborate._internals.polars import as_rows
+from corroborate._internals.polars import to_dicts
 from corroborate.bridge.analysis import analysis
 
 
@@ -53,7 +53,7 @@ class CrossStratumArmDiffSlopeResult:
 
 @analysis
 def cross_stratum_arm_diff_slope(
-    cells: pl.DataFrame | Iterable[Mapping[str, object]],
+    cells: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -72,11 +72,11 @@ def cross_stratum_arm_diff_slope(
     ρ/p when n_strata < `min_strata`. NaN values drop their cell;
     pure independent-samples per arm (no pair-key cross-reference).
     """
-    cells = as_rows(cells)
+    rows = to_dicts(cells)
     per_stratum_arm: dict[
         tuple[object, ...], dict[str, list[Mapping[str, object]]],
     ] = defaultdict(lambda: defaultdict(list))
-    for c in cells:
+    for c in rows:
         arm = c.get(arm_field)
         if arm not in (treatment_arm, baseline_arm):
             continue
