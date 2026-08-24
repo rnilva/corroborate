@@ -5,7 +5,7 @@ The synthetic-input + composition tests previously living here
 were superseded by the closed-form analytic implementation at
 `tests/analytic/lg_scm/test_paired_g_per_burst.py`, which exercises
 the full `Measurable → reduce_axis → paired_g_per_burst` pipeline
-on real LG-SCM cells with `rel_err` bounds against
+on real LG-SCM rows with `rel_err` bounds against
 `mu_x · sqrt(n_steps) / sigma_x · c_4`.
 
 What stays here: registry probe + corpus-binding smokes that
@@ -24,7 +24,7 @@ import corroborate.analyses  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from corroborate.analyses.paired.paired_g_per_burst import (
     DEFAULT_PER_BURST_SOURCE, panel_for_env, paired_g_per_burst,
 )
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def test_analysis_registered_with_bridge_required_signature() -> None:
@@ -67,7 +67,7 @@ EXPECTILE_TRACES = (
 
 
 @pytest.fixture(scope='module')
-def expectile_3way_cells() -> list[dict[str, object]]:
+def expectile_3way_rows() -> list[dict[str, object]]:
     """Project to needed columns to keep memory bounded; join
     runs + traces on `id`."""
     if not (EXPECTILE_RUNS.exists() and EXPECTILE_TRACES.exists()):
@@ -96,7 +96,7 @@ _VANILLA_ARM = 'baseline'
 
 
 def test_real_corpus_catch_bsuite_zero_across_bursts(
-    expectile_3way_cells: list[dict[str, object]],
+    expectile_3way_rows: list[dict[str, object]],
 ) -> None:
     """FINDINGS revision 12: 'DDQN at n=1 has *exactly* zero effect
     (g = +0.00) on Catch — both arms saturate at mc_return ≈ +0.92
@@ -105,7 +105,7 @@ def test_real_corpus_catch_bsuite_zero_across_bursts(
     Per-burst panel should show g ≈ 0 across every burst on Catch.
     """
     result = paired_g_per_burst.fn(
-        cells_to_dataframe(expectile_3way_cells),
+        to_dataframe(expectile_3way_rows),
         treatment_arm=_DDQN_ARM,
         baseline_arm=_VANILLA_ARM,
         pair_by=('seed',),
@@ -121,16 +121,16 @@ def test_real_corpus_catch_bsuite_zero_across_bursts(
 
 
 def test_real_corpus_fourrooms_positive_across_bursts(
-    expectile_3way_cells: list[dict[str, object]],
+    expectile_3way_rows: list[dict[str, object]],
 ) -> None:
-    """FINDINGS revision 9 (and revision 12 for the (C-A) cell):
+    """FINDINGS revision 9 (and revision 12 for the (C-A) row):
     'g_link(C-A) ≈ +0.79 across bursts on FourRooms — DDQN
     benefit is stable throughout.'
 
     Per-burst panel should show positive g across every burst on
     FourRooms (DDQN improves outcome relative to vanilla)."""
     result = paired_g_per_burst.fn(
-        cells_to_dataframe(expectile_3way_cells),
+        to_dataframe(expectile_3way_rows),
         treatment_arm=_DDQN_ARM,
         baseline_arm=_VANILLA_ARM,
         pair_by=('seed',),

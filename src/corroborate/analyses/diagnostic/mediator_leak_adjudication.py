@@ -111,7 +111,7 @@ class LeakAdjudication(Enum):
 class StratumLeakResult:
     """Per-stratum adjudication record. The discordant counts
     `n_discordant_joint_only` / `n_discordant_sibling_only` are the
-    McNemar (b, c) cells; `z_mcnemar` is the paired-test statistic
+    McNemar (b, c) rows; `z_mcnemar` is the paired-test statistic
     (continuity-corrected for small n)."""
     stratum_id: tuple[object, ...]
     n_marginal_edges: int
@@ -216,7 +216,7 @@ def _mcnemar_z_normal(n_01: int, n_10: int) -> float:
 
 @analysis
 def mediator_leak_adjudication(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     mediator_per_burst: str,
     sibling_per_burst: str | tuple[str, ...],
@@ -275,7 +275,7 @@ def mediator_leak_adjudication(
         else '(' + ', '.join(sibling_tuple) + ')'
     )
 
-    if cells.height == 0:
+    if df.height == 0:
         return MediatorLeakAdjudicationResult(
             per_stratum=(),
             mediator_name=str(mediator_per_burst),
@@ -295,7 +295,7 @@ def mediator_leak_adjudication(
     # already accepts tuple-or-string. Single sibling → depth-1; tuple
     # → depth-k where k = len(tuple).
     sibling_res = dynamic_pc_adjacency.fn(
-        cells,
+        df,
         mediator_per_burst=(
             sibling_tuple[0] if len(sibling_tuple) == 1 else sibling_tuple
         ),
@@ -308,7 +308,7 @@ def mediator_leak_adjudication(
     )
     # Joint run: (mediator, *siblings) at depth-(k+1).
     joint_res = dynamic_pc_adjacency.fn(
-        cells,
+        df,
         mediator_per_burst=joint_set,
         arm_field=arm_field,
         outcome_per_burst=outcome_per_burst,
@@ -324,12 +324,12 @@ def mediator_leak_adjudication(
         sib_marg, sib_dsep = _per_burst_booleans(sibling_res, s_id, alpha)
         joint_marg, joint_dsep = _per_burst_booleans(joint_res, s_id, alpha)
         # **Per-burst NaN-coupling pre-filter** (v5 fix). The depth-1
-        # sibling-only run drops cells with NaN in `sibling`; the
-        # depth-2 joint run drops cells with NaN in EITHER `sibling`
-        # OR `mediator`, so the two runs may use different cell
+        # sibling-only run drops rows with NaN in `sibling`; the
+        # depth-2 joint run drops rows with NaN in EITHER `sibling`
+        # OR `mediator`, so the two runs may use different row
         # subsets at each burst. Intersect via `n_per_burst >=
         # min_n_per_burst` from both runs to score only the bursts
-        # where both had adequate sample size. Earlier "cell-level"
+        # where both had adequate sample size. Earlier "row-level"
         # pre-filter (v4) was overly strict — discarded usable bursts
         # for a single NaN entry.
         sib_n = sibling_res[s_id].n_per_burst
@@ -340,9 +340,9 @@ def mediator_leak_adjudication(
             for b in range(n_bursts)
         ]
         # marg-edge intersection — only count a burst as a marg-edge
-        # pair if (a) both runs sampled enough cells, AND (b) the
+        # pair if (a) both runs sampled enough rows, AND (b) the
         # marg-edge boolean agrees. Since marg is depth-0 and
-        # mediator-independent over the SAME cells, the agreement is
+        # mediator-independent over the SAME rows, the agreement is
         # by construction on `valid_burst` bursts; the AND below is
         # defensive.
         marg_intersect = [

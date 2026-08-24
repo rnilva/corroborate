@@ -35,7 +35,7 @@ from corroborate.analyses.dowhy.stratum_baseline_predictor_link_dowhy import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _SIGMA_X = 0.5
@@ -65,12 +65,12 @@ def _scm(mu_x: float, beta_xz: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells() -> list[Mapping[str, object]]:
-    """Build (env, μ_x) cells. Each combination contributes
-    N_SEEDS_PER_ARM cells per arm. The runner stamps mu_x as a
-    leaf field on each cell, so stratify_by=('env_name', 'mu_x')
+def _build_rows() -> list[Mapping[str, object]]:
+    """Build (env, μ_x) rows. Each combination contributes
+    N_SEEDS_PER_ARM rows per arm. The runner stamps mu_x as a
+    leaf field on each row, so stratify_by=('env_name', 'mu_x')
     sees 12 strata. Seeds are offset per (env, μ_x) to ensure
-    distinct cell IDs across the corpus."""
+    distinct row IDs across the corpus."""
     rows = []
     for i, env in enumerate(_ENVS):
         for j, mu_x in enumerate(_MU_X_LEVELS):
@@ -102,9 +102,9 @@ def test_stratum_baseline_predictor_link_recovers_structural_slope() -> None:
     """Δ_target / v_pred = (β_xz_t − β_xz_b)·β_zy / β_xz_b = 2.0
     exactly at each stratum under shared-seed cancellation. After
     env one-hot adjustment, OLS slope recovers 2.0."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = stratum_baseline_predictor_link_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -131,9 +131,9 @@ def test_stratum_baseline_predictor_link_recovers_structural_slope() -> None:
 def test_stratum_baseline_predictor_link_placebo_drift() -> None:
     """Placebo refutation: permute v_pred → structural slope
     broken → refuted ATE ≈ 0, drift ≈ structural slope."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = stratum_baseline_predictor_link_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -161,9 +161,9 @@ def test_stratum_baseline_predictor_link_rcc_drift_small() -> None:
     to v_pred. Since Δ_target is almost perfectly explained by
     (v_pred + env dummies), OLS allocates near-zero coefficient
     to the random column → drift ≈ 0."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = stratum_baseline_predictor_link_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -188,9 +188,9 @@ def test_stratum_baseline_predictor_link_min_baseline_floor_drops_strata() -> No
     v_pred drops those strata. Lowest v_pred = β_xz_b · min(μ_x)
     = 0.3 · 1.0 = 0.3. Setting floor at 0.6 should drop the μ_x=1
     strata (4 envs × 1 level = 4 strata)."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = stratum_baseline_predictor_link_dowhy.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',

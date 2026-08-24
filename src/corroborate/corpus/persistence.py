@@ -8,7 +8,7 @@ own typed column at top level. Querying HPs at the dataframe
 level just works (`df.filter(pl.col('optimizer.inner.lr') < 1e-3)`).
 
 Heterogeneous measurement keys across rows: parquet requires every
-column to have one type per file, but different cells/comparisons
+column to have one type per file, but different rows/comparisons
 can carry different paths. Polars handles missing columns by null-
 padding when constructing the DataFrame from a list-of-dicts —
 rows that don't carry a path get null in that column, which
@@ -75,7 +75,7 @@ from corroborate.corpus.schema import (
 # ============ URI-aware parquet input reads ============
 #
 # Sweep merges are manifest-driven (SWEEP_PERSISTENCY.md I3): when a
-# sweep archives per-cell shards, the merge reads them back from their
+# sweep archives per-row shards, the merge reads them back from their
 # `s3://…` URIs. polars' and pyarrow's native object-store readers
 # can't reach a custom-endpoint store (Cloudflare R2) — they derive
 # the endpoint from region alone (`region='auto'` → bogus
@@ -210,8 +210,8 @@ def iter_trace_records(
     columns: Sequence[str] | None = None,
     batch_size: int = 32,
 ) -> Iterator[Mapping[str, object]]:
-    """Stream per-cell trace records from a parquet without
-    full-corpus materialization. Yields one dict per cell; the
+    """Stream per-row trace records from a parquet without
+    full-corpus materialization. Yields one dict per row; the
     dict is a polars row dict (`List` columns surface as Python
     `list[float]` / `list[int]` / nested lists for 2-D+; scalars
     surface as their native type).
@@ -227,7 +227,7 @@ def iter_trace_records(
     corpus is large.
 
     Memory-bounded alternative to `read_tracerows` for post-hoc
-    per-cell projections (measurable computation, fact extraction
+    per-row projections (measurable computation, fact extraction
     across the corpus, ...) where TraceRow's typed shape isn't
     needed. Drops the ~30× Python-object overhead of
     `to_dicts(df)` materialisation by reading slice-by-slice.
@@ -286,7 +286,7 @@ def apply_trace_reductions(
 
     **Memory profile** — materializes a typed `list[TraceRow]`
     via `from_row_dict` round-trip; on long-trace sweeps (MinAtar
-    1M-step CNN, ~670 MB reduced traces per cell) this doubles
+    1M-step CNN, ~670 MB reduced traces per row) this doubles
     peak heap because both the polars frame AND the typed-rebuild
     list co-exist. Use `write_reduced_tracerows` when the next
     step is parquet-write — it skips the typed rebuild."""

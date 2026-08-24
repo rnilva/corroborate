@@ -29,7 +29,7 @@ from corroborate.analyses.panel.stratum_effect_panel import (
 from tests.analytic.lg_scm._closed_form import y_mean_arm_sd
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _MU_X = 1.0
@@ -60,7 +60,7 @@ def _scm(beta_xz: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells() -> list[Mapping[str, object]]:
+def _build_rows() -> list[Mapping[str, object]]:
     envs = {
         name: (_scm(t), _scm(b))
         for name, (t, b) in _ENV_BETAS.items()
@@ -89,7 +89,7 @@ def _expected_shared_seed_delta_se(env: str) -> float:
 
 def test_stratum_effect_panel_mean_recovers_structural_delta() -> None:
     panel = stratum_effect_panel.fn(
-        cells_to_dataframe(_build_cells()),
+        to_dataframe(_build_rows()),
         treatment_arm='treatment',
         baseline_arm='baseline',
         measurables=('y_mean',),
@@ -97,7 +97,7 @@ def test_stratum_effect_panel_mean_recovers_structural_delta() -> None:
     )
     assert panel.n_strata == 3
     deltas = panel.deltas['y_mean']
-    # Per-stratum cell counts equal seeds per arm
+    # Per-stratum row counts equal seeds per arm
     for n_t, n_b in zip(panel.n_treatment, panel.n_baseline, strict=True):
         assert n_t == _N_SEEDS_PER_ARM
         assert n_b == _N_SEEDS_PER_ARM
@@ -134,7 +134,7 @@ def test_stratum_effect_panel_median_recovers_structural_delta() -> None:
     detects any sign / scale / pooling regression by orders of
     magnitude."""
     panel = stratum_effect_panel.fn(
-        cells_to_dataframe(_build_cells()),
+        to_dataframe(_build_rows()),
         treatment_arm='treatment',
         baseline_arm='baseline',
         measurables=('y_mean',),
@@ -171,18 +171,18 @@ def test_stratum_effect_panel_mean_vs_median_agree_under_gaussian() -> None:
     same population value. Joint sampling SD on (mean Δ −
     median Δ) is bounded by `mean_se + median_se_upper` per env
     (worst case under uncorrelated noise; both estimators on the
-    same shared-seed cells have some correlation, so the actual
+    same shared-seed rows have some correlation, so the actual
     SD is smaller)."""
-    cells = _build_cells()
+    rows = _build_rows()
     mean_panel = stratum_effect_panel.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         measurables=('y_mean',),
         aggregator='mean',
     )
     median_panel = stratum_effect_panel.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         measurables=('y_mean',),

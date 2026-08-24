@@ -23,7 +23,7 @@ Cluster-shaped causal claims (a refutation triple, a sibling
 mean/median pair) live at the graph level — queried by the
 dataset-relative extent grouping key `(source, target,
 extent_hash)` over the post-evaluated graph, NOT decided by a
-central aggregator. The key groups de-duplicated string cell IDs;
+central aggregator. The key groups de-duplicated string row IDs;
 it is not evidence identity or provenance. See
 `docs/HYPOTHESIS_AS_GRAPH.md` for the authoring discipline this
 entails (bridge naming, refutation clusters via shared scope
@@ -191,7 +191,10 @@ verdict, scope, hypothesis, finding* — plus: **condition** (one
 algorithm variant under study), **evaluation window** (a block of
 greedy eval episodes; the code names these `burst`), **run set**
 (the logged collection of runs; the code says corpus), **seeded
-run** at an environment–condition pair (the code says cell), and
+run** at an environment–condition pair (in framework code this is
+just a row carrying env/seed/condition columns; the RL
+substrate's own code still says cell — see the naming rule
+below), and
 **the implementation under study** (the code and CLI say
 "substrate"). New docs, docstrings, README text, and PR prose use
 the paper's words, mentioning the code name once in parentheses
@@ -203,6 +206,24 @@ bearing in parquet schemas, the CLI surface, and the frozen
 `submission` archive; renaming them buys prose purity at the
 cost of breaking every logged run set. The paper itself bridges
 the gap in its terminology paragraph — follow that pattern.
+
+**Data-at-rest naming rule (no framework glossary).** The
+framework defines and checks claims, bridges, scopes, verdicts,
+arms — those words are its vocabulary. Data at rest has NO
+collective domain noun: each surface is named by its local
+shape, in the host ecosystem's own words. A `pl.DataFrame` is
+`df` (`Panel.df`, every `@analysis` first parameter), a sequence
+of row mappings is `rows` (admission gates, rows-level cores), a
+single row's mapping is `record` (`@measurable` input), and
+`evaluate`'s ergonomic union input is `data`. "Cell" is NOT a
+framework concept — nothing in `corroborate` enforces
+one-seeded-run-per-row, and unit-hood is claim-relative
+(`pair_by`, `DoEffect`, `scope`, checked by the gates). The RL
+substrate keeps "cell" for its own rows exactly the way it keeps
+"HP" for leaves: `corroborate_rl.cell_runner` genuinely
+constructs one (env, seed) execution per row, so the word names
+a contract the substrate really enforces — substrate-local
+vocabulary, never framework semantics.
 
 The framework speaks of two kinds of measurables:
 
@@ -290,7 +311,7 @@ Before `@claim_bridge` authoring, substrate authors probe data
 to decide scope predicates + cluster shape. The framework's
 exploration entry point is `Panel` (`corroborate.data.Panel`)
 — a typed, frozen dataclass wrapping
-`cells: pl.DataFrame` + `scope_chain` + `stratify_by` +
+`df: pl.DataFrame` + `scope_chain` + `stratify_by` +
 `sources`. Four constructors:
 
 - `Panel.from_corpus(dir)` — one `runs.parquet` + sidecars.
@@ -305,18 +326,18 @@ Chaining: `narrow(expr)` extends `scope_chain`; `derive(spec)`
 returns per-stratum aggregates via the shared kernel;
 `with_measurables(names)` fills nulls from the `@measurable`
 registry; `with_traces(cols)` joins trace columns lazily;
-`diagnostics` returns typed per-stratum facts (cell counts,
+`diagnostics` returns typed per-stratum facts (row counts,
 corpora-per-stratum, finite-fraction, nonunique-config heterogeneity).
 
 Closing the loop: `panel.to_cache(hyp_module)` writes the
 parquet + `<hyp>.sources.json` (appending an ingested_at
 timestamp to each source's audit trail), so an exploration
 Panel can be promoted into the production cache without
-re-ingest. The cache parquet IS `panel.cells` on disk —
+re-ingest. The cache parquet IS `panel.df` on disk —
 there's no separate Panel format.
 
 `@analysis` primitives consume `pl.DataFrame` directly (not
-the `Panel` wrapper); pass `panel.cells` when calling them from
+the `Panel` wrapper); pass `panel.df` when calling them from
 exploration code. The `panel: Panel` bridge fixture pattern
 was tried and deleted as theatre — bridges consume @analysis
 results by typed parameter name, period. The exploration that
@@ -335,7 +356,7 @@ level attributes (`EXPECTED`, `BRIDGES`, `BLOCKED_ON`, `__name__`),
 no callable. The framework derives the verdict via
 `composed_verdict(g, bridges=f.BRIDGES)` — every named bridge
 admits → SUPPORTED; any refutes → REFUTED; mix admit /
-unevaluated → UNDERPOWERED; all members admit zero cells →
+unevaluated → UNDERPOWERED; all members admit zero rows →
 EMPTY_EXTENT (corpus can't distinguish them).
 
 Authoring conventions:
@@ -381,7 +402,7 @@ Each row store splits into two surfaces:
 
 Two stores join by UUID:
 
-- **Trace store** (`TraceRow`) — per-cell raw observation. Outputs
+- **Trace store** (`TraceRow`) — per-row raw observation. Outputs
   (1) as 1-D `list[float]` columns + leaves (2) as scalar columns.
 - **Row store** (`RunRow`) — provenance + framework verdict +
   `measurements`. The cross-arm aggregate
@@ -391,7 +412,7 @@ Two stores join by UUID:
 A topology sidecar `<corpus>/graphs.json` is written alongside
 the row stores. It carries one `ComputationGraph` per `arm_key`
 so post-hoc consumers can recover the per-arm Claim-to-Claim
-data flow that ran each cell.
+data flow that ran each row.
 
 **Hard rule: no JSON-wrapped struct columns in parquet.** Every
 heterogeneous-keyed dict (HPs, derived measurables) is flattened
@@ -430,7 +451,7 @@ layout.)
   LOCAL_ONLY / IN_PROGRESS_SCAFFOLD), and `--leaves` /
   `--leaves-wide` give the per-(corpus, arm) configurational
   fingerprint. Use it to find which corpus actually carries the
-  cells a bridge needs.
+  rows a bridge needs.
 - **`--ingest <name>` resolution**. The CLI prefixes relative
   names with `experiments/data/`. Probes corpora need
   ABSOLUTE paths (`--ingest "$PWD/experiments/probes/<corpus>"`)
@@ -443,7 +464,7 @@ layout.)
   two distinct sub-corpora share a leaf name across parents.
 - **Cache-sources sidecar** (`cache/<hyp>.sources.json`). Pairs
   with the existing `<hyp>.hashes.json` (output-side measurable
-  provenance) by tracking the INPUT side: which corpora's cells
+  provenance) by tracking the INPUT side: which corpora's rows
   contributed, with `data_root`, `remote_root`, and an
   append-only `ingested_at` audit trail. Mutates lockstep with
   the cache parquet via the `--ingest` and `--evict` paths.
@@ -538,9 +559,9 @@ a running sweep. If you need to run parallel work that might
 include the dangerous commands above, use a separate
 `git worktree add ../sweep-worktree main` so the running sweep's
 filesystem is independent. The runner also re-`mkdir(exist_ok)`
-each cell's parent dir before write as a belt-and-suspenders
+each row's parent dir before write as a belt-and-suspenders
 defense (commit `39ffb09`) — recovers automatically from a
-transient deletion of `tmp/` between cells, but the cell that
+transient deletion of `tmp/` between rows, but the row that
 was in-flight at the time of deletion is still lost.
 
 Sweeps write per-arm sub-corpora under `<out_dir>/<arm>/` and
@@ -561,10 +582,10 @@ and the substrate's `dispatch_sweep` removes them post-merge.
   + `cloud.list_archives` are the recovery / discovery
   primitives.
 - **Trace eviction (CI7)**: per-step / per-burst trace columns
-  are the heavyweight part (~MB per cell). The runner reads
+  are the heavyweight part (~MB per row). The runner reads
   them only when computing measurables, then evicts the local
   `traces.parquet` if cloud-recoverable. CI8 refuses
-  contaminated traces (cell-id mismatches between runs and
+  contaminated traces (row-id mismatches between runs and
   traces).
 - **Trace inspection**: `scripts/trace_schema.py <traces.parquet>
   [<bridges_module>]` lists trace columns + which measurables
@@ -592,9 +613,9 @@ substrate corpora. Reimplementing these inline in experiments
 duplicates logic that's already centralized; **prefer the
 primitives** below.
 
-### Per-cell vs per-burst — when to choose
+### Per-row vs per-burst — when to choose
 
-- **Per-cell scalar** (`paired_g`, `meta_regression_paired_g`):
+- **Per-row scalar** (`paired_g`, `meta_regression_paired_g`):
   pair vanilla / DDQN at the trajectory-averaged level. Fast,
   reliable when training is uniphase. **Fails silently** when
   Q dynamics are non-monotone (e.g., Q-explosion-prone envs):
@@ -631,14 +652,14 @@ methodological claim). The corpus's `jensen_gap` measurable is
 clamped to `max(0, mean(Q − MC))` — `0` does NOT mean
 "unbiased": pair with the `jensen_dormancy_gap` measurable to
 distinguish "true zero" from "underestimating (mech dormant)".
-Link verdicts on dormant-mech cells are UNTESTABLE, not NULL.
+Link verdicts on dormant-mech rows are UNTESTABLE, not NULL.
 
 ### Conditioning rule
 
 Link analyses MUST condition on `mech HELD` (Δ_jens < 0 with
 the mechanism active, not just `jensen_gap > 0`). Otherwise
 "link null" claims silently mix mech-dormant (bias premise
-inactive) with mech-active-but-link-broken cells. The two are
+inactive) with mech-active-but-link-broken rows. The two are
 different verdicts — the framework refuses to collapse them.
 
 ### Concrete primitives
@@ -655,9 +676,9 @@ different verdicts — the framework refuses to collapse them.
 | `stratified_arm_diff_pooled` | per-stratum **independent-samples** Cohen's d → DL random-effects pool with heterogeneity-flagged verdict (HELD / HELD_WITH_SCOPE_FLAG / NO_EFFECT / POWER_INSUFFICIENT). Pair with `meta_regression` sibling on the same scope for the scope-cluster pattern (docs/HYPOTHESIS_AS_GRAPH.md §3b). Use **this** for cross-env / cross-config pooling — NOT `paired_g_pooled`, which pseudo-replicates by seed (see its module docstring). |
 | `stratum_effect_panel_per_burst` | per-(env, burst) **independent-samples** Cohen's d panel. Walks per-burst NDArray source (same shape as `paired_g_per_burst`) but pools treatment / baseline seeds independently within each (env, burst) → Cohen's d via simple-mean-variance form. Canonical migration target for per-burst phase-consistency bridges that can't use `paired_g_per_burst` under the RL substrate seed-pairing rule. |
 | `mundlak_paired_g_per_burst` | **synthetic SCM tests only** — paired form. Off-limits in RL substrate. |
-| `partial_spearman` | **Canonical mediation primitive — unified JCI (partial-)Spearman**. Subsumes five legacy variants (`stratified_spearman` / `stratified_partial_spearman` / `stratified_partial_spearman_multi` / `per_burst_jci_spearman` / `per_burst_partial_jci_spearman`). Single result type `PartialSpearmanResult`. Granularity detected from input types: `x/y: str` → per-cell; `x/y: Measurable[..., NDArray]` → per-burst (one observation per (cell, burst) — preserves phase structure). `conditioning: tuple[..., ...] = ()` — empty for marginal, single entry for closed-form first-order partial, k entries for multi-Z OLS-residual partial. Internal dispatch picks the right `graph.discovery` primitive per k. |
-| `dynamic_partial_spearman` | **Trajectory-resolved mediation** on per-burst measurables. Sibling to `partial_spearman` for per-burst List-typed columns: iterates one ρ per BURST INDEX (not one observation per (cell, burst)) and returns `Mapping[Stratum, DynamicMediationResult]` carrying the per-burst ρ trajectory + `TimeAggregationStatus` enum (`SIGN_FLIP_DETECTED`, `WEAK_TIME_VARYING`, `CONSISTENT_DIRECTION`, `UNDERPOWERED_BURSTS`). `mediator_per_burst` / `outcome_per_burst` accept `str` column names OR `Measurable[..., NDArray]` instances (mirrors `partial_spearman`'s lazy-evaluation pattern via `evaluate_per_burst_source`); `mediator_per_burst` may also be a **tuple** of columns/Measurables for multi-mediator depth-≥2 conditioning (parallel to static `partial_spearman`'s `conditioning` parameter — k=1 closed-form, k≥2 multi-Z OLS-residual; df_offset shifts to `3 + k`). Result's `mediator_names: tuple[str, ...]` records the conditioning set. Both FE Fisher-z (fixed-effects, n-weighted) and DerSimonian-Laird (random-effects) pools are exposed via the result fields `rho_marginal_pooled` / `rho_partial_pooled` (FE) + `dl_marginal` / `dl_partial: FisherZDLPool` (DL). DL is the canonical aggregate — its τ²/I² quantify the heterogeneity that `aggregation_status` flags qualitatively (SIGN_FLIP → I² ≈ 1.0, large τ²; WEAK_TIME_VARYING → I² ∈ [0.5, 1.0]; CONSISTENT_DIRECTION → I² ≈ 0). The FE pool is NaN'd when `SIGN_FLIP_DETECTED` (sign-opposing bursts make the n-weighted z-average a Simpson's-paradox artifact); the DL pool is **never** NaN'd by the diagnostic gate — its heterogeneity statistics are the typed surface for the same pathology. Pool weights match the sibling primitives: marginal `(n_b − 3)` (`stratified_spearman_rho`), partial `(n_b − 4)` (`stratified_partial_spearman_rho`). DL exposes `tau2` / `i2` / `q` (z-units), `rho_pooled` / `rho_pi_lo` / `rho_pi_hi` (inverse-Fisher-z to ρ-units; PI bounds NaN at G < 3), `se_pooled` (z-units), `n_bursts_used`, `assumption_violations` (small-G DL regime warnings). DL gives parametric PI bounds (over-confident under within-cell autocorrelation); `n_bootstrap > 0` adds **cluster-bootstrap empirical CI** which is assumption-free under any within-cell autocorrelation structure (cells = resampling unit; recommended `n_bootstrap=1000` for publication-grade CIs). `bootstrap_marginal` / `bootstrap_partial: ClusterBootstrapInterval | None` populate when `n_bootstrap > 0`; default 0 keeps the fast path bit-identical. `sign_flip_min_abs_rho: float = 0.05` is the noise-floor magnitude below which a per-burst ρ is treated as sampling noise rather than structural signal — opposing-sign bursts at noise level don't trigger SIGN_FLIP, and the noise-level bursts are dropped from the `weak_time_varying_ratio` `max/min` comparison so a single near-zero burst doesn't drive WEAK classification. Per-burst alignment is "ragged tail": `n_bursts = max trajectory length` and `n_per_burst[b]` shrinks as shorter cells drop off (vs truncate-to-min, which would discard every burst past the shortest cell's tail). Mediation on RL training trajectories where burst dynamics may be non-monotone (Q-explosion phases, sign-flipping marginals, mid-training mediation peaks) MUST go through this primitive; static `partial_spearman` on per-burst data risks aggregation artifacts. |
-| `dynamic_pc_adjacency` | **Trajectory-resolved PC-style mediation** on per-burst measurables. Sibling to `dynamic_partial_spearman` from a different identification path: at each burst runs Fisher-z partial-correlation CI tests (the same machinery `corroborate.graph.discovery.discover_adjacency` uses for PC edge removal) and reports per-burst edge presence + counts. Returns `Mapping[Stratum, DynamicPCResult]` with per-burst `p_marginal[b]` (depth-0 marginal Spearman CI), `p_conditional[b]` (depth-1 closed-form partial Spearman CI, df = n − 4), `rho_marginal[b]`, `rho_partial[b]`, and three boolean trajectory counts: `n_bursts_marginal_edge` (where marginal CI rejects at α), `n_bursts_mediator_dseparates` (marginal edge present AND conditional edge absent → full mediation at burst b), `n_bursts_direct_edge` (both present → partial mediation or direct effect). Consumers decide trajectory-shape thresholds (mostly-mediated / rarely-mediated); the framework declines to prescribe a meta-aggregator. Shares the `TimeAggregationStatus` classifier with `dynamic_partial_spearman` (driven by `rho_marginal[b]`). Also exposes `dl_marginal` / `dl_partial: FisherZDLPool` — the DerSimonian-Laird random-effects pool over the per-burst (ρ, n) trajectory (same shape as the sibling). DL is the canonical aggregate — its τ²/I² quantify the heterogeneity that `aggregation_status` flags qualitatively (the PC primitive doesn't expose an FE Fisher-z pool because its primary output is per-burst CI-test edge presence, not a pooled magnitude). DL gives parametric PI bounds (over-confident under within-cell autocorrelation); `n_bootstrap > 0` adds **cluster-bootstrap empirical CI** which is assumption-free under any within-cell autocorrelation structure (cells = resampling unit; recommended `n_bootstrap=1000` for publication-grade CIs). `bootstrap_marginal` / `bootstrap_partial: ClusterBootstrapInterval | None` populate when `n_bootstrap > 0`. The integer edge-count triple ALSO gets a cluster-bootstrap CI via `bootstrap_edge_counts: ClusterBootstrapEdgeCounts | None` — answers "is the edge classification robust to which cells we sampled?" (wide CI on dsep means a few outlier cells flip per-burst CI decisions across resamples). Conceptually distinct from the ρ-pool CIs (which answer "what's the average magnitude under resampling?"); both populate together at `n_bootstrap > 0`. `min_n_per_burst: int = 20` defaults higher than the partial-Spearman sibling's 5 — PC's CI tests need more samples for stable α-level control. Cross-validates `dynamic_partial_spearman` from a different identification path; discrepancies (one says "mediator d-separates" while the other reports nonzero partial ρ) are diagnostic of non-linearity or identification failure. **Multi-mediator depth-≥2**: `mediator_per_burst` accepts a tuple of columns/Measurables — the `n_bursts_mediator_dseparates` count generalises to "the JOINT mediator set d-separates"; CI test dispatches to `partial_spearman_rho_multi` per-burst with df = n − 3 − k. Result's `mediator_names: tuple[str, ...]` records the conditioning set; bootstrap edge-count CIs work identically at any k. |
+| `partial_spearman` | **Canonical mediation primitive — unified JCI (partial-)Spearman**. Subsumes five legacy variants (`stratified_spearman` / `stratified_partial_spearman` / `stratified_partial_spearman_multi` / `per_burst_jci_spearman` / `per_burst_partial_jci_spearman`). Single result type `PartialSpearmanResult`. Granularity detected from input types: `x/y: str` → per-row; `x/y: Measurable[..., NDArray]` → per-burst (one observation per (row, burst) — preserves phase structure). `conditioning: tuple[..., ...] = ()` — empty for marginal, single entry for closed-form first-order partial, k entries for multi-Z OLS-residual partial. Internal dispatch picks the right `graph.discovery` primitive per k. |
+| `dynamic_partial_spearman` | **Trajectory-resolved mediation** on per-burst measurables. Sibling to `partial_spearman` for per-burst List-typed columns: iterates one ρ per BURST INDEX (not one observation per (row, burst)) and returns `Mapping[Stratum, DynamicMediationResult]` carrying the per-burst ρ trajectory + `TimeAggregationStatus` enum (`SIGN_FLIP_DETECTED`, `WEAK_TIME_VARYING`, `CONSISTENT_DIRECTION`, `UNDERPOWERED_BURSTS`). `mediator_per_burst` / `outcome_per_burst` accept `str` column names OR `Measurable[..., NDArray]` instances (mirrors `partial_spearman`'s lazy-evaluation pattern via `evaluate_per_burst_source`); `mediator_per_burst` may also be a **tuple** of columns/Measurables for multi-mediator depth-≥2 conditioning (parallel to static `partial_spearman`'s `conditioning` parameter — k=1 closed-form, k≥2 multi-Z OLS-residual; df_offset shifts to `3 + k`). Result's `mediator_names: tuple[str, ...]` records the conditioning set. Both FE Fisher-z (fixed-effects, n-weighted) and DerSimonian-Laird (random-effects) pools are exposed via the result fields `rho_marginal_pooled` / `rho_partial_pooled` (FE) + `dl_marginal` / `dl_partial: FisherZDLPool` (DL). DL is the canonical aggregate — its τ²/I² quantify the heterogeneity that `aggregation_status` flags qualitatively (SIGN_FLIP → I² ≈ 1.0, large τ²; WEAK_TIME_VARYING → I² ∈ [0.5, 1.0]; CONSISTENT_DIRECTION → I² ≈ 0). The FE pool is NaN'd when `SIGN_FLIP_DETECTED` (sign-opposing bursts make the n-weighted z-average a Simpson's-paradox artifact); the DL pool is **never** NaN'd by the diagnostic gate — its heterogeneity statistics are the typed surface for the same pathology. Pool weights match the sibling primitives: marginal `(n_b − 3)` (`stratified_spearman_rho`), partial `(n_b − 4)` (`stratified_partial_spearman_rho`). DL exposes `tau2` / `i2` / `q` (z-units), `rho_pooled` / `rho_pi_lo` / `rho_pi_hi` (inverse-Fisher-z to ρ-units; PI bounds NaN at G < 3), `se_pooled` (z-units), `n_bursts_used`, `assumption_violations` (small-G DL regime warnings). DL gives parametric PI bounds (over-confident under within-row autocorrelation); `n_bootstrap > 0` adds **cluster-bootstrap empirical CI** which is assumption-free under any within-row autocorrelation structure (rows = resampling unit; recommended `n_bootstrap=1000` for publication-grade CIs). `bootstrap_marginal` / `bootstrap_partial: ClusterBootstrapInterval | None` populate when `n_bootstrap > 0`; default 0 keeps the fast path bit-identical. `sign_flip_min_abs_rho: float = 0.05` is the noise-floor magnitude below which a per-burst ρ is treated as sampling noise rather than structural signal — opposing-sign bursts at noise level don't trigger SIGN_FLIP, and the noise-level bursts are dropped from the `weak_time_varying_ratio` `max/min` comparison so a single near-zero burst doesn't drive WEAK classification. Per-burst alignment is "ragged tail": `n_bursts = max trajectory length` and `n_per_burst[b]` shrinks as shorter rows drop off (vs truncate-to-min, which would discard every burst past the shortest row's tail). Mediation on RL training trajectories where burst dynamics may be non-monotone (Q-explosion phases, sign-flipping marginals, mid-training mediation peaks) MUST go through this primitive; static `partial_spearman` on per-burst data risks aggregation artifacts. |
+| `dynamic_pc_adjacency` | **Trajectory-resolved PC-style mediation** on per-burst measurables. Sibling to `dynamic_partial_spearman` from a different identification path: at each burst runs Fisher-z partial-correlation CI tests (the same machinery `corroborate.graph.discovery.discover_adjacency` uses for PC edge removal) and reports per-burst edge presence + counts. Returns `Mapping[Stratum, DynamicPCResult]` with per-burst `p_marginal[b]` (depth-0 marginal Spearman CI), `p_conditional[b]` (depth-1 closed-form partial Spearman CI, df = n − 4), `rho_marginal[b]`, `rho_partial[b]`, and three boolean trajectory counts: `n_bursts_marginal_edge` (where marginal CI rejects at α), `n_bursts_mediator_dseparates` (marginal edge present AND conditional edge absent → full mediation at burst b), `n_bursts_direct_edge` (both present → partial mediation or direct effect). Consumers decide trajectory-shape thresholds (mostly-mediated / rarely-mediated); the framework declines to prescribe a meta-aggregator. Shares the `TimeAggregationStatus` classifier with `dynamic_partial_spearman` (driven by `rho_marginal[b]`). Also exposes `dl_marginal` / `dl_partial: FisherZDLPool` — the DerSimonian-Laird random-effects pool over the per-burst (ρ, n) trajectory (same shape as the sibling). DL is the canonical aggregate — its τ²/I² quantify the heterogeneity that `aggregation_status` flags qualitatively (the PC primitive doesn't expose an FE Fisher-z pool because its primary output is per-burst CI-test edge presence, not a pooled magnitude). DL gives parametric PI bounds (over-confident under within-row autocorrelation); `n_bootstrap > 0` adds **cluster-bootstrap empirical CI** which is assumption-free under any within-row autocorrelation structure (rows = resampling unit; recommended `n_bootstrap=1000` for publication-grade CIs). `bootstrap_marginal` / `bootstrap_partial: ClusterBootstrapInterval | None` populate when `n_bootstrap > 0`. The integer edge-count triple ALSO gets a cluster-bootstrap CI via `bootstrap_edge_counts: ClusterBootstrapEdgeCounts | None` — answers "is the edge classification robust to which rows we sampled?" (wide CI on dsep means a few outlier rows flip per-burst CI decisions across resamples). Conceptually distinct from the ρ-pool CIs (which answer "what's the average magnitude under resampling?"); both populate together at `n_bootstrap > 0`. `min_n_per_burst: int = 20` defaults higher than the partial-Spearman sibling's 5 — PC's CI tests need more samples for stable α-level control. Cross-validates `dynamic_partial_spearman` from a different identification path; discrepancies (one says "mediator d-separates" while the other reports nonzero partial ρ) are diagnostic of non-linearity or identification failure. **Multi-mediator depth-≥2**: `mediator_per_burst` accepts a tuple of columns/Measurables — the `n_bursts_mediator_dseparates` count generalises to "the JOINT mediator set d-separates"; CI test dispatches to `partial_spearman_rho_multi` per-burst with df = n − 3 − k. Result's `mediator_names: tuple[str, ...]` records the conditioning set; bootstrap edge-count CIs work identically at any k. |
 | `partial_spearman_rho` (graph.discovery) | underlying single-Z closed-form first-order partial Spearman (`(rxy − rxz·ryz) / sqrt((1−rxz²)(1−ryz²))`). The `partial_spearman` analysis primitive dispatches single-Z conditioning here for verdict-stability reasons (boundary-case ρ differs from the multi-Z OLS-residual form). |
 | `partial_spearman_rho_multi` / `stratified_partial_spearman_rho_multi` (graph.discovery) | underlying multi-Z OLS-residual primitive. The `partial_spearman` analysis primitive dispatches k≥2 conditioning here. |
 | `stratum_panel_jci_spearman` | per-stratum-panel Spearman for mediation FALSIFICATION (marginal-vs-stratified ρ comparison per stratum). Distinct shape from `partial_spearman` (which iterates observations, not strata) — kept separate. |
@@ -795,8 +816,8 @@ rules, in order of importance:
    inflation → t-critical at df=n-p; etc.). `g > 0.8` when
    structural g is 28 is a 35× slack — no.
 
-2. **Substrate-grounded over synthetic-input**. Cells flow through
-   `RunRow.as_dict()` → `cells_to_dataframe` → analysis (the
+2. **Substrate-grounded over synthetic-input**. Rows flow through
+   `RunRow.as_dict()` → `to_dataframe` → analysis (the
    production data path; analyses take a plain `pl.DataFrame`,
    and the boundary conversion is the same one `evaluate`
    performs). The
@@ -851,7 +872,7 @@ mutations as wrap-broken, not real survivors.
 3. For real-gap clusters (e.g., Fisher-z formula never reached
    because tests give r=±1 short-circuit; IVW weighting never
    exercised because tests use uniform SE), add a closed-form
-   test that **specifically constructs cells putting the
+   test that **specifically constructs rows putting the
    framework on the unexercised code path**. Examples:
    `tests/analytic/lg_scm/test_paired_link_fisher_z.py` (moderate-r
    construction with independent ε per arm), `test_random_effects_ivw.py`

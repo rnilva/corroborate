@@ -27,7 +27,7 @@ from corroborate.analyses.panel.cross_env_sign_alignment_binomial import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _MU_X = 1.0
@@ -56,7 +56,7 @@ _SAME_DIRECTION_ENVS: Mapping[str, tuple[float, float]] = {
 }
 
 
-def _build_cells(
+def _build_rows(
     env_betas: Mapping[str, tuple[float, float]],
 ) -> list[Mapping[str, object]]:
     envs = {n: (_scm(t), _scm(b)) for n, (t, b) in env_betas.items()}
@@ -70,9 +70,9 @@ def test_sign_alignment_same_direction_at_every_env() -> None:
     """All 10 envs have β_xz_t > β_xz_b → Δ_z > 0 and Δ_y > 0
     at every env (β_zy > 0). Sign-alignment SAME holds at 10/10
     → one-tailed binomial p = 0.5**10 = 0.000977. SUPPORTED."""
-    cells = _build_cells(_SAME_DIRECTION_ENVS)
+    rows = _build_rows(_SAME_DIRECTION_ENVS)
     result = cross_env_sign_alignment_binomial.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source_x='z_mean',
         source_y='y_mean',
         treatment_arm='treatment',
@@ -104,9 +104,9 @@ def test_sign_alignment_opposite_direction_rejects() -> None:
     → binomial p = 1.0 (no evidence of opposite alignment;
     actually evidence of SAME alignment but we asked the wrong
     question)."""
-    cells = _build_cells(_SAME_DIRECTION_ENVS)
+    rows = _build_rows(_SAME_DIRECTION_ENVS)
     result = cross_env_sign_alignment_binomial.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source_x='z_mean',
         source_y='y_mean',
         treatment_arm='treatment',
@@ -133,9 +133,9 @@ def test_sign_alignment_mixed_direction_same_at_every_env() -> None:
     """Mixed-sign envs: Δ_z and Δ_y flip sign together at every
     env (β_zy > 0 globally → sign(Δ_y) = sign(Δ_z) regardless of
     Δβ direction). SAME alignment HELDs at 10/10."""
-    cells = _build_cells(_MIXED_SIGN_ENVS)
+    rows = _build_rows(_MIXED_SIGN_ENVS)
     result = cross_env_sign_alignment_binomial.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source_x='z_mean',
         source_y='y_mean',
         treatment_arm='treatment',
@@ -154,9 +154,9 @@ def test_sign_alignment_mixed_direction_same_at_every_env() -> None:
 def test_sign_alignment_null_floor_drops_small_d() -> None:
     """With a very large null_floor on x, every stratum drops out
     → n_total = 0 → p = NaN."""
-    cells = _build_cells(_SAME_DIRECTION_ENVS)
+    rows = _build_rows(_SAME_DIRECTION_ENVS)
     result = cross_env_sign_alignment_binomial.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source_x='z_mean',
         source_y='y_mean',
         treatment_arm='treatment',

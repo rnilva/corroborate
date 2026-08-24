@@ -35,7 +35,7 @@ SD across 5 deterministic-seed replicates: 0.09 — matches the
 closed form. The 0.30 bound covers 3σ of partial-Spearman
 sampling variation around the d-separation null.
 
-Cells are LG-SCM realisations across N=3 envs with different
+Rows are LG-SCM realisations across N=3 envs with different
 per-env β_xz so per-stratum ρ varies; Fisher-z pooling
 integrates them. The test exercises:
 
@@ -46,7 +46,7 @@ integrates them. The test exercises:
 3. Multi-Z dispatch: adding a second conditioning variable that
    is a noise-augmented copy of Z keeps partial ρ ≈ 0; exercises
    the k≥2 dispatch into `partial_spearman_rho_multi`.
-4. NaN-empty contract: empty cells → NaN ρ, n_strata=0.
+4. NaN-empty contract: empty rows → NaN ρ, n_strata=0.
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ import pytest
 from corroborate.analyses.spearman.partial_spearman import partial_spearman
 from corroborate.measurables import Measurable
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -139,12 +139,12 @@ def _expected_pooled_rho() -> float:
     return math.tanh(z_avg)
 
 
-def _build_cells() -> list[Mapping[str, object]]:
+def _build_rows() -> list[Mapping[str, object]]:
     """Multi-env paired sweep; keep one arm only — the
     intervention axis is degenerate here (both arms identical),
-    we just need cells with x_mean/z_mean/y_mean columns. Both
+    we just need rows with x_mean/z_mean/y_mean columns. Both
     arms run on shared seeds → exact duplicates per (env, seed),
-    so dropping treatment leaves exactly _N_SEEDS_PER_ENV cells
+    so dropping treatment leaves exactly _N_SEEDS_PER_ENV rows
     per env without information loss."""
     envs = {
         env_name: (_scm(beta_xz), _scm(beta_xz))
@@ -161,17 +161,17 @@ def _build_cells() -> list[Mapping[str, object]]:
 
 
 def _add_independent_noise_column(
-    cells: Sequence[Mapping[str, object]], *, sigma: float = 1.0,
+    rows: Sequence[Mapping[str, object]], *, sigma: float = 1.0,
 ) -> list[Mapping[str, object]]:
-    """Augment cells with a fresh independent N(0, σ²) column.
-    Statistically independent of every other cell variable, so
+    """Augment rows with a fresh independent N(0, σ²) column.
+    Statistically independent of every other row variable, so
     partial ρ(X, Y | Z, noise_col) is identical to partial
     ρ(X, Y | Z) in population. Exercises the k≥2 dispatch
     without introducing collinearity that would destabilise the
     OLS-residual primitive at the n=30-per-stratum we use."""
     rng = np.random.default_rng(_det_seed('indep_noise', sigma))
     out: list[Mapping[str, object]] = []
-    for c in cells:
+    for c in rows:
         d = dict(c)
         d['noise_indep'] = float(rng.normal(0.0, sigma))
         out.append(d)
@@ -179,9 +179,9 @@ def _add_independent_noise_column(
 
 
 def test_marginal_rho_recovers_closed_form() -> None:
-    cells = _build_cells()
+    rows = _build_rows()
     result = partial_spearman.fn(
-        cells_to_dataframe(cells), x='x_mean', y='y_mean', conditioning=(),
+        to_dataframe(rows), x='x_mean', y='y_mean', conditioning=(),
         stratify_by='env_name',
     )
     expected = _expected_pooled_rho()
@@ -208,9 +208,9 @@ def test_marginal_rho_recovers_closed_form() -> None:
 
 def test_partial_rho_conditional_on_mediator_is_null() -> None:
     """Z fully mediates X → Y; ρ(X, Y | Z) = 0 in population."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = partial_spearman.fn(
-        cells_to_dataframe(cells), x='x_mean', y='y_mean', conditioning=('z_mean',),
+        to_dataframe(rows), x='x_mean', y='y_mean', conditioning=('z_mean',),
         stratify_by='env_name',
     )
     # Fisher-z pooled SE on partial Spearman at k=3 strata, n=120
@@ -234,9 +234,9 @@ def test_multi_z_partial_rho_dispatch() -> None:
     N(0, 1) noise column as joint conditioners, partial ρ stays
     ≈ 0 — the noise column carries no information about Y, and Z
     still d-separates X from Y."""
-    cells = _add_independent_noise_column(_build_cells())
+    rows = _add_independent_noise_column(_build_rows())
     result = partial_spearman.fn(
-        cells_to_dataframe(cells), x='x_mean', y='y_mean',
+        to_dataframe(rows), x='x_mean', y='y_mean',
         conditioning=('z_mean', 'noise_indep'),
         stratify_by='env_name',
     )
@@ -253,9 +253,9 @@ def test_multi_z_partial_rho_dispatch() -> None:
     assert result.n_strata == 3
 
 
-def test_empty_cells_returns_nan_zero_strata() -> None:
+def test_empty_rows_returns_nan_zero_strata() -> None:
     result = partial_spearman.fn(
-        cells_to_dataframe([]), x='x_mean', y='y_mean', conditioning=(),
+        to_dataframe([]), x='x_mean', y='y_mean', conditioning=(),
         stratify_by='env_name',
     )
     assert math.isnan(result.rho_pooled)
@@ -268,20 +268,20 @@ def test_empty_cells_returns_nan_zero_strata() -> None:
 #
 # `partial_spearman` dispatches into `_collect_per_burst` when ALL
 # of `x`, `y`, conditioning are `Measurable[..., NDArray]` rather
-# than `str`. Each (cell, burst) pair contributes ONE observation,
-# so phased cells × n_bursts × n_seeds give the panel its
-# observation count. The per-cell tests above only cover the
-# `str`-input dispatch into `_collect_per_cell`; this block
+# than `str`. Each (row, burst) pair contributes ONE observation,
+# so phased rows × n_bursts × n_seeds give the panel its
+# observation count. The per-row tests above only cover the
+# `str`-input dispatch into `_collect_per_row`; this block
 # exercises the per-burst branch with the same closed-form
 # structural targets.
 #
 # Observation count: 3 envs × 30 seeds × 4 bursts = 360, matching
-# the per-cell suite's 3 × 120 = 360 → comparable power.
+# the per-row suite's 3 × 120 = 360 → comparable power.
 #
 # Population correlations are scale-invariant under the LG-SCM
 # (Pearson r doesn't depend on whether we average over n_steps),
 # so `_expected_pearson_r` / `_expected_pooled_rho` from the
-# per-cell block apply identically to the per-burst panel.
+# per-row block apply identically to the per-burst panel.
 
 _N_SEEDS_PER_ENV_PHASED = 30
 _N_BURSTS = 4
@@ -298,13 +298,13 @@ _PER_BURST_Y_MEAN = reduce_axis(
 )
 
 
-def _build_phased_cells() -> list[Mapping[str, object]]:
+def _build_phased_rows() -> list[Mapping[str, object]]:
     """Multi-env, multi-burst sweep. Both arms use the same SCM per
     env so the contrast is degenerate (we don't need it for the
-    mediation question); the cells carry the per-burst trace
+    mediation question); the rows carry the per-burst trace
     arrays the Measurable inputs read. Drop one arm so each (env,
     seed, burst) contributes a single observation, matching the
-    per-cell suite's single-arm panel pattern."""
+    per-row suite's single-arm panel pattern."""
     rows: list[Mapping[str, object]] = []
     for env_name, beta_xz in _ENV_BETAS.items():
         scms = tuple(_scm(beta_xz) for _ in range(_N_BURSTS))
@@ -318,14 +318,14 @@ def _build_phased_cells() -> list[Mapping[str, object]]:
 
 
 def _add_per_burst_noise_column(
-    cells: Sequence[Mapping[str, object]], *,
+    rows: Sequence[Mapping[str, object]], *,
     key: str = 'noise_indep_per_burst',
     sigma: float = 1.0,
 ) -> tuple[
     list[Mapping[str, object]],
     Measurable[Mapping[str, object], npt.NDArray[np.floating]],
 ]:
-    """Stamp each cell with an independent per-burst noise array
+    """Stamp each row with an independent per-burst noise array
     `(n_bursts,)` at the given top-level key, and return the
     Measurable that reads it. Statistically independent of every
     other LG-SCM variable, so partial ρ(X, Y | Z, noise) ≈ partial
@@ -334,13 +334,13 @@ def _add_per_burst_noise_column(
     path without introducing structural collinearity."""
     rng = np.random.default_rng(_det_seed('per_burst_noise', sigma, key))
     out: list[Mapping[str, object]] = []
-    for c in cells:
+    for c in rows:
         d = dict(c)
         d[key] = [
             float(rng.normal(0.0, sigma)) for _ in range(_N_BURSTS)
         ]
         out.append(d)
-    # The cell-level value at `key` is already a 1-D array of
+    # The row-level value at `key` is already a 1-D array of
     # shape (n_bursts,); `from_key` coerces it via np.asarray.
     # No further reduction needed.
     measurable = from_key(key)
@@ -352,13 +352,13 @@ def test_marginal_rho_recovers_closed_form_per_burst() -> None:
     Pearson r — exercises `_collect_per_burst` end-to-end.
 
     Pearson r is scale-invariant under linear-averaging
-    transformations, so `_expected_pooled_rho` from the per-cell
+    transformations, so `_expected_pooled_rho` from the per-row
     block applies. Fisher-z SE at 360 observations across 3
     strata of 120 each → SE on pooled ρ ≈ 0.039 at ρ ≈ 0.52.
-    Same 0.10 bound as the per-cell test (2.5× sampling slack)."""
-    cells = _build_phased_cells()
+    Same 0.10 bound as the per-row test (2.5× sampling slack)."""
+    rows = _build_phased_rows()
     result = partial_spearman.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         x=_PER_BURST_X_MEAN, y=_PER_BURST_Y_MEAN, conditioning=(),
         stratify_by='env_name',
     )
@@ -377,18 +377,18 @@ def test_marginal_rho_recovers_closed_form_per_burst() -> None:
     assert result.n_obs_total == _N_SEEDS_PER_ENV_PHASED * _N_BURSTS * 3, (
         f'n_obs_total={result.n_obs_total} expected '
         f'{_N_SEEDS_PER_ENV_PHASED * _N_BURSTS * 3} — '
-        '_collect_per_burst should emit one observation per (cell, burst)'
+        '_collect_per_burst should emit one observation per (row, burst)'
     )
 
 
 def test_partial_rho_conditional_on_mediator_is_null_per_burst() -> None:
-    """Z d-separates X from Y at each (cell, burst); per-burst
+    """Z d-separates X from Y at each (row, burst); per-burst
     partial ρ(X, Y | Z) ≈ 0 in population. Same 0.30 bound as the
-    per-cell sibling — Fisher-z pooled SE on partial Spearman at
+    per-row sibling — Fisher-z pooled SE on partial Spearman at
     k=3 strata of 120 obs each lands at ≈ 0.093."""
-    cells = _build_phased_cells()
+    rows = _build_phased_rows()
     result = partial_spearman.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         x=_PER_BURST_X_MEAN, y=_PER_BURST_Y_MEAN,
         conditioning=(_PER_BURST_Z_MEAN,),
         stratify_by='env_name',
@@ -407,11 +407,11 @@ def test_multi_z_partial_rho_dispatch_per_burst() -> None:
     per-burst noise array as a second conditioner; partial ρ
     stays ≈ 0 since the noise carries no information about Y and
     Z still d-separates X from Y."""
-    cells, noise_measurable = _add_per_burst_noise_column(
-        _build_phased_cells(),
+    rows, noise_measurable = _add_per_burst_noise_column(
+        _build_phased_rows(),
     )
     result = partial_spearman.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         x=_PER_BURST_X_MEAN, y=_PER_BURST_Y_MEAN,
         conditioning=(_PER_BURST_Z_MEAN, noise_measurable),
         stratify_by='env_name',
@@ -429,10 +429,10 @@ def test_mixed_str_and_measurable_inputs_raises() -> None:
     """Mixing `str` and `Measurable` across x/y/conditioning is a
     bridge-author bug — silent coercion would flatten or broadcast
     incorrectly. The granularity detector raises TypeError."""
-    cells = _build_phased_cells()
+    rows = _build_phased_rows()
     with pytest.raises(TypeError, match='must all be str.*OR all Measurable'):
         partial_spearman.fn(
-            cells_to_dataframe(cells),
+            to_dataframe(rows),
             x='x_mean', y=_PER_BURST_Y_MEAN, conditioning=(),
             stratify_by='env_name',
         )

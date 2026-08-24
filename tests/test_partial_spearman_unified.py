@@ -10,9 +10,9 @@ matching the underlying `graph.discovery` primitives directly:
   - k=1 single-Z       → `stratified_partial_spearman_rho`
   - k≥2 multi-Z        → `stratified_partial_spearman_rho_multi`
 
-Per-cell vs per-burst granularity is detected from input types
-(`str` → per-cell; `Measurable[..., NDArray]` → per-burst). The
-per-burst form unfolds each cell into n_bursts (x, y, z) rows
+Per-row vs per-burst granularity is detected from input types
+(`str` → per-row; `Measurable[..., NDArray]` → per-burst). The
+per-burst form unfolds each row into n_bursts (x, y, z) rows
 before pooling — verified here against a hand-built dataset
 where the expected number of contributing observations is
 explicitly computable.
@@ -36,29 +36,29 @@ from corroborate.graph.discovery import (
     stratified_spearman_rho,
 )
 from corroborate.measurables import Measurable
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
     return zlib.adler32(repr(parts).encode()) & 0xFFFF_FFFF
 
 
-def _build_per_cell_cells(
+def _build_per_row_rows(
     *, n_per_env: int = 30, n_envs: int = 3, with_z: int = 0,
 ) -> list[Mapping[str, object]]:
-    """LG-SCM-shaped per-cell cells. Each env has a different
+    """LG-SCM-shaped per-row rows. Each env has a different
     coupling strength so per-stratum ρ varies; pooled Fisher-z
     integrates them. Optional Z columns are correlated with X
     so the partial-form test exercises non-trivial conditioning."""
-    rng = np.random.default_rng(_det_seed('per_cell', n_per_env, n_envs, with_z))
-    cells: list[Mapping[str, object]] = []
+    rng = np.random.default_rng(_det_seed('per_row', n_per_env, n_envs, with_z))
+    rows: list[Mapping[str, object]] = []
     for env_idx in range(n_envs):
         env_name = f'env_{env_idx}'
         alpha = 0.5 + 0.2 * env_idx  # per-env coupling
         for seed in range(n_per_env):
             x_val = float(rng.normal(0.0, 1.0))
             y_val = float(alpha * x_val + rng.normal(0.0, 0.5))
-            cell: dict[str, object] = {
+            row: dict[str, object] = {
                 'env_name': env_name,
                 'seed': seed,
                 'x_col': x_val,
@@ -66,9 +66,9 @@ def _build_per_cell_cells(
             }
             for k in range(with_z):
                 z_val = float(0.3 * x_val + rng.normal(0.0, 1.0))
-                cell[f'z_col_{k}'] = z_val
-            cells.append(cell)
-    return cells
+                row[f'z_col_{k}'] = z_val
+            rows.append(row)
+    return rows
 
 
 def _per_burst_measurable(
@@ -78,21 +78,21 @@ def _per_burst_measurable(
     return from_key(column_key)
 
 
-def _build_per_burst_cells(
+def _build_per_burst_rows(
     *, n_per_env: int = 30, n_envs: int = 3, n_bursts: int = 5,
     with_z: int = 0,
 ) -> list[Mapping[str, object]]:
     rng = np.random.default_rng(
         _det_seed('per_burst', n_per_env, n_envs, n_bursts, with_z),
     )
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for env_idx in range(n_envs):
         env_name = f'env_{env_idx}'
         alpha = 0.5 + 0.2 * env_idx
         for seed in range(n_per_env):
             x_arr = rng.normal(0.0, 1.0, size=n_bursts)
             y_arr = alpha * x_arr + rng.normal(0.0, 0.5, size=n_bursts)
-            cell: dict[str, object] = {
+            row: dict[str, object] = {
                 'env_name': env_name,
                 'seed': seed,
                 'x_col': x_arr.tolist(),
@@ -100,26 +100,26 @@ def _build_per_burst_cells(
             }
             for k in range(with_z):
                 z_arr = 0.3 * x_arr + rng.normal(0.0, 1.0, size=n_bursts)
-                cell[f'z_col_{k}'] = z_arr.tolist()
-            cells.append(cell)
-    return cells
+                row[f'z_col_{k}'] = z_arr.tolist()
+            rows.append(row)
+    return rows
 
 
-def _cells_to_arrays_per_cell(
-    cells: list[Mapping[str, object]],
+def _rows_to_arrays_per_row(
+    rows: list[Mapping[str, object]],
     *, x: str, y: str, conditioning: tuple[str, ...],
 ) -> tuple[
     npt.NDArray[np.float64], npt.NDArray[np.float64],
     npt.NDArray[np.float64], list[object],
 ]:
-    """Replicate the unified primitive's per-cell observation
+    """Replicate the unified primitive's per-row observation
     extraction so the graph.discovery reference call sees the
     same data. Used by the dispatch-equivalence tests."""
     xs: list[float] = []
     ys: list[float] = []
     zs: list[list[float]] = [[] for _ in conditioning]
     strata: list[object] = []
-    for c in cells:
+    for c in rows:
         xv = c[x]
         yv = c[y]
         assert isinstance(xv, (int, float))
@@ -148,15 +148,15 @@ def test_unified_k0_dispatches_to_marginal_path() -> None:
     call to `graph.discovery.stratified_spearman_rho` on the same
     extracted observations. Bit-exact — both use the same
     Fisher-z pooling primitive."""
-    cells = _build_per_cell_cells(with_z=0)
-    x_np, y_np, _, strata = _cells_to_arrays_per_cell(
-        cells, x='x_col', y='y_col', conditioning=(),
+    rows = _build_per_row_rows(with_z=0)
+    x_np, y_np, _, strata = _rows_to_arrays_per_row(
+        rows, x='x_col', y='y_col', conditioning=(),
     )
     ref_rho, ref_p = stratified_spearman_rho(x_np, y_np, strata)
-    unified = partial_spearman.fn(cells_to_dataframe(cells), x='x_col', y='y_col')
+    unified = partial_spearman.fn(to_dataframe(rows), x='x_col', y='y_col')
     assert unified.rho_pooled == ref_rho
     assert unified.p_value == ref_p
-    assert unified.granularity == 'per_cell'
+    assert unified.granularity == 'per_row'
     assert unified.conditioning == ()
 
 
@@ -171,16 +171,16 @@ def test_unified_k1_dispatches_to_closed_form_single_z() -> None:
     closed form doesn't). Dispatching k=1 to the closed-form
     path was load-bearing for verdict stability across the
     migration."""
-    cells = _build_per_cell_cells(with_z=1)
-    x_np, y_np, z_np, strata = _cells_to_arrays_per_cell(
-        cells, x='x_col', y='y_col', conditioning=('z_col_0',),
+    rows = _build_per_row_rows(with_z=1)
+    x_np, y_np, z_np, strata = _rows_to_arrays_per_row(
+        rows, x='x_col', y='y_col', conditioning=('z_col_0',),
     )
     # z_np is (n, 1); single-Z primitive wants (n,)
     ref_rho, ref_p = stratified_partial_spearman_rho(
         x_np, y_np, z_np[:, 0], strata,
     )
     unified = partial_spearman.fn(
-        cells_to_dataframe(cells), x='x_col', y='y_col', conditioning=('z_col_0',),
+        to_dataframe(rows), x='x_col', y='y_col', conditioning=('z_col_0',),
     )
     assert unified.rho_pooled == ref_rho
     assert unified.p_value == ref_p
@@ -191,16 +191,16 @@ def test_unified_k1_dispatches_to_closed_form_single_z() -> None:
 def test_unified_k2_dispatches_to_multi_z_path() -> None:
     """`conditioning=('z_col_0', 'z_col_1')` must use the multi-Z
     OLS-residual primitive — only one available at k≥2."""
-    cells = _build_per_cell_cells(with_z=2)
-    x_np, y_np, z_np, strata = _cells_to_arrays_per_cell(
-        cells, x='x_col', y='y_col',
+    rows = _build_per_row_rows(with_z=2)
+    x_np, y_np, z_np, strata = _rows_to_arrays_per_row(
+        rows, x='x_col', y='y_col',
         conditioning=('z_col_0', 'z_col_1'),
     )
     ref_rho, ref_p = stratified_partial_spearman_rho_multi(
         x_np, y_np, z_np, strata,
     )
     unified = partial_spearman.fn(
-        cells_to_dataframe(cells), x='x_col', y='y_col',
+        to_dataframe(rows), x='x_col', y='y_col',
         conditioning=('z_col_0', 'z_col_1'),
     )
     assert unified.rho_pooled == ref_rho
@@ -209,26 +209,26 @@ def test_unified_k2_dispatches_to_multi_z_path() -> None:
 
 # ============ Per-burst granularity ============
 
-def test_per_burst_unfolds_cells_then_pools() -> None:
-    """Per-burst granularity: each cell unfolds to `n_bursts`
-    observations. Verify n_obs_total = n_cells * n_bursts and
+def test_per_burst_unfolds_rows_then_pools() -> None:
+    """Per-burst granularity: each row unfolds to `n_bursts`
+    observations. Verify n_obs_total = n_rows * n_bursts and
     the pooled ρ matches calling `stratified_spearman_rho` on
     the explicitly-unfolded observation set."""
-    cells = _build_per_burst_cells(
+    rows = _build_per_burst_rows(
         n_per_env=30, n_envs=3, n_bursts=5, with_z=0,
     )
     x_m = _per_burst_measurable('x_col')
     y_m = _per_burst_measurable('y_col')
-    unified = partial_spearman.fn(cells_to_dataframe(cells), x=x_m, y=y_m)
+    unified = partial_spearman.fn(to_dataframe(rows), x=x_m, y=y_m)
     assert unified.granularity == 'per_burst'
     # 3 envs × 30 seeds × 5 bursts = 450 observations
     assert unified.n_obs_total == 450
-    # Unfold cells explicitly and verify ρ equals the marginal
+    # Unfold rows explicitly and verify ρ equals the marginal
     # primitive on the unfolded data.
     xs: list[float] = []
     ys: list[float] = []
     strata: list[object] = []
-    for c in cells:
+    for c in rows:
         x_vals = c['x_col']
         y_vals = c['y_col']
         assert isinstance(x_vals, list) and isinstance(y_vals, list)
@@ -246,15 +246,15 @@ def test_per_burst_unfolds_cells_then_pools() -> None:
 # ============ Type detection ============
 
 def test_mixed_str_measurable_raises_typeerror() -> None:
-    """str x + Measurable y is incoherent: either both per-cell
+    """str x + Measurable y is incoherent: either both per-row
     (str) or both per-burst (Measurable). Silent coercion would
     flatten a per-burst array to a single number or broadcast a
     scalar across n_bursts — both wrong. The primitive raises
     TypeError naming the count of each kind."""
-    cells = _build_per_cell_cells(with_z=0)
+    rows = _build_per_row_rows(with_z=0)
     y_m = _per_burst_measurable('y_col')
     with pytest.raises(TypeError, match='must all be str.*OR all Measurable'):
-        partial_spearman.fn(cells_to_dataframe(cells), x='x_col', y=y_m)
+        partial_spearman.fn(to_dataframe(rows), x='x_col', y=y_m)
 
 
 def test_mixed_conditioning_raises_typeerror() -> None:
@@ -262,18 +262,18 @@ def test_mixed_conditioning_raises_typeerror() -> None:
     Measurable z is incoherent."""
     y_m = _per_burst_measurable('y_col')
     z_m = _per_burst_measurable('z_col_0')
-    cells = _build_per_burst_cells(with_z=1)
+    rows = _build_per_burst_rows(with_z=1)
     with pytest.raises(TypeError, match='must all be str.*OR all Measurable'):
         partial_spearman.fn(
-            cells_to_dataframe(cells), x=y_m, y=y_m, conditioning=('z_col_0', z_m),
+            to_dataframe(rows), x=y_m, y=y_m, conditioning=('z_col_0', z_m),
         )
 
 
-def test_empty_cells_returns_nan_result() -> None:
-    """No cells → NaN ρ/p, zero n_obs/n_strata. Should not raise.
+def test_empty_rows_returns_nan_result() -> None:
+    """No rows → NaN ρ/p, zero n_obs/n_strata. Should not raise.
     The contract holds across granularities and conditioning
     shapes."""
-    result = partial_spearman.fn(cells_to_dataframe([]), x='x_col', y='y_col')
+    result = partial_spearman.fn(to_dataframe([]), x='x_col', y='y_col')
     assert math.isnan(result.rho_pooled)
     assert math.isnan(result.p_value)
     assert result.n_obs_total == 0

@@ -1,6 +1,6 @@
 """`paired_g_per_burst` — per-(env, burst) paired Hedges' g panel.
 
-Per-cell trace data has burst-level arrays of shape
+Per-row trace data has burst-level arrays of shape
 `(n_bursts, n_episodes)`; for each (env, burst_index) we compute
 paired-g across seeds on a typed per-burst measurable
 (`source: Measurable[Mapping, NDArray]`). The analysis returns
@@ -33,7 +33,7 @@ import numpy.typing as npt
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.analyses._cell_value import (
+from corroborate.analyses._row_value import (
     evaluate_per_burst_source, key_tuple,
 )
 from corroborate.bridge.analysis import analysis
@@ -78,7 +78,7 @@ class PerBurstResult:
 
 @analysis
 def paired_g_per_burst(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -92,9 +92,9 @@ def paired_g_per_burst(
 ) -> PerBurstResult:
     """Per-(env, burst) paired Hedges' g panel.
 
-    For each cell, evaluate `source` to get a per-burst vector
-    (length `n_bursts`). Group cells by env_name; for each
-    (env, burst) pair treatment ↔ baseline cells on `pair_by`
+    For each row, evaluate `source` to get a per-burst vector
+    (length `n_bursts`). Group rows by env_name; for each
+    (env, burst) pair treatment ↔ baseline rows on `pair_by`
     and compute Hedges' g + SE on the burst-Δs.
 
     `source` is a typed Measurable returning a per-burst NDArray.
@@ -107,21 +107,21 @@ def paired_g_per_burst(
     `xxx_mean` strings.
 
     `env_name`, when supplied, restricts the analysis to one env
-    (skips cells with `record['env_name'] != env_name`). When
+    (skips rows with `record['env_name'] != env_name`). When
     None, all envs participate.
 
-    `dedupe_strategy` mirrors `paired_g`: when multiple cells
+    `dedupe_strategy` mirrors `paired_g`: when multiple rows
     share the same `(env, arm, pair_by)` tuple,
     - `'mean'` (default) averages the per-burst vectors
       element-wise within each duplicate bucket. Suits M2M scopes
       that combine repeated experiments. **WARNING**: when the
-      duplicate cells differ on regime-defining fields not in
+      duplicate rows differ on regime-defining fields not in
       `pair_by`, `'mean'` silently averages causally distinct
       experiments — pass `'raise'` to detect this.
     - `'raise'` errors loudly on duplicates AND reports which
       columns differ between them so the bridge author tightens
       scope (extend `pair_by`) or explicitly opts into `'mean'`."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     from corroborate.stats import hedges_g_paired
 
     if dedupe_strategy not in ('raise', 'mean'):
@@ -135,32 +135,32 @@ def paired_g_per_burst(
     )
 
     # Group rows by (env_name, arm), key on pair_by. Carry the
-    # source cell mapping alongside the per-burst array so duplicate
-    # detection can introspect which cell-level columns distinguish
+    # source row mapping alongside the per-burst array so duplicate
+    # detection can introspect which row-level columns distinguish
     # the duplicates (regime mismatch report — see
     # `_dedup_diagnostics`).
     by_env_arm: dict[tuple[str, str], dict[
         tuple[object, ...], list[tuple[Mapping[str, object], np.ndarray]],
     ]] = {}
-    for cell in rows:
-        env = cell.get('env_name')
-        arm = cell.get(arm_field)
+    for row in rows:
+        env = row.get('env_name')
+        arm = row.get(arm_field)
         if not isinstance(env, str) or not isinstance(arm, str):
             continue
         if env_name is not None and env != env_name:
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
-        per_burst = evaluate_per_burst_source(source, cell)
+        per_burst = evaluate_per_burst_source(source, row)
         if per_burst.size == 0:
             continue
         bucket = by_env_arm.setdefault((env, arm), {})
-        key = key_tuple(cell, pair_by)
+        key = key_tuple(row, pair_by)
         existing = bucket.setdefault(key, [])
         if existing and dedupe_strategy == 'raise':
-            prior_cells = [c for c, _ in existing]
+            prior_rows = [c for c, _ in existing]
             diff = distinguishing_columns(
-                [*prior_cells, cell],
+                [*prior_rows, row],
                 skip=frozenset(pair_by) | {'env_name', arm_field},
             )
             if diff:
@@ -178,9 +178,9 @@ def paired_g_per_burst(
             # default / derived-measurable drift). Fall through to
             # mean-aggregation below; matches `paired_g.fn`'s
             # smarter `'raise'` semantics.
-        existing.append((cell, per_burst))
+        existing.append((row, per_burst))
 
-    # Collapse list[(cell, ndarray)] → ndarray via element-wise mean.
+    # Collapse list[(row, ndarray)] → ndarray via element-wise mean.
     # Single-element buckets are unchanged. Multi-element buckets
     # only land here under dedupe_strategy='mean'; if their per-burst
     # shapes don't line up, the rows aren't replicates and we raise
@@ -197,9 +197,9 @@ def paired_g_per_burst(
             arrays = [arr for _, arr in items]
             shapes = {arr.shape for arr in arrays}
             if len(shapes) > 1:
-                cells_with_dup = [c for c, _ in items]
+                rows_with_dup = [c for c, _ in items]
                 diff = distinguishing_columns(
-                    cells_with_dup,
+                    rows_with_dup,
                     skip=frozenset(pair_by) | {'env_name', arm_field},
                 )
                 raise ValueError(

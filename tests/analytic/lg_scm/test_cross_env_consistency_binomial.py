@@ -38,7 +38,7 @@ from corroborate.analyses.panel.cross_env_consistency_binomial import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _MU_X = 1.0
@@ -59,7 +59,7 @@ def _scm(beta_xz: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells(
+def _build_rows(
     env_betas: Mapping[str, tuple[float, float]],
 ) -> list[Mapping[str, object]]:
     envs = {n: (_scm(t), _scm(b)) for n, (t, b) in env_betas.items()}
@@ -80,9 +80,9 @@ def test_consistency_binomial_all_positive_supported() -> None:
     """All 10 envs constructed with treatment β > baseline β
     → Δ_y > 0 at every env → 10/10 binomial against p=0.5 →
     one-tailed p = 0.5**10 = 0.000977. SUPPORTED."""
-    cells = _build_cells(_ALL_POSITIVE_ENVS)
+    rows = _build_rows(_ALL_POSITIVE_ENVS)
     result = cross_env_consistency_binomial.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -116,9 +116,9 @@ def test_consistency_binomial_mixed_direction_null() -> None:
     Predicting 'a_gt_b' direction: 5/10 envs match → one-tailed
     binomial p = 0.6230 (lower-bounded by tied count). NOT
     distinguishable from chance."""
-    cells = _build_cells(_MIXED_DIRECTION_ENVS)
+    rows = _build_rows(_MIXED_DIRECTION_ENVS)
     result = cross_env_consistency_binomial.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -141,9 +141,9 @@ def test_consistency_binomial_null_floor_drops_small_d() -> None:
     Tests the gating logic: |d|<null_floor strata are dropped
     from the binomial count. Picked to be unambiguously larger
     than any plausible LG-SCM Cohen's d."""
-    cells = _build_cells(_ALL_POSITIVE_ENVS)
+    rows = _build_rows(_ALL_POSITIVE_ENVS)
     result = cross_env_consistency_binomial.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -169,9 +169,9 @@ def test_consistency_binomial_either_two_tailed() -> None:
     For 10 envs all d>0, two-tailed p against majority count = 10
     is 2 · 0.5^10 = 0.00195 — still SUPPORTED but weaker by ×2
     than one-tailed."""
-    cells = _build_cells(_ALL_POSITIVE_ENVS)
+    rows = _build_rows(_ALL_POSITIVE_ENVS)
     result = cross_env_consistency_binomial.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='y_mean',
         treatment_arm='treatment',
         baseline_arm='baseline',

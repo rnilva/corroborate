@@ -4,7 +4,7 @@
 Each stratum (a unique combination of `stratify_by` values)
 contributes one triple `(Δ_predictor, Δ_target, Δ_confound)` where
 `Δ_x = mean(treatment x | stratum) − mean(baseline x | stratum)`,
-computed independently across each arm's cells in the stratum
+computed independently across each arm's rows in the stratum
 (no pair-key cross-reference). Partial Spearman ρ via the
 closed-form three-rank-correlation identity is then computed
 across strata.
@@ -35,7 +35,7 @@ Distinct from:
   (no conditioning).
 - `cross_stratum_property_slope` — single-arm property vs
   outcome (not arm-diff).
-- `stratified_partial_spearman` — per-cell partial-r within
+- `stratified_partial_spearman` — per-row partial-r within
   stratum, Fisher-z pooled. Doesn't answer the cross-stratum
   dose-response question.
 """
@@ -62,7 +62,7 @@ class CrossStratumArmDiffPartialSpearmanResult:
     Δ_confound).
 
     `n_strata` is the number of strata that contributed (both
-    arms had ≥ `min_seeds_per_arm` finite-valued cells on
+    arms had ≥ `min_seeds_per_arm` finite-valued rows on
     predictor, target, AND confound).
 
     `arm_diff_*` carry the per-stratum Δs for inspection. The
@@ -81,7 +81,7 @@ class CrossStratumArmDiffPartialSpearmanResult:
 
 @analysis
 def cross_stratum_arm_diff_partial_spearman(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -97,7 +97,7 @@ def cross_stratum_arm_diff_partial_spearman(
     Δ_confound) across strata.
 
     Per-stratum: requires ≥ `min_seeds_per_arm` finite-valued
-    cells in BOTH arms on ALL of predictor, target, confound.
+    rows in BOTH arms on ALL of predictor, target, confound.
     Returns NaN ρ/p when n_strata < `min_strata` (default 5; the
     closed-form partial-r requires n ≥ 5 — see
     `partial_spearman_rho`).
@@ -106,7 +106,7 @@ def cross_stratum_arm_diff_partial_spearman(
     `graph.discovery.partial_spearman_rho` — rank-transform each
     Δ vector, pairwise Spearman, partial-correlation combination.
     """
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     per_stratum_arm: dict[
         tuple[object, ...], dict[str, list[Mapping[str, object]]],
     ] = defaultdict(lambda: defaultdict(list))
@@ -135,14 +135,14 @@ def cross_stratum_arm_diff_partial_spearman(
     diff_target: list[float] = []
     diff_confound: list[float] = []
     for arms_map in per_stratum_arm.values():
-        t_cells = arms_map.get(treatment_arm, [])
-        b_cells = arms_map.get(baseline_arm, [])
-        t_p = _finite(t_cells, predictor)
-        b_p = _finite(b_cells, predictor)
-        t_t = _finite(t_cells, target)
-        b_t = _finite(b_cells, target)
-        t_c = _finite(t_cells, confound)
-        b_c = _finite(b_cells, confound)
+        t_rows = arms_map.get(treatment_arm, [])
+        b_rows = arms_map.get(baseline_arm, [])
+        t_p = _finite(t_rows, predictor)
+        b_p = _finite(b_rows, predictor)
+        t_t = _finite(t_rows, target)
+        b_t = _finite(b_rows, target)
+        t_c = _finite(t_rows, confound)
+        b_c = _finite(b_rows, confound)
         if any(
             len(arr) < min_seeds_per_arm
             for arr in (t_p, b_p, t_t, b_t, t_c, b_c)

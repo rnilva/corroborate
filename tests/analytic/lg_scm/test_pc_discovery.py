@@ -25,8 +25,8 @@ CI-test machinery (`_spearman_marginal`, `partial_spearman_rho`,
 `discover_adjacency`, `orient_adjacency`, `_detect_v_structures`,
 `_apply_meek_rules`).
 
-The implementation produces real LG-SCM cells across a multi-env panel
-(varying mu_x for cross-cell variation in x_mean / z_mean / y_mean),
+The implementation produces real LG-SCM rows across a multi-env panel
+(varying mu_x for cross-row variation in x_mean / z_mean / y_mean),
 PC operates on the polars DataFrame, and assertions check the
 recovered adjacency exactly matches the closed-form chain pattern.
 """
@@ -46,7 +46,7 @@ from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
 
 
-# Single-env design with high within-cell variance. Multi-env
+# Single-env design with high within-row variance. Multi-env
 # corpora make rank(x), rank(z), rank(y) all dominated by the
 # discrete env block structure, so Spearman partial-ρ is
 # numerically degenerate (all marginal ρ → 1, denominator →
@@ -54,13 +54,13 @@ from tests.analytic.lg_scm.runner import run_arm
 # gives x_mean substantial seed-to-seed variation without env-
 # block contamination of the rank structure.
 _MU_X = 1.0
-_SIGMA_X = 5.0           # large within-cell variance
+_SIGMA_X = 5.0           # large within-row variance
 _BETA_XZ = 0.5
 _BETA_ZY = 1.5
 _SIGMA_Z = 0.1
 _SIGMA_Y = 0.1
 _N_STEPS = 50            # x_mean has SE = sigma_x/sqrt(n_steps) ≈ 0.71
-_N_SEEDS = 200           # 200 cells for tight CI tests
+_N_SEEDS = 200           # 200 rows for tight CI tests
 # Tighter alpha than PC's default 0.05 — the framework uses
 # rank-based Spearman partial which has a systematic bias on
 # linear-Gaussian data (rank-transform distorts the perfect-
@@ -74,10 +74,10 @@ _PC_ALPHA = 0.001
 
 
 def _build_dag_corpus() -> pl.DataFrame:
-    """Single-env corpus: one SCM, 200 seeds. Each cell has scalar
+    """Single-env corpus: one SCM, 200 seeds. Each row has scalar
     x_mean, z_mean, y_mean from the LG-SCM's averaged trajectories.
 
-    Within-cell sampling SE on x_mean: sigma_x/sqrt(n_steps) ≈
+    Within-row sampling SE on x_mean: sigma_x/sqrt(n_steps) ≈
     0.71 — large enough that across 200 seeds, x_mean varies
     meaningfully and the rank-based PC tests can discriminate
     conditional dependence.

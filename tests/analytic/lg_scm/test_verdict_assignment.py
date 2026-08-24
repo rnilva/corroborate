@@ -11,13 +11,13 @@ admission) of `verdict_from_paired_stats` are already covered in
 `tests/test_statistics.py:122-172` with hand-picked (g, se, n)
 tuples. This file keeps ONE substrate-grounded test that covers
 the path the synthetic-input tests can't: the upstream pipeline
-where real cells flow through `paired_g.fn`'s sample-statistic
+where real rows flow through `paired_g.fn`'s sample-statistic
 computation, and the resulting (g, se) lands on the
 POWER_INSUFFICIENT side of the MDE boundary.
 
 A regression in the upstream Hedges' g computation that inflated
 g (e.g., dropped Bessel) could silently push a structurally-
-underpowered cell-set into the HELD bucket — the synthetic-input
+underpowered row-set into the HELD bucket — the synthetic-input
 tests can't catch that because they bypass the upstream stage."""
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from corroborate.analyses.paired.paired_g import paired_g
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.corpus.schema import RunRow
 from corroborate.stats.effect_size import verdict_from_paired_stats
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_paired_arms
@@ -48,7 +48,7 @@ def _as_dicts(rows: Sequence[RunRow]) -> list[Mapping[str, object]]:
     return [r.as_dict() for r in rows]
 
 
-def test_underpowered_real_cells_resolve_to_power_insufficient_not_no_effect() -> None:
+def test_underpowered_real_rows_resolve_to_power_insufficient_not_no_effect() -> None:
     """LG-SCM with `mu_x ≈ 0.01` produces a TRUE structural Δ of
     magnitude `Δβ_xz · β_zy · μ_x ≈ 0.0075` — small but nonzero.
     Combined with `n_pairs=5` and small `n_steps=10`, the
@@ -62,7 +62,7 @@ def test_underpowered_real_cells_resolve_to_power_insufficient_not_no_effect() -
     Why a substrate-grounded test instead of feeding (g=0.025,
     se=large, n=5) directly: the implementation verifies the upstream
     Hedges' g computation actually returns ~0.025 from real
-    cells. A regression in Bessel correction or c_4 could shift
+    rows. A regression in Bessel correction or c_4 could shift
     the empirical g across the MDE boundary, which the
     synthetic-input verdict tests can't catch."""
     rows = run_paired_arms(
@@ -71,7 +71,7 @@ def test_underpowered_real_cells_resolve_to_power_insufficient_not_no_effect() -
         seeds=range(5),
     )
     result = paired_g.fn(
-        cells_to_dataframe(_as_dicts(rows)),
+        to_dataframe(_as_dicts(rows)),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -85,7 +85,7 @@ def test_underpowered_real_cells_resolve_to_power_insufficient_not_no_effect() -
         f'paired_g.g = {result.g:.4f}; closed-form ≈ 0.025. A '
         f'value above 0.2 indicates the upstream Hedges computation '
         f'is inflating beyond the structural sample size — would '
-        f'mis-classify this cell-set as HELD'
+        f'mis-classify this row-set as HELD'
     )
     verdict, refutation, is_powered = verdict_from_paired_stats(
         result.g, result.se, n=result.n_pairs,

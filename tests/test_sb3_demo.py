@@ -31,7 +31,7 @@ _RUNS = Path(__file__).parents[1] / 'examples' / 'sb3_demo' / 'runs'
 
 def test_committed_sb3_logger_record_evaluates_the_claim_module() -> None:
     panel = load_sb3_logger_runs(_RUNS)
-    df = panel.cells
+    df = panel.df
     assert df.height == 6
     # Configuration is what the producer recorded under config/*:
     assert set(df['config/gamma'].to_list()) == {0.8, 0.99}
@@ -50,13 +50,13 @@ def test_committed_sb3_logger_record_evaluates_the_claim_module() -> None:
     # The claim's horizon column is claim-side: registered by the
     # claim module, computed from the record arrays on demand.
     panel = panel.with_measurables(('eval_reward_at_25k',))
-    at_25k = panel.cells['eval_reward_at_25k'].to_list()
+    at_25k = panel.df['eval_reward_at_25k'].to_list()
     assert len(at_25k) == 6
     assert all(v is not None and math.isfinite(v) for v in at_25k)
 
     evaluation = evaluate(higher_gamma_improves_return, panel)
 
-    assert evaluation.n_cells_in_scope == 6
+    assert evaluation.n_rows_in_scope == 6
     assert evaluation.extent_hash != 0
     assert evaluation.blocked_by is None
     # config/gamma is registered configuration, every registered

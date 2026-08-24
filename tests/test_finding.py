@@ -133,7 +133,7 @@ def _evaluated_with(
     bridges: tuple[Bridge, ...],
     verdicts: dict[str, tuple[Verdict, int]],
     *,
-    n_cells_in_scope: int = 1,
+    n_rows_in_scope: int = 1,
 ) -> Graph[str, BridgeEdge]:
     """Build a post-eval graph by stamping each bridge with the
     given (Verdict, extent_hash) pair via `evaluated_graph`."""
@@ -142,7 +142,7 @@ def _evaluated_with(
         name: PostEvalEntry(
             verdict=v,
             extent_hash=h,
-            n_cells_in_scope=n_cells_in_scope,
+            n_rows_in_scope=n_rows_in_scope,
         )
         for name, (v, h) in verdicts.items()
     }
@@ -198,7 +198,7 @@ def test_composed_verdict_all_empty_extent_empty_extent() -> None:
             '_bridge_a': (Verdict.POWER_INSUFFICIENT, empty),
             '_bridge_b': (Verdict.POWER_INSUFFICIENT, empty),
         },
-        n_cells_in_scope=0,
+        n_rows_in_scope=0,
     )
     assert composed_verdict(g, bridges=(_bridge_a, _bridge_b)) is (
         ClusterVerdict.EMPTY_EXTENT
@@ -324,7 +324,7 @@ def test_validate_accepts_blocked_on_with_non_terminal_expected() -> None:
     class PendingFinding:
         EXPECTED: ClassVar[ClusterVerdict] = ClusterVerdict.UNDERPOWERED
         BRIDGES: ClassVar[tuple[Bridge, ...]] = (_bridge_a,)
-        BLOCKED_ON: ClassVar[str | None] = 'waiting for n=240 cells'
+        BLOCKED_ON: ClassVar[str | None] = 'waiting for n=240 rows'
 
     @dataclass(frozen=True)
     class H:

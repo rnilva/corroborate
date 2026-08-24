@@ -1,9 +1,9 @@
 """Closed-form assertions on `backdoor_ate` / `placebo_refutation`
 / `random_common_cause_refutation` over a multi-env LG-SCM corpus.
 
-The structural truth: per-cell `y_mean ≈ beta_xz * beta_zy * x_mean`
+The structural truth: per-row `y_mean ≈ beta_xz * beta_zy * x_mean`
 under the X → Z → Y SCM with shared structural coefficients across
-all cells. With `beta_xz = 0.5` and `beta_zy = 1.5`, the total
+all rows. With `beta_xz = 0.5` and `beta_zy = 1.5`, the total
 effect of X on Y is `0.5 * 1.5 = 0.75`.
 
 DoWhy with `backdoor.linear_regression` on the `(x_mean, y_mean)`
@@ -19,7 +19,7 @@ must recover this slope. The two refuters then check robustness:
 
 Test corpus: 5 envs × 30 seeds × single arm. `mu_x` varies across
 envs to give x_mean enough variance for OLS to converge tightly.
-n_steps is large (200) so per-cell sampling noise on x_mean and
+n_steps is large (200) so per-row sampling noise on x_mean and
 y_mean is small relative to the between-env signal.
 """
 from __future__ import annotations
@@ -33,7 +33,7 @@ from corroborate.analyses.dowhy import (
     random_common_cause_refutation,
 )
 from corroborate.corpus.schema import RunRow
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
@@ -57,9 +57,9 @@ _EXPECTED_ATE = _BETA_XZ * _BETA_ZY  # 0.75
 _DAG: list[tuple[str, str]] = [('x_mean', 'y_mean')]
 
 
-def _var_x_across_cells() -> float:
-    """Closed-form variance of `x_mean` across all cells in the
-    multi-env corpus. Per-cell `x_mean ≈ mu_x_env + N(0, σ_x²/n_steps)`
+def _var_x_across_rows() -> float:
+    """Closed-form variance of `x_mean` across all rows in the
+    multi-env corpus. Per-row `x_mean ≈ mu_x_env + N(0, σ_x²/n_steps)`
     so the total variance decomposes into between-env (mu_x grid)
     + within-env (sampling). For our parameters the within term
     is ~σ_x²/n_steps = 0.5²/200 = 1.25e-3 — negligible vs the
@@ -82,7 +82,7 @@ def _scm(*, mu_x: float) -> LinearGaussianSCM:
 
 
 def _build_observational_corpus() -> list[Mapping[str, object]]:
-    """Single-arm corpus across 5 envs × N seeds. Each cell
+    """Single-arm corpus across 5 envs × N seeds. Each row
     carries scalar `x_mean`, `z_mean`, `y_mean`. Multi-env spread
     in mu_x widens x_mean's range so OLS has signal to regress
     against. Env-specific seed offsets keep the per-env noise
@@ -103,7 +103,7 @@ def _build_observational_corpus() -> list[Mapping[str, object]]:
     return [r.as_dict() for r in rows]
 
 
-def _cells() -> Sequence[Mapping[str, object]]:
+def _rows() -> Sequence[Mapping[str, object]]:
     """Module-level memoization for the corpus would tie the test
     file to import-order side effects; building the corpus per
     test is fast (a few hundred SCM evaluations) and keeps the
@@ -128,12 +128,12 @@ def test_backdoor_ate_returns_unidentified_when_no_directed_path() -> None:
 
     Construct a corpus with z confounding x and y; pass DAG that
     has the confounder structure but no direct x → y edge."""
-    cells = [
+    rows = [
         {'x_mean': float(i), 'y_mean': float(i * 2), 'z': 0.0}
         for i in range(20)
     ]
     result = backdoor_ate.fn(
-        cells_to_dataframe(cells), treatment='x_mean', outcome='y_mean',
+        to_dataframe(rows), treatment='x_mean', outcome='y_mean',
         dag=[('z', 'x_mean'), ('z', 'y_mean')],    # no x→y path
     )
     assert result.identified is False
@@ -145,7 +145,7 @@ def test_backdoor_ate_recovers_structural_total_effect() -> None:
     """ATE matches `beta_xz * beta_zy = 0.75` within 5%.
 
     DoWhy with linear-regression backdoor reduces to OLS slope on
-    a DAG with no confounders. With ~150 cells spanning a
+    a DAG with no confounders. With ~150 rows spanning a
     deterministic structural relationship `y = 0.75 * x + small
     noise`, the slope is recovered tightly.
 
@@ -153,7 +153,7 @@ def test_backdoor_ate_recovers_structural_total_effect() -> None:
     outcome, or missed the linear-regression dispatch would fail
     by orders of magnitude."""
     result = backdoor_ate.fn(
-        cells_to_dataframe(_cells()),
+        to_dataframe(_rows()),
         treatment='x_mean',
         outcome='y_mean',
         dag=_DAG,
@@ -171,7 +171,7 @@ def test_backdoor_ate_recovers_structural_total_effect() -> None:
         f'ATE = {result.ate:.4f}, expected {_EXPECTED_ATE:.4f} '
         f'(rel err {rel_err:.4f}); a >5% drift indicates the '
         f'estimator is not the textbook linear-regression slope, '
-        f'or the cell-DataFrame projection mishandled either '
+        f'or the row-DataFrame projection mishandled either '
         f'column'
     )
 
@@ -194,7 +194,7 @@ def test_placebo_refutation_destroys_structural_estimate() -> None:
     treatment column) would leave refuted_ate ≈ real_ate ≈ 0.75
     and breach the SE bound by orders of magnitude."""
     result = placebo_refutation.fn(
-        cells_to_dataframe(_cells()),
+        to_dataframe(_rows()),
         treatment='x_mean',
         outcome='y_mean',
         dag=_DAG,
@@ -207,10 +207,10 @@ def test_placebo_refutation_destroys_structural_estimate() -> None:
         f'same baseline ATE as backdoor_ate'
     )
     # Refuted ATE within 4·SE of zero under the permutation null.
-    n_cells = len(_MU_X_GRID) * _N_PER_ENV  # 150
-    var_x = _var_x_across_cells()  # mu_x grid variance + within-env
+    n_rows = len(_MU_X_GRID) * _N_PER_ENV  # 150
+    var_x = _var_x_across_rows()  # mu_x grid variance + within-env
     var_y = (_BETA_XZ * _BETA_ZY) ** 2 * var_x  # dominant term
-    se_null = math.sqrt(var_y / (n_cells * var_x))
+    se_null = math.sqrt(var_y / (n_rows * var_x))
     bound = 4.0 * se_null
     assert abs(result.refuted_ate) < bound, (
         f'refuted_ate = {result.refuted_ate:.4f}, analytical '
@@ -234,7 +234,7 @@ def test_placebo_refutation_destroys_structural_estimate() -> None:
     assert result.refuter_name == 'placebo_treatment_refuter'
     assert result.treatment == 'x_mean'
     assert result.outcome == 'y_mean'
-    assert result.n_rows == n_cells
+    assert result.n_rows == n_rows
 
 
 # ============ random common cause refutation ============
@@ -248,7 +248,7 @@ def test_random_common_cause_preserves_structural_estimate() -> None:
     A refuter that mishandled the synthetic node (e.g., correlated
     it with treatment by accident) would inflate the drift."""
     result = random_common_cause_refutation.fn(
-        cells_to_dataframe(_cells()),
+        to_dataframe(_rows()),
         treatment='x_mean',
         outcome='y_mean',
         dag=_DAG,
@@ -296,12 +296,12 @@ def test_placebo_refutation_returns_nan_when_unidentified() -> None:
     Construction: same DAG as `test_backdoor_ate_returns_unidentified
     _when_no_directed_path` — z→x, z→y, no x→y edge.
     """
-    cells = [
+    rows = [
         {'x_mean': float(i), 'y_mean': float(i * 2), 'z': 0.0}
         for i in range(20)
     ]
     result = placebo_refutation.fn(
-        cells_to_dataframe(cells), treatment='x_mean', outcome='y_mean',
+        to_dataframe(rows), treatment='x_mean', outcome='y_mean',
         dag=[('z', 'x_mean'), ('z', 'y_mean')],
     )
     assert math.isnan(result.real_ate), (
@@ -327,12 +327,12 @@ def test_random_common_cause_returns_nan_when_unidentified() -> None:
     differs between placebo and RCC paths — a regression that
     confused the two refuter names would breach the assertion on
     `refuter_name`."""
-    cells = [
+    rows = [
         {'x_mean': float(i), 'y_mean': float(i * 2), 'z': 0.0}
         for i in range(20)
     ]
     result = random_common_cause_refutation.fn(
-        cells_to_dataframe(cells), treatment='x_mean', outcome='y_mean',
+        to_dataframe(rows), treatment='x_mean', outcome='y_mean',
         dag=[('z', 'x_mean'), ('z', 'y_mean')],
     )
     assert math.isnan(result.real_ate)

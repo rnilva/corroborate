@@ -108,7 +108,7 @@ from corroborate._internals.polars import to_dicts
 from corroborate.analyses._dowhy_internal import (
     DAGLike,
     backdoor_estimate,
-    cells_to_pandas,
+    rows_to_pandas,
 )
 from corroborate.bridge.analysis import analysis
 
@@ -182,7 +182,7 @@ def _classify_linearity(
 
 @analysis
 def mediation_dowhy(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment: str,
     outcome: str,
@@ -200,8 +200,8 @@ def mediation_dowhy(
     Stage 1's backdoor identification to admit the path-aware
     adjustment set.
 
-    Reads `cells` and projects (treatment, outcome, *mediators)
-    columns; cells missing any required key are skipped.
+    Reads `rows` and projects (treatment, outcome, *mediators)
+    columns; rows missing any required key are skipped.
 
     Returns `MediationResult` with `linearity_status` set to one
     of {RELIABLE, SIGN_FLIPPED, OUT_OF_BOUNDS, UNIDENTIFIED,
@@ -210,7 +210,7 @@ def mediation_dowhy(
     for OLS. Pair with `dowhy.placebo_refutation` +
     `random_common_cause_refutation` on the same total-ATE
     arguments to refute the foundation."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     if not mediators:
         raise ValueError(
             'mediation_dowhy: `mediators` must be a non-empty tuple of '
@@ -222,8 +222,8 @@ def mediation_dowhy(
     # check on an empty DataFrame. Return POWER_INSUFFICIENT
     # cleanly so the cluster Finding's verdict aggregates as
     # UNDERPOWERED rather than the bridge erroring.
-    cells_list = list(rows)
-    if not cells_list:
+    rows_list = list(rows)
+    if not rows_list:
         return MediationResult(
             total_ate=float('nan'), direct_ate=float('nan'),
             indirect_ate=float('nan'), indirect_proportion=float('nan'),
@@ -234,10 +234,10 @@ def mediation_dowhy(
         )
 
     # Stage 1: total ATE via backdoor
-    df, _identified_estimand, estimate = backdoor_estimate(
-        cells_list, treatment, outcome, dag, method_name,
+    pdf, _identified_estimand, estimate = backdoor_estimate(
+        rows_list, treatment, outcome, dag, method_name,
     )
-    n_rows = len(df)
+    n_rows = len(pdf)
     if estimate is None:
         return MediationResult(
             total_ate=float('nan'), direct_ate=float('nan'),
@@ -251,7 +251,7 @@ def mediation_dowhy(
 
     # Stage 2: direct ATE via OLS with mediators as covariates.
     needed = [treatment, outcome, *mediators]
-    df_med = cells_to_pandas(cells_list, needed)
+    df_med = rows_to_pandas(rows_list, needed)
     if df_med.empty or len(df_med) < 3:
         return MediationResult(
             total_ate=total_ate, direct_ate=float('nan'),

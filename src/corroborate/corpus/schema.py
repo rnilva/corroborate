@@ -2,7 +2,7 @@
 
 Two persistence stores:
 
-- `RunRow` — per-cell evidence (one (env, seed) execution).
+- `RunRow` — per-row evidence (one (env, seed) execution).
   Source of truth.
 - `TraceRow.leaves` — scalars + N-D series, persisted to parquet
   (one column per leaf path, polars-queryable). Multi-dim
@@ -56,7 +56,7 @@ type MeasurementLeaf = str | int | float | bool
 leaf as its own typed parquet column."""
 
 
-# ============ TraceRow — raw per-cell observation store ============
+# ============ TraceRow — raw per-row observation store ============
 
 # A trace leaf is a scalar (leaf value, summary scalar), a numpy
 # ndarray (any dim, write-side: cell_runner emits these directly
@@ -85,7 +85,7 @@ type TraceLeaf = (
 
 @dataclass(frozen=True, slots=True)
 class TraceRow:
-    """One cell's raw observation: leaves + provenance.
+    """One row's raw observation: leaves + provenance.
 
     The trace store is the v9-`traces.parquet` analog: low-
     derivation, queryable, re-usable for post-hoc bridge
@@ -95,7 +95,7 @@ class TraceRow:
 
     `id` matches the corresponding `RunRow.id` so the two stores
     join on a single column. Linking by UUID (not by hypothesis
-    name as v9 did) lets two cells of the same hypothesis remain
+    name as v9 did) lets two rows of the same hypothesis remain
     distinguishable.
 
     `leaves` — scalars + N-D series, all persisted to parquet via
@@ -206,7 +206,7 @@ def _flatten_measurements(
 
 @dataclass(frozen=True, slots=True)
 class RunRow:
-    """Per-cell evidence — one (env, seed) execution under one
+    """Per-row evidence — one (env, seed) execution under one
     hypothesis. The lowest-level row, source of truth for upper
     aggregations.
 
@@ -223,12 +223,12 @@ class RunRow:
     fixtures and old parquets without the column read as the
     baseline arm. Production write paths populate it from
     `canonical_str(claim)` of the per-arm composition (the
-    implementation's cell runner).
+    implementation's row runner).
 
     Older parquets may carry a `claim_graph_signature` column
     (legacy program-structural fingerprint); `from_row_dict`
     silently absorbs it into `measurements` if encountered. The
-    column is no longer authored — the per-cell program identity
+    column is no longer authored — the per-row program identity
     is derivable from the leaves the path-keyed convention already
     flattens, and a denormalised hash didn't earn its keep."""
     id: str
@@ -237,15 +237,15 @@ class RunRow:
     timestamp: str
     verdict: Verdict
     arm_key: str = 'baseline'
-    # Git commit SHA the implementation was on when this cell was
+    # Git commit SHA the implementation was on when this row was
     # produced. Stamped by the runner at sweep start (one SHA shared
-    # across all cells in one runner invocation). `None` for cells
+    # across all rows in one runner invocation). `None` for rows
     # produced before this field existed; bridges that care about a
     # specific implementation fix scope by SHA via
     # `pl.col('substrate_commit_sha').is_in([...])`. See
     # `docs/SUBSTRATE_FIXES.md` for the SHA → fix-name catalogue.
     substrate_commit_sha: str | None = None
-    # Root program (top-level `@claim`) that produced this cell —
+    # Root program (top-level `@claim`) that produced this row —
     # e.g. `'dqn'`, `'paired_dqn'`. The arm fingerprint `arm_key`
     # captures the INTERVENTION tuple only (slot swaps on one base);
     # program identity is a distinct axis (a different root claim,
@@ -253,7 +253,7 @@ class RunRow:
     # leaves, so it earns a typed column rather than a denormalised
     # arm_key prefix. Cross-program contrasts (e.g. `paired_dqn` vs
     # `dqn`) scope via `pl.col('program') == 'paired_dqn'`. `None`
-    # for cells produced before this field existed.
+    # for rows produced before this field existed.
     program: str | None = None
     measurements: Mapping[str, MeasurementLeaf] = field(
         default_factory=lambda: {},
@@ -321,7 +321,7 @@ _RUN_ROW_TYPED_FIELDS: frozenset[str] = frozenset(
 
 # Lineage subset across both row classes — UUIDs, lineage IDs,
 # timestamp. Provenance bookkeeping that the runner ignores when
-# checking whether two rows describe the same scientific cell
+# checking whether two rows describe the same scientific row
 # (`runner._dedup_by_content`).
 LINEAGE_FIELDS: frozenset[str] = (
     _TRACE_ROW_TYPED_FIELDS | _RUN_ROW_TYPED_FIELDS

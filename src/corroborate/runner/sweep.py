@@ -3,20 +3,20 @@
 Substrate-agnostic primitive: takes a `DoEffect` (the typed
 contrast), a substrate-provided `base` Callable (the implementation's
 theory pre-bound with HPs), an optional `measurables` tuple (for
-eager per-cell scalar persistence), a discrete `grid_points`
-sequence, and a `Runner` that knows how to execute one cell.
+eager per-row scalar persistence), a discrete `grid_points`
+sequence, and a `Runner` that knows how to execute one row.
 The framework composes treatment + baseline claims via
 `apply_interventions(base, intervention_tuple)`, iterates the
 grid, and dispatches both arms to the runner per grid point.
 
 **Paired-sweep-per-intervention.** Each call to `run_intervention`
 runs both arms of one `DoEffect` in lockstep. Treatment and
-baseline cells share the same `grid_point` — pairing is
+baseline rows share the same `grid_point` — pairing is
 intrinsic, not reconstructed post-hoc via arm_key match.
 
 Multi-arm sweeps (3-way, factorial) are expressed as multiple
 calls to `run_intervention`, each with its own DoEffect. Vanilla
-cells appear in each baseline-shared sweep — that's the cost of
+rows appear in each baseline-shared sweep — that's the cost of
 the self-contained-contrast discipline (see
 `project_multi_arm_intervention_primitive` memory).
 
@@ -31,7 +31,7 @@ A non-RL implementation sweeping over (`patient_id`, `dose`,
 `arm_key = combined_arm_key(intervention_tuple)` and passes it
 through to the runner; the runner sets `RunRow.arm_key` to
 this value. HPs baked into `base` thus do NOT distinguish arms
-— they're cell covariates per CLAUDE.md's leaves-as-covariates
+— they're row covariates per CLAUDE.md's leaves-as-covariates
 discipline."""
 from __future__ import annotations
 
@@ -61,8 +61,8 @@ from corroborate.measurables import Measurable
 
 
 @dataclass(frozen=True, slots=True)
-class CellFailure:
-    """One cell that raised during execution. Captures the arm key,
+class RowFailure:
+    """One row that raised during execution. Captures the arm key,
     grid-point values, and the exception's string representation.
     Sweeps return failures alongside successful results so callers
     see the gap explicitly (no silent drops)."""
@@ -89,24 +89,24 @@ class SweepCellResult:
 class SweepResult:
     """Aggregated sweep output across all grid points × both arms.
     Failures captured alongside successes — the framework never
-    silently drops a failed cell."""
-    cell_results: tuple[SweepCellResult, ...]
-    failures: tuple[CellFailure, ...] = field(default_factory=tuple)
+    silently drops a failed row."""
+    row_results: tuple[SweepCellResult, ...]
+    failures: tuple[RowFailure, ...] = field(default_factory=tuple)
 
     @property
     def all_runs(self) -> tuple[RunRow, ...]:
-        return tuple(r for cr in self.cell_results for r in cr.runs)
+        return tuple(r for cr in self.row_results for r in cr.runs)
 
     @property
     def all_traces(self) -> tuple[TraceRow, ...]:
-        return tuple(t for cr in self.cell_results for t in cr.traces)
+        return tuple(t for cr in self.row_results for t in cr.traces)
 
 
 class Runner[R: Mapping[str, object]](Protocol):
     """Substrate's bridge into corroborate.sweep. Receives one
     composed Claim + its arm_key + the (optional) measurables to
     pre-register + one exogenous-grid point; returns a
-    `SweepCellResult` with per-cell records + captured graph.
+    `SweepCellResult` with per-row records + captured graph.
 
     Protocol (not a bare Callable alias) so implementations can hold
     init state — e.g. the RL runner caches the env catalogue and
@@ -118,7 +118,7 @@ class Runner[R: Mapping[str, object]](Protocol):
     under the measurable's `.name`). implementations that compute
     mediators post-sweep from raw traces leave it empty.
 
-    The cell runner's contract:
+    The row runner's contract:
     - Invoke `claim(...)` parameterised by `grid_point` to produce
       one record per seed/replicate.
     - For each `Measurable` in `measurables`, compute and persist
@@ -144,7 +144,7 @@ def empty_graph() -> ComputationGraph:
 class MergeIntegrityError(RuntimeError):
     """Invariant I3 cross-check (SWEEP_PERSISTENCY.md): the merged
     parquet's row count disagreed with the sum of `row_ids`
-    across the cell-shard manifest entries. Indicates either a
+    across the row-shard manifest entries. Indicates either a
     regression in `archived_shard_uris` (manifest filter dropped
     shards) or a regression in `stream_concat_parquets` (rows
     lost / duplicated during concat). Raised before the corrupt
@@ -163,7 +163,7 @@ class MergeIntegrityError(RuntimeError):
         super().__init__(
             f'merge integrity check failed for {kind!r}: '
             f'merged {merged_path} has {actual_rows} rows, '
-            f'manifest cell-shard row_ids sum to {expected_rows} '
+            f'manifest row-shard row_ids sum to {expected_rows} '
             f'across {n_shards} shards. Either `archived_shard_uris` '
             f'silently dropped shards from the merge input, or '
             f'`stream_concat_parquets` lost / duplicated rows. The '
@@ -237,15 +237,15 @@ def run_intervention[R: Mapping[str, object]](
     trace_drops: Sequence[str] = (),
 ) -> tuple[Path, Path]:
     """Execute the typed contrast `intervention` against `base`
-    over the discrete sequence `grid_points`; persist per-cell
+    over the discrete sequence `grid_points`; persist per-row
     parquets; merge to a corpus.
 
     The framework's rung-2 `do()` operator at the corpus level.
     A sweep-time primitive: its job is to compose one claim per
     arm via `apply_interventions(base, intervention.arms[i])` and
     dispatch each (claim, arm_key, measurables, grid_point) to
-    `runner`. Pairing is intrinsic — all N arms' cells at the
-    same `grid_point` ARE matched by construction (one cell per
+    `runner`. Pairing is intrinsic — all N arms' rows at the
+    same `grid_point` ARE matched by construction (one row per
     arm per grid point).
 
     `base` is the implementation's theory pre-bound with HPs (e.g.
@@ -256,7 +256,7 @@ def run_intervention[R: Mapping[str, object]](
     tuple, per the leaves-as-covariates discipline.
 
     `measurables` is OPTIONAL: pre-registered Measurable instances
-    the implementation's runner persists per cell at sweep time
+    the implementation's runner persists per row at sweep time
     (typically used to bake outcome reductions or cheap-to-compute
     scalars into RunRow.measurements alongside the leaf
     fingerprint). implementations that compute mediators post-sweep
@@ -268,10 +268,10 @@ def run_intervention[R: Mapping[str, object]](
     Cartesian product compose `itertools.product` themselves;
     implementations with heterogeneous-shape grids (e.g. different
     chunk_sizes per env) emit the flat list directly. Empty
-    sequence runs zero cells; `[{}]` runs one cell per arm with
+    sequence runs zero rows; `[{}]` runs one row per arm with
     an empty grid_point.
 
-    `arm_tag` produces the filename suffix for each cell's
+    `arm_tag` produces the filename suffix for each row's
     parquets. Default: `f'{arm_key}'` — caller usually overrides
     to encode grid_point keys (e.g. `env_name`).
 
@@ -285,11 +285,11 @@ def run_intervention[R: Mapping[str, object]](
     identity on separate, independently-queryable axes.
 
     `archive_remote`: optional fsspec URI prefix; uploads each
-    cell's parquet pair to remote storage right after the cell
+    row's parquet pair to remote storage right after the row
     completes, purges local; merges from remote at the end.
 
     `trace_reductions` / `trace_drops` forwarded to
-    `apply_trace_reductions` per cell."""
+    `apply_trace_reductions` per row."""
     if intervention.is_value_based:
         raise ValueError(
             'run_intervention() requires a structural DoEffect; '
@@ -322,8 +322,8 @@ def run_intervention[R: Mapping[str, object]](
         effective_arm_tag = arm_tag
 
     grid_point_list = list(grid_points)
-    n_cells = len(grid_point_list) * len(arms)
-    print(f'sweep: {n_cells} cells '
+    n_rows = len(grid_point_list) * len(arms)
+    print(f'sweep: {n_rows} rows '
           f'({len(grid_point_list)} grid points × {len(arms)} arms)',
           flush=True)
 
@@ -333,27 +333,27 @@ def run_intervention[R: Mapping[str, object]](
     arm_graphs: dict[str, ComputationGraph] = {}
     archived_runs_uris: list[str] = []
     archived_traces_uris: list[str] = []
-    failures: list[CellFailure] = []
+    failures: list[RowFailure] = []
     t_start = time.monotonic()
 
-    cell_idx = 0
+    row_idx = 0
     for grid_point in grid_point_list:
         for claim, arm_key in arms:
-            t_cell = time.monotonic()
+            t_row = time.monotonic()
             tag = effective_arm_tag(arm_key, grid_point)
             runs_path = (
-                tmp_dir / f'cell{cell_idx:03d}__{tag}__runs.parquet'
+                tmp_dir / f'cell{row_idx:03d}__{tag}__runs.parquet'
             )
             traces_path = (
-                tmp_dir / f'cell{cell_idx:03d}__{tag}__traces.parquet'
+                tmp_dir / f'cell{row_idx:03d}__{tag}__traces.parquet'
             )
             graph_path = (
-                tmp_dir / f'cell{cell_idx:03d}__{tag}__graph.json'
+                tmp_dir / f'cell{row_idx:03d}__{tag}__graph.json'
             )
             rp_rel = runs_path.relative_to(out_dir).as_posix()
             tp_rel = traces_path.relative_to(out_dir).as_posix()
 
-            # Resume support: skip cells whose outputs already
+            # Resume support: skip rows whose outputs already
             # exist (locally or remotely).
             if archive_remote is not None:
                 from corroborate.corpus.cloud import (
@@ -372,11 +372,11 @@ def run_intervention[R: Mapping[str, object]](
                     if graph_path.exists():
                         graph_paths.append(graph_path)
                     print(
-                        f'  [{cell_idx+1}/{n_cells}] {tag} '
+                        f'  [{row_idx+1}/{n_rows}] {tag} '
                         f'✓ already archived, skipping',
                         flush=True,
                     )
-                    cell_idx += 1
+                    row_idx += 1
                     continue
             elif (
                 runs_path.exists() and traces_path.exists()
@@ -388,15 +388,15 @@ def run_intervention[R: Mapping[str, object]](
                 if graph_path.exists():
                     graph_paths.append(graph_path)
                 print(
-                    f'  [{cell_idx+1}/{n_cells}] {tag} '
+                    f'  [{row_idx+1}/{n_rows}] {tag} '
                     f'✓ local parquets exist, skipping',
                     flush=True,
                 )
-                cell_idx += 1
+                row_idx += 1
                 continue
             elif runs_path.exists() or traces_path.exists():
                 # Partial / zero-byte leftover from a crashed previous
-                # run (e.g. cell002 traces.parquet at 0 bytes after a
+                # run (e.g. row002 traces.parquet at 0 bytes after a
                 # SIGKILL mid-write — observed 2026-05-09 on metamaze
                 # g099 finalize). The skip-cached check above only saw
                 # `exists()` before the size guard was added; subsequent
@@ -408,78 +408,84 @@ def run_intervention[R: Mapping[str, object]](
                     if stale.exists():
                         stale.unlink()
                 print(
-                    f'  [{cell_idx+1}/{n_cells}] {tag} '
+                    f'  [{row_idx+1}/{n_rows}] {tag} '
                     f'⚠ stale local parquets (0-byte / partial) '
                     f'cleared; re-running',
                     flush=True,
                 )
 
             print(
-                f'  [{cell_idx+1}/{n_cells}] {tag} '
+                f'  [{row_idx+1}/{n_rows}] {tag} '
                 f'(grid_point keys: {sorted(grid_point.keys())}) ...',
                 flush=True,
             )
             try:
-                # Inject the framework's cell_idx so the implementation can
-                # name per-cell sidecars consistently across runs that
+                # Inject the framework's row_idx so the implementation can
+                # name per-row sidecars consistently across runs that
                 # include skips (resume after a partial sweep). Without
                 # this, implementations that maintain their own call counter
-                # diverge from `cell_idx` here because skipped iterations
+                # diverge from `row_idx` here because skipped iterations
                 # don't bump their counter, leading to sidecar filename
-                # collisions on subsequent cells. The sentinel key
+                # collisions on subsequent rows. The sentinel key
                 # `__framework_cell_idx__` is stripped from `unexpected`
                 # checks by the implementation runner; old implementations that
                 # ignore it keep their pre-fix behavior unchanged.
+                # The injected key and the shard filenames are
+                # WIRE names: substrates outside this repo read
+                # `__framework_cell_idx__`, and archived corpora
+                # carry `tmp/cell###__…` shards. Persisted and
+                # protocol identifiers do not churn with in-process
+                # vocabulary (CLAUDE.md).
                 grid_point_with_cell_idx: dict[str, object] = {
                     **grid_point,
-                    '__framework_cell_idx__': cell_idx,
+                    '__framework_cell_idx__': row_idx,
                 }
-                cell_result = runner(
+                row_result = runner(
                     claim, arm_key, measurables, grid_point_with_cell_idx,
                 )
             except Exception as exc:  # noqa: BLE001
-                failures.append(CellFailure(
+                failures.append(RowFailure(
                     arm_key=arm_key,
                     grid_point=dict(grid_point),
                     error=f'{type(exc).__name__}: {exc}',
-                    duration_s=time.monotonic() - t_cell,
+                    duration_s=time.monotonic() - t_row,
                 ))
-                cell_idx += 1
+                row_idx += 1
                 continue
             # Post-runner write/reduce/archive block. Substep-tagged
             # so a crash names the failing phase (e.g. OOM during
-            # `reduce_traces` on long-trace cells). Re-raises after
+            # `reduce_traces` on long-trace rows). Re-raises after
             # logging — strict-abort default: a partial write is
             # systemic (OOM, disk full, S3 outage), continuing
             # silently produces thin sweeps. Runner failures (above)
-            # ARE legitimately per-cell and continue.
+            # ARE legitimately per-row and continue.
             substep = 'write_runs'
             try:
-                # Defensive re-mkdir before each cell write.
+                # Defensive re-mkdir before each row write.
                 # `tmp_dir` was created once at the start of
                 # run_intervention (line ~286), but a long-running
                 # sweep can have its untracked tmp/ wiped by external
                 # forces (git operations in the same worktree, manual
                 # cleanup, concurrent test cleanup). Without this
                 # belt-and-suspenders, a transient deletion ends the
-                # sweep with ENOENT on every subsequent cell. The
+                # sweep with ENOENT on every subsequent row. The
                 # mkdir is idempotent + cheap; the cost is one
-                # syscall per cell vs lifetime of the sweep.
+                # syscall per row vs lifetime of the sweep.
                 runs_path.parent.mkdir(parents=True, exist_ok=True)
-                write_runrows(cell_result.runs, runs_path)
+                write_runrows(row_result.runs, runs_path)
                 substep = 'reduce_and_write_traces'
                 traces_path.parent.mkdir(parents=True, exist_ok=True)
                 write_reduced_tracerows(
-                    list(cell_result.traces), traces_path,
+                    list(row_result.traces), traces_path,
                     add=trace_reductions, drop=trace_drops,
                 )
                 substep = 'write_graph'
                 graph_path.parent.mkdir(parents=True, exist_ok=True)
                 write_graphs_sidecar(
-                    {arm_key: cell_result.graph}, graph_path,
+                    {arm_key: row_result.graph}, graph_path,
                 )
                 substep = 'append_paths'
-                arm_graphs[arm_key] = cell_result.graph
+                arm_graphs[arm_key] = row_result.graph
                 runs_paths.append(runs_path)
                 traces_paths.append(traces_path)
                 graph_paths.append(graph_path)
@@ -505,12 +511,12 @@ def run_intervention[R: Mapping[str, object]](
                 }
                 print(
                     f'    FAILED at substep={substep!r} after '
-                    f'{time.monotonic()-t_cell:.1f}s: '
+                    f'{time.monotonic()-t_row:.1f}s: '
                     f'{type(exc).__name__}: {exc}',
                     file=sys.stderr, flush=True,
                 )
                 print(
-                    f'    cell={cell_idx} tag={tag}\n'
+                    f'    row={row_idx} tag={tag}\n'
                     f'    on-disk: {on_disk}',
                     file=sys.stderr, flush=True,
                 )
@@ -519,36 +525,36 @@ def run_intervention[R: Mapping[str, object]](
                 raise
             finally:
                 # Memory hygiene: drop the runner output before the
-                # next cell. JAX arrays + polars buffers from
-                # `cell_result.traces` are the dominant heap. On
+                # next row. JAX arrays + polars buffers from
+                # `row_result.traces` are the dominant heap. On
                 # long-trace MinAtar 1M-step sweeps, 6 sequential
-                # cells accumulated enough heap to OOM-kill the
-                # process at apply_trace_reductions of the 6th cell.
-                del cell_result
+                # rows accumulated enough heap to OOM-kill the
+                # process at apply_trace_reductions of the 6th row.
+                del row_result
                 gc.collect()
-            elapsed = time.monotonic() - t_cell
+            elapsed = time.monotonic() - t_row
             total = time.monotonic() - t_start
             print(
                 f'    done in {elapsed:.1f}s '
                 f'(cumulative {total/60:.1f} min)',
                 flush=True,
             )
-            cell_idx += 1
+            row_idx += 1
 
     if failures:
         # Surface failures before the merge step — a thin merge
         # (no runs_paths) otherwise raises ValueError without
-        # explaining which cells crashed. Print here too; the
+        # explaining which rows crashed. Print here too; the
         # tail-of-function print stays for the partial-failure
         # case where some merge succeeded.
         print()
-        print(f'  WARN: {len(failures)} cell failures (pre-merge):',
+        print(f'  WARN: {len(failures)} row failures (pre-merge):',
               flush=True)
         for f in failures:
             print(f'    [{f.arm_key}] {f.grid_point}: {f.error}',
                   flush=True)
     print()
-    print('merging per-cell parquets ...', flush=True)
+    print('merging per-row parquets ...', flush=True)
     if archive_remote is not None:
         # Manifest-driven merge (invariant I3 in SWEEP_PERSISTENCY.md):
         # Read the URI list from the manifest at `<out_dir>/_remote.json`
@@ -556,7 +562,7 @@ def run_intervention[R: Mapping[str, object]](
         # When multiple `run_intervention` calls target the same
         # `out_dir` (paired sweeps), the manifest accumulates entries
         # from all calls; using it ensures the final merge contains
-        # every cell, not just this call's iteration.
+        # every row, not just this call's iteration.
         from corroborate.corpus.cloud import (
             archive as _archive_merged,
             archived_shard_uris,
@@ -570,7 +576,7 @@ def run_intervention[R: Mapping[str, object]](
         stream_concat_parquets(runs_uris, final_runs)
         stream_concat_parquets(traces_uris, final_traces)
         # Integrity cross-check: the merged parquet's row count
-        # should equal the sum of `row_ids` across the cell-shard
+        # should equal the sum of `row_ids` across the row-shard
         # manifest entries we merged. Pre-fix, a regression in
         # `archived_shard_uris` (manifest filter regex breaks,
         # subset of shards returned) would silently produce a
@@ -585,11 +591,11 @@ def run_intervention[R: Mapping[str, object]](
             out_dir, final_runs, final_traces,
         )
         # The merged output is INTENTIONALLY a function of the
-        # manifest — it grows as more cells are added across
+        # manifest — it grows as more rows are added across
         # multiple `run_intervention` calls into the same `out_dir`
         # (invariant I3). Each merge produces a new sha256 by
         # design; pass `force=True` so I2's conflict check (which
-        # is the right behavior for IMMUTABLE cell shards) doesn't
+        # is the right behavior for IMMUTABLE row shards) doesn't
         # mistake intentional regeneration for content drift.
         _archive_merged(
             out_dir, archive_remote,
@@ -616,14 +622,14 @@ def run_intervention[R: Mapping[str, object]](
         print(f'  → {final_graphs}')
 
     if failures:
-        print(f'  WARN: {len(failures)} cell failures')
+        print(f'  WARN: {len(failures)} row failures')
         for f in failures:
             print(f'    [{f.arm_key}] {f.grid_point}: {f.error}')
     return final_runs, final_traces
 
 
 __all__ = [
-    'CellFailure',
+    'RowFailure',
     'Runner',
     'SweepCellResult',
     'SweepResult',

@@ -5,7 +5,7 @@ refutations.
 Where `paired_delta_link_dowhy` consumes per-burst Δ_predictor /
 Δ_target Measurables (mediator → outcome link), this primitive
 consumes a continuous **treatment** that's an HP / scalar swept
-across cells (e.g. `target_sync.tau`, `gamma`, `sync_period`)
+across rows (e.g. `target_sync.tau`, `gamma`, `sync_period`)
 and tests its causal effect on the paired-Δ outcome.
 
 Schematically:
@@ -14,7 +14,7 @@ Schematically:
         include the swept HP, so each pair has a well-defined
         treatment value)
     Δ_outcome  =  outcome[treatment_arm] − outcome[baseline_arm]
-    treatment  =  HP value at the pair (read from each cell)
+    treatment  =  HP value at the pair (read from each row)
 
     DAG:        treatment_var → delta_outcome
     ATE:        backdoor_ate(treatment_var, delta_outcome, dag)
@@ -58,7 +58,7 @@ class PairedContinuousDoResult:
 
 
 def _pair_and_extract(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -82,16 +82,16 @@ def _pair_and_extract(
         tuple[object, ...],
         dict[str, Mapping[str, object]],
     ] = defaultdict(dict)
-    for cell in cells:
-        arm = cell.get(arm_field)
+    for row in rows:
+        arm = row.get(arm_field)
         if arm not in (treatment_arm, baseline_arm):
             continue
-        key = tuple(cell.get(k) for k in pair_by)
+        key = tuple(row.get(k) for k in pair_by)
         if any(v is None for v in key):
             continue
-        keyed[key][arm] = cell
+        keyed[key][arm] = row
 
-    rows: list[dict[str, float]] = []
+    pair_rows: list[dict[str, float]] = []
     for key, arms in keyed.items():
         del key
         t = arms.get(treatment_arm)
@@ -120,11 +120,11 @@ def _pair_and_extract(
             continue
         if math.isnan(ot_f) or math.isnan(ob_f):
             continue
-        rows.append({
+        pair_rows.append({
             treatment_var: tv_f,
             'delta_outcome': ot_f - ob_f,
         })
-    return rows
+    return pair_rows
 
 
 def _nan_backdoor(
@@ -151,7 +151,7 @@ def _nan_refutation(
 
 @analysis
 def paired_continuous_do_dowhy(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -166,13 +166,13 @@ def paired_continuous_do_dowhy(
     """Test `do(treatment_var) → Δ_outcome` via DoWhy backdoor +
     refutations.
 
-    `treatment_var` is the column name on each cell carrying the
+    `treatment_var` is the column name on each row carrying the
     swept HP (continuous, exogenous by sweep design — e.g.
     `'target_sync.tau'`). `pair_by` MUST include the swept HP so
     each pair has a well-defined treatment value (treatment and
-    baseline cells pair within a single HP value).
+    baseline rows pair within a single HP value).
 
-    `outcome` is the per-cell column name of the bridge target
+    `outcome` is the per-row column name of the bridge target
     (e.g. `'eval_best_burst_mean'`). Δ_outcome is computed at
     pair-time as `outcome[treatment_arm] − outcome[baseline_arm]`.
 
@@ -185,7 +185,7 @@ def paired_continuous_do_dowhy(
     and `placebo.refuted_ate ≈ 0` / `random_common_cause.drift`
     small for the refutation gates."""
     rows = _pair_and_extract(
-        to_dicts(cells),
+        to_dicts(df),
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         treatment_var=treatment_var,

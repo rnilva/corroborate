@@ -37,7 +37,7 @@ deliberate lightweight wrapper around the heavy
 
 **Why a substrate-registered entry-point shape, not a framework-
 level abstract `dispatch_sweep`.** The framework can't run a
-implementation's cells (no per-cell-runner Protocol exists at this
+implementation's rows (no per-row-runner Protocol exists at this
 level — see `IMPLEMENTATION_SPEC_yaml_sweep_lift.md` §1
 non-goals). The CLI here is a thin import + delegate layer; the
 real dispatch logic stays in the implementation's `dispatch_sweep`."""
@@ -313,7 +313,7 @@ def add_args(
         '--dry-run', action='store_true',
         help='Validate the YAML through the substrate\'s '
              '`expand_sweep` and print the resolved configs '
-             'without running cells. Requires the substrate to '
+             'without running rows. Requires the substrate to '
              'provide `expand_sweep` on its `SweepEntryPoints`.',
     )
     _ = p_run.add_argument(

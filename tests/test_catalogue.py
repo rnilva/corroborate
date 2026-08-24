@@ -5,7 +5,7 @@ discovery is exercised without real network. Mirrors the structure
 of `tests/test_cloud.py`.
 
 Eight test shapes:
-1. Classifier truth table over all 16 input cells.
+1. Classifier truth table over all 16 input rows.
 2. Walk + classification of one fixture per reachable state.
 3. `tmp/` pruning — per-arm shard dirs are not surfaced.
 4. Local-only mode — no cloud queries fire, cloud is None.
@@ -34,7 +34,7 @@ def _write_real_parquet(p: Path, n_rows: int = 4) -> None:
     minimum even at small row counts."""
     p.parent.mkdir(parents=True, exist_ok=True)
     df = pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(n_rows)],
+        'id': [f'row-{i}' for i in range(n_rows)],
         'x': list(range(n_rows)),
         # pad column — ensures size >= 1 KiB so cloud.archive accepts.
         'pad': ['x' * 256 for _ in range(max(n_rows, 4))][:n_rows],
@@ -74,8 +74,8 @@ _ALL_NAMED: Final = (
 @pytest.mark.parametrize(
     ('local_dir', 'local_manifest', 'parquets', 'cloud_manifest', 'expected'),
     [
-        # local_dir=F: cells where local_manifest or parquets exist are
-        # UNREACHABLE (filesystem ontology); cell with neither is
+        # local_dir=F: rows where local_manifest or parquets exist are
+        # UNREACHABLE (filesystem ontology); row with neither is
         # UPSTREAM-FILTERED. Only (F,F,F,T) is reachable → CLOUD_ORPHAN.
         (False, False, False, False, 'RAISE'),
         (False, False, False, True,  'CLOUD_ORPHAN'),
@@ -85,7 +85,7 @@ _ALL_NAMED: Final = (
         (False, True,  False, True,  'RAISE'),
         (False, True,  True,  False, 'RAISE'),
         (False, True,  True,  True,  'RAISE'),
-        # local_dir=T: 8 reachable cells.
+        # local_dir=T: 8 reachable rows.
         (True,  False, False, False, 'IN_PROGRESS_SCAFFOLD'),
         (True,  False, False, True,  'CLOUD_ORPHAN'),
         (True,  False, True,  False, 'LOCAL_ONLY'),
@@ -333,7 +333,7 @@ def test_nested_cloud_archives_both_classified(tmp_path: Path) -> None:
             'sha256': 'a' * 64,
             'size_bytes': (parent / 'runs.parquet').stat().st_size,
             'pushed_at': '2026-01-01T00:00:00+00:00',
-            'row_ids': [f'cell-{i}' for i in range(4)],
+            'row_ids': [f'row-{i}' for i in range(4)],
         }],
     }
     _ = (parent / cloud.MANIFEST_NAME).write_text(
@@ -460,7 +460,7 @@ def _write_runs_parquet(
     have len == len(arm_keys)."""
     p.parent.mkdir(parents=True, exist_ok=True)
     df_dict: dict[str, list[object]] = {
-        'id': [f'cell-{i}' for i in range(len(arm_keys))],
+        'id': [f'row-{i}' for i in range(len(arm_keys))],
         'arm_key': list(arm_keys),
         'pad': ['x' * 256 for _ in range(len(arm_keys))],
     }
@@ -478,7 +478,7 @@ def test_arm_leaves_two_arms_constant_leaves(tmp_path: Path) -> None:
     profiles = catalogue.arm_leaves(data_root)
     assert len(profiles) == 2
     by_arm = {p.arm: p for p in profiles}
-    assert by_arm['baseline'].n_cells == 3
+    assert by_arm['baseline'].n_rows == 3
     assert by_arm['baseline'].leaves['gamma'] == ('0.99',)
     assert by_arm['ddqn'].leaves['optimizer.inner.lr'] == ('0.0001',)
 
@@ -540,7 +540,7 @@ def test_arm_leaves_missing_arm_key_falls_back_to_baseline(tmp_path: Path) -> No
     profiles = catalogue.arm_leaves(data_root)
     assert len(profiles) == 1
     assert profiles[0].arm == 'baseline'
-    assert profiles[0].n_cells == 3
+    assert profiles[0].n_rows == 3
 
 
 # ============ 14b. arm_leaves: trajectory List columns excluded ============

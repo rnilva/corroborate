@@ -32,7 +32,7 @@ from corroborate.stats.meta_regression import Pool
 
 @analysis
 def meta_regression_paired_g(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -43,7 +43,7 @@ def meta_regression_paired_g(
     alpha: float = 0.05,
     pool: Pool = 'random',
 ) -> MetaRegressionResult:
-    """For each unique `env_name` in `cells`, compute paired g
+    """For each unique `env_name` in `rows`, compute paired g
     on `source` (treatment vs baseline by `pair_by`), then
     meta-regress those g/se on env-level covariates.
 
@@ -60,7 +60,7 @@ def meta_regression_paired_g(
     via tuple-search naturally fall through to POW_INSUF. The
     underlying `meta_regress_panel` still fail-loud raises for
     direct callers that haven't opted into this graceful shape."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     panel = per_env_paired_g_panel(
         list(rows),
         treatment_arm=treatment_arm,

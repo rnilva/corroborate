@@ -26,7 +26,7 @@ must catch that.
 
 Implementation: 5 envs × 30 seeds × one arm. Each env has its own
 `mu_x`. Mediator candidates are injected post-hoc into each
-cell's measurements (the audit reads `mediator.<name>` paths)
+row's measurements (the audit reads `mediator.<name>` paths)
 since they're not part of the structural SCM."""
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from dataclasses import replace
 from corroborate.analyses.diagnostic.tautology_audit import tautology_audit
 from corroborate.corpus.schema import MeasurementLeaf, RunRow
 from corroborate.measurables.redundancy_check import TautologyReport
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
@@ -54,7 +54,7 @@ _SIGMA_Y = 0.5
 _BETA_XZ = 0.5
 _BETA_ZY = 1.5
 _N_STEPS = 20
-# 60 seeds per env (~300 cells total) tightens the pooled stratified
+# 60 seeds per env (~300 rows total) tightens the pooled stratified
 # Spearman SE on a structurally-null ρ enough that finite-sample
 # fluctuations stay reliably below the audit threshold below.
 _N_PAIRS = 60
@@ -77,7 +77,7 @@ def _scm(*, mu_x: float) -> LinearGaussianSCM:
 
 
 def _hp_correlated_value(*, mu_x: float, seed: int, env_name: str) -> float:
-    """Value that depends on mu_x plus deterministic per-cell noise.
+    """Value that depends on mu_x plus deterministic per-row noise.
 
     The HP carries the marginal correlation; the noise scrambles
     within-stratum dependence with the outcome. random.Random
@@ -106,15 +106,15 @@ def _augment_with_mediators(rows: list[RunRow]) -> list[RunRow]:
         seed_v = m.get('seed')
         env_v = m.get('env_name')
         if not isinstance(mu_x, (int, float)) or isinstance(mu_x, bool):
-            raise TypeError(f'cell missing scalar mu_x: {r.id}')
+            raise TypeError(f'row missing scalar mu_x: {r.id}')
         if not isinstance(y_mean, (int, float)) or isinstance(y_mean, bool):
-            raise TypeError(f'cell missing scalar y_mean: {r.id}')
+            raise TypeError(f'row missing scalar y_mean: {r.id}')
         if not isinstance(z_mean, (int, float)) or isinstance(z_mean, bool):
-            raise TypeError(f'cell missing scalar z_mean: {r.id}')
+            raise TypeError(f'row missing scalar z_mean: {r.id}')
         if not isinstance(seed_v, int) or isinstance(seed_v, bool):
-            raise TypeError(f'cell missing int seed: {r.id}')
+            raise TypeError(f'row missing int seed: {r.id}')
         if not isinstance(env_v, str):
-            raise TypeError(f'cell missing string env_name: {r.id}')
+            raise TypeError(f'row missing string env_name: {r.id}')
         m['mediator.outcome_shadow'] = float(y_mean)
         m['mediator.hp_shadow'] = float(mu_x)
         m['mediator.hp_correlated'] = _hp_correlated_value(
@@ -153,9 +153,9 @@ def _audit() -> dict[str, TautologyReport]:
     `by_name` lookup. All tests share the same corpus and audit
     parameters so the four mediator stories are inspectable as
     one consistent picture."""
-    cells = _build_audit_corpus()
+    rows = _build_audit_corpus()
     result = tautology_audit.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         measurables=_MEDIATOR_SPECS,
         outcome_path='y_mean',
         outcome_reads=('y_per_episode',),
@@ -187,7 +187,7 @@ def test_outcome_shadow_is_flagged_by_structural_jaccard() -> None:
 # ============ HP-deterministic ============
 
 def test_hp_shadow_is_flagged_by_hp_r_squared() -> None:
-    """`hp_shadow.value == mu_x` per cell — R²(mediator, mu_x) = 1.
+    """`hp_shadow.value == mu_x` per row — R²(mediator, mu_x) = 1.
 
     Structural check passes (reads=('mu_x',) doesn't overlap
     outcome_reads); HP-R² fires with `('mu_x',)`."""
@@ -292,9 +292,9 @@ def test_clean_names_returns_only_the_clean_mediator() -> None:
     flagged on at least one check; only `mediator.clean` survives.
     This is the bridge-level summary surface — bridges typically
     consume `clean_names` to filter their candidate list."""
-    cells = _build_audit_corpus()
+    rows = _build_audit_corpus()
     result = tautology_audit.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         measurables=_MEDIATOR_SPECS,
         outcome_path='y_mean',
         outcome_reads=('y_per_episode',),
@@ -320,7 +320,7 @@ def test_tautology_audit_forwards_mediator_path_for_to_audit_panel() -> None:
 
     The default path resolution looks up each mediator's value at
     `record[f'mediator.{name}']` (or `record[name]` when name has
-    a dot). Implementation authors whose cells expose mediator scalars
+    a dot). Implementation authors whose rows expose mediator scalars
     under BARE names (no `mediator.` prefix and no dots) would
     silently get all-NaN audits without the forwarding kwarg.
 
@@ -329,14 +329,14 @@ def test_tautology_audit_forwards_mediator_path_for_to_audit_panel() -> None:
     `mediator_path_for`, the audit looks at `mediator.clean_z` →
     not found → degenerate result. With the forwarding, the audit
     looks at `clean_z` → finds it → returns real verdicts."""
-    cells = _build_audit_corpus()
+    rows = _build_audit_corpus()
     # Replace `mediator.clean` with a bare-name key.
-    bare_cells: list[Mapping[str, object]] = []
-    for c in cells:
+    bare_rows: list[Mapping[str, object]] = []
+    for c in rows:
         new = dict(c)
         if 'mediator.clean' in new:
             new['clean_z'] = new.pop('mediator.clean')
-        bare_cells.append(new)
+        bare_rows.append(new)
 
     bare_specs: tuple[Mapping[str, object], ...] = (
         {'name': 'clean_z', 'reads': ('z_per_episode',)},
@@ -345,7 +345,7 @@ def test_tautology_audit_forwards_mediator_path_for_to_audit_panel() -> None:
     # Without forwarding: audit looks at `mediator.clean_z`, finds
     # nothing, returns degenerate report (all NaN signals).
     no_forward = tautology_audit.fn(
-        cells_to_dataframe(bare_cells),
+        to_dataframe(bare_rows),
         measurables=bare_specs,
         outcome_path='y_mean',
         outcome_reads=('y_per_episode',),
@@ -354,7 +354,7 @@ def test_tautology_audit_forwards_mediator_path_for_to_audit_panel() -> None:
         stratified_rho_threshold=_STRATIFIED_RHO_THRESHOLD,
     )
     no_fwd = no_forward.reports[0]
-    # When mediator_path_for is not provided AND the cell-key
+    # When mediator_path_for is not provided AND the row-key
     # convention doesn't match, audit_mediator_panel produces a
     # NaN stratified-ρ — the metric can't be computed without
     # the column.
@@ -370,7 +370,7 @@ def test_tautology_audit_forwards_mediator_path_for_to_audit_panel() -> None:
     # three checks (matches the `mediator.clean` case in the
     # existing test_clean_mediator_passes_all_three_checks test).
     forwarded = tautology_audit.fn(
-        cells_to_dataframe(bare_cells),
+        to_dataframe(bare_rows),
         measurables=bare_specs,
         outcome_path='y_mean',
         outcome_reads=('y_per_episode',),

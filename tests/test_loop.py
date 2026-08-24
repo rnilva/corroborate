@@ -12,7 +12,7 @@ Verifies:
    a fast/jit backend.
 
 Substrate-side conformance cases (jax-flavoured `scan_loop` and
-`python_loop`, cell-runner graph capture) live in
+`python_loop`, row-runner graph capture) live in
 `src/corroborate_rl/tests/test_loop_protocol_conformance.py`."""
 from __future__ import annotations
 

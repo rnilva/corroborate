@@ -18,7 +18,7 @@ scenarios cover the discriminative cases:
    U is independent. Partial Spearman recovers U's share of the
    Δ_target signal; marginal mixes both.
 
-Each test constructs hand-built per-cell records (multi-stratum
+Each test constructs hand-built per-row records (multi-stratum
 panel with one stratum per env), runs the @analysis fixture, and
 asserts the returned ρ against the closed-form expectation
 within a sample-rank tolerance.
@@ -34,7 +34,7 @@ from corroborate.analyses.link.cross_stratum_arm_diff_partial_spearman import (
 )
 
 
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 # The analysis itself takes a plain DataFrame; fixture rows route
@@ -44,7 +44,7 @@ from corroborate.data import cells_to_dataframe
 _fn = cross_stratum_arm_diff_partial_spearman.fn
 
 
-def _cells(
+def _rows(
     *,
     strata: list[str],
     delta_predictor: list[float],
@@ -53,27 +53,27 @@ def _cells(
     n_per_arm: int = 10,
     rng_seed: int = 0,
 ) -> list[Mapping[str, object]]:
-    """Build a per-cell record list realising the given per-stratum
+    """Build a per-row record list realising the given per-stratum
     arm-diff structure.
 
     For each stratum:
-      - baseline arm: `n_per_arm` cells with predictor/target/
+      - baseline arm: `n_per_arm` rows with predictor/target/
         confound drawn from N(0, sigma_arm).
-      - treatment arm: `n_per_arm` cells with mean shifted by the
+      - treatment arm: `n_per_arm` rows with mean shifted by the
         target Δ, same sigma.
 
     Verifies that `mean(treatment) - mean(baseline)` equals the
     requested Δ to within `1 / sqrt(n_per_arm)` rounding."""
     rng = np.random.default_rng(rng_seed)
     sigma_within = 0.5
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for k, env in enumerate(strata):
         # Baseline arm: zero-mean draws.
         b_p = rng.normal(0.0, sigma_within, n_per_arm)
         b_y = rng.normal(0.0, sigma_within, n_per_arm)
         b_z = rng.normal(0.0, sigma_within, n_per_arm)
         for i in range(n_per_arm):
-            cells.append({
+            rows.append({
                 'arm_key': 'baseline',
                 'env_name': env,
                 'M': float(b_p[i]),
@@ -90,14 +90,14 @@ def _cells(
         t_y = t_y - t_y.mean() + delta_target[k] + b_y.mean()
         t_z = t_z - t_z.mean() + delta_confound[k] + b_z.mean()
         for i in range(n_per_arm):
-            cells.append({
+            rows.append({
                 'arm_key': 'treatment',
                 'env_name': env,
                 'M': float(t_p[i]),
                 'Y': float(t_y[i]),
                 'Z': float(t_z[i]),
             })
-    return cells
+    return rows
 
 
 # ============ Test 1: shadow predictor → partial r ≈ 0 ============
@@ -115,7 +115,7 @@ def test_shadow_predictor_collapses_to_zero_under_partial() -> None:
     delta_m = [alpha * z for z in delta_z]  # M is Z's shadow
     delta_y = [gamma * z for z in delta_z]  # Y depends only on Z
 
-    cells = _cells(
+    rows = _rows(
         strata=strata,
         delta_predictor=delta_m,
         delta_target=delta_y,
@@ -123,7 +123,7 @@ def test_shadow_predictor_collapses_to_zero_under_partial() -> None:
         n_per_arm=20,
     )
     result = _fn(
-        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
+        to_dataframe(rows), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -154,7 +154,7 @@ def test_independent_predictor_keeps_partial_near_marginal() -> None:
     beta_m, beta_z = 1.0, 1.0
     delta_y = [beta_m * m + beta_z * z for m, z in zip(delta_m, delta_z)]
 
-    cells = _cells(
+    rows = _rows(
         strata=strata,
         delta_predictor=delta_m,
         delta_target=delta_y,
@@ -162,7 +162,7 @@ def test_independent_predictor_keeps_partial_near_marginal() -> None:
         n_per_arm=20,
     )
     result = _fn(
-        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
+        to_dataframe(rows), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -184,7 +184,7 @@ def test_marginal_rho_alongside_partial_rho() -> None:
     delta_z = [-0.5, +0.5, -0.3, +0.3, +0.0, +0.7]  # weak relation to M
     delta_y = [m + 0.2 * z for m, z in zip(delta_m, delta_z)]
 
-    cells = _cells(
+    rows = _rows(
         strata=strata,
         delta_predictor=delta_m,
         delta_target=delta_y,
@@ -192,7 +192,7 @@ def test_marginal_rho_alongside_partial_rho() -> None:
         n_per_arm=10,
     )
     result = _fn(
-        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
+        to_dataframe(rows), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -213,7 +213,7 @@ def test_min_strata_floor_returns_nan() -> None:
     floor, the partial returns NaN. Diagnostic: caller sees
     n_strata < min_strata."""
     strata = ['e1', 'e2', 'e3']  # only 3 strata
-    cells = _cells(
+    rows = _rows(
         strata=strata,
         delta_predictor=[-1.0, 0.0, 1.0],
         delta_target=[-1.0, 0.0, 1.0],
@@ -221,7 +221,7 @@ def test_min_strata_floor_returns_nan() -> None:
         n_per_arm=10,
     )
     result = _fn(
-        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
+        to_dataframe(rows), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -235,29 +235,29 @@ def test_min_strata_floor_returns_nan() -> None:
 
 def test_per_arm_seed_floor_drops_stratum() -> None:
     """A stratum where either arm has < `min_seeds_per_arm`
-    finite cells on any of predictor / target / confound is
+    finite rows on any of predictor / target / confound is
     silently dropped from the Δ panel. n_strata reflects the
     surviving count."""
     strata = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6']
-    cells_full = _cells(
+    rows_full = _rows(
         strata=strata,
         delta_predictor=[-1.0, 0.0, 1.0, 2.0, -0.5, 0.5],
         delta_target=[-1.0, 0.0, 1.0, 2.0, -0.5, 0.5],
         delta_confound=[-0.5, 0.0, 0.5, 1.0, -0.2, 0.2],
         n_per_arm=10,
     )
-    # Drop most of e3's treatment cells to put it below 5.
+    # Drop most of e3's treatment rows to put it below 5.
     pruned = [
-        c for c in cells_full
+        c for c in rows_full
         if not (c['env_name'] == 'e3' and c['arm_key'] == 'treatment')
     ]
-    # Add back 3 treatment cells for e3 (below min_seeds_per_arm=5).
+    # Add back 3 treatment rows for e3 (below min_seeds_per_arm=5).
     pruned.extend([
-        c for c in cells_full
+        c for c in rows_full
         if c['env_name'] == 'e3' and c['arm_key'] == 'treatment'
     ][:3])
     result = _fn(
-        cells_to_dataframe(pruned), treatment_arm='treatment', baseline_arm='baseline',
+        to_dataframe(pruned), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
@@ -275,7 +275,7 @@ def test_monotone_rank_rho_marginal_exact() -> None:
     delta_m = [-3.0, -1.0, 0.5, 1.5, 4.0, 7.0]  # strictly increasing
     delta_y = [m ** 3 for m in delta_m]  # monotone increasing
     delta_z = [+1.0, -1.0, +2.0, -2.0, +0.5, -0.5]  # unrelated
-    cells = _cells(
+    rows = _rows(
         strata=strata,
         delta_predictor=delta_m,
         delta_target=delta_y,
@@ -283,12 +283,12 @@ def test_monotone_rank_rho_marginal_exact() -> None:
         n_per_arm=10,
     )
     result = _fn(
-        cells_to_dataframe(cells), treatment_arm='treatment', baseline_arm='baseline',
+        to_dataframe(rows), treatment_arm='treatment', baseline_arm='baseline',
         predictor='M', target='Y', confound='Z',
         stratify_by=('env_name',),
         min_seeds_per_arm=5, min_strata=5,
     )
     # Δ_M strictly increasing, Δ_Y strictly increasing → Spearman
     # is exactly +1 (no sampling slack at the per-stratum-arm-mean
-    # level because _cells re-centres to exact Δ).
+    # level because _rows re-centres to exact Δ).
     assert abs(result.rho_marginal - 1.0) < 1e-6

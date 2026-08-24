@@ -35,7 +35,7 @@ from corroborate.analyses.spearman.stratum_panel_jci_spearman import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _SIGMA_X = 0.5
@@ -65,7 +65,7 @@ def _scm(mu_x: float, beta_xz: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells() -> list[Mapping[str, object]]:
+def _build_rows() -> list[Mapping[str, object]]:
     rows = []
     for i, env in enumerate(_ENVS):
         for j, mu_x in enumerate(_MU_X_LEVELS):
@@ -91,9 +91,9 @@ def test_stratum_panel_jci_marginal_rho_high() -> None:
     16 strata (4 envs × 4 μ_x levels) ≈ +1: predictor and
     target share the same rank order in μ_x, with 4-way ties
     at each of the 4 μ_x levels. Empirically ρ ≈ 0.994."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = stratum_panel_jci_spearman.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -128,9 +128,9 @@ def test_stratum_panel_jci_stratified_rho_high() -> None:
     σ_z/sqrt(n_steps)/(β_xz_b · Δμ_x) ≈ 0.0035/(0.3) ≈ 1.2%, so
     ranks never flip → per-env ρ = +1.
     """
-    cells = _build_cells()
+    rows = _build_rows()
     result = stratum_panel_jci_spearman.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -166,9 +166,9 @@ def test_stratum_panel_jci_partial_rho_collapses_under_full_mediation() -> None:
     the primitive to NOT silently return 0 (which would be
     mistaken for "mediation falsified"). NaN forces the bridge
     to handle the singular case explicitly."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = stratum_panel_jci_spearman.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',
@@ -192,7 +192,7 @@ def test_stratum_panel_jci_partial_rho_collapses_under_full_mediation() -> None:
 def test_stratum_panel_jci_returns_nan_when_no_strata() -> None:
     """Empty corpus → NaN throughout."""
     result = stratum_panel_jci_spearman.fn(
-        cells_to_dataframe([]),
+        to_dataframe([]),
         treatment_arm='treatment',
         baseline_arm='baseline',
         predictor_col='z_mean',

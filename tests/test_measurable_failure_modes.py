@@ -2,7 +2,7 @@
 
 Two contracts:
 
-1. Per-cell measurable failures map to None per-cell; downstream
+1. Per-row measurable failures map to None per-row; downstream
    NaN-skip cleanly. (Existing behavior; this confirms nothing
    broke after narrowing the catch-all `except Exception`.)
 2. A measurable that ALWAYS fails (typo in its body, wrong arg
@@ -38,9 +38,9 @@ def _swap_stderr(buf: StringIO) -> TextIO:
     return prev
 
 
-def test_per_cell_failure_maps_to_none() -> None:
-    """A measurable that fails on SOME cells (not all) maps those
-    cells to None silently — no warning. The legitimate
+def test_per_row_failure_maps_to_none() -> None:
+    """A measurable that fails on SOME rows (not all) maps those
+    rows to None silently — no warning. The legitimate
     "missing inputs on a subset" case."""
 
     @measurable(reads=('x',))
@@ -64,7 +64,7 @@ def test_per_cell_failure_maps_to_none() -> None:
     finally:
         sys.stderr = prev
 
-    # Mixed success/failure → no warning (some cells succeeded).
+    # Mixed success/failure → no warning (some rows succeeded).
     assert 'WARNING' not in buf.getvalue()
     assert 'needs_positive_x' in out.columns
     vals = out['needs_positive_x'].to_list()
@@ -76,14 +76,14 @@ def test_per_cell_failure_maps_to_none() -> None:
 
 
 def test_always_failing_measurable_warns_to_stderr() -> None:
-    """A measurable that fails on EVERY cell (e.g., references a
+    """A measurable that fails on EVERY row (e.g., references a
     column that never exists) is an authoring bug, not a missing-
     input situation. The all-null column should be paired with a
     stderr warning naming the measurable + the exception class."""
 
     @measurable(reads=('does_not_exist',))
     def always_fails(record: Mapping[str, object]) -> float:
-        # KeyError on every cell — reads from a never-present key.
+        # KeyError on every row — reads from a never-present key.
         return float(record['does_not_exist'])  # type: ignore[arg-type]
     _ = always_fails
 

@@ -1,6 +1,6 @@
 """Polars boundary — typed wrappers over polars' `Any`-leaky surface.
 
-Polars uses `Any` for heterogeneous cell values
+Polars uses `Any` for heterogeneous row values
 (`DataFrame.to_dicts() -> list[dict[str, Any]]`,
 `iter_rows(named=True) -> Iterator[dict[str, Any]]`,
 `Series.item() -> Any`). The framework's `Mapping[str, object]` /
@@ -11,7 +11,7 @@ narrow per-field via `_narrow.is_*` TypeIs predicates and
 
 Same rationale as `_json_boundary`. Each function laundering an
 `Any`-typed return is the framework's ONE allowed escape hatch for
-that polars surface — the runtime invariant (heterogeneous cell
+that polars surface — the runtime invariant (heterogeneous row
 values) cannot be expressed in polars' static contract.
 
 Module name is underscore-prefixed to signal **internal use
@@ -47,10 +47,10 @@ def scalar_int(lf: pl.LazyFrame, expr: pl.Expr) -> int:
     """Materialise a scalar-int column from a LazyFrame via
     `lf.select(expr).collect().item()`.
 
-    Polars' `.item()` returns `Any` (cell type is heterogeneous in
+    Polars' `.item()` returns `Any` (row type is heterogeneous in
     general); narrowing via isinstance (with explicit `bool`
     exclusion since `bool ⊂ int` in Python) is the typed exit.
-    Raises `TypeError` if the materialised cell isn't an int."""
+    Raises `TypeError` if the materialised row isn't an int."""
     # `Any` source: polars' `Series.item() -> Any`. Laundered
     # immediately by the isinstance guard below.
     v = lf.select(expr).collect().item()

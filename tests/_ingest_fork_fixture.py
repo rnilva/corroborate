@@ -10,7 +10,7 @@ a test function wouldn't be re-importable, so it lives here at
 module scope where importing the module re-runs the `@measurable`
 decorator.
 
-The measurable `trace_doubled_sum` reads a per-cell trace column
+The measurable `trace_doubled_sum` reads a per-row trace column
 (`signal`) and reduces it — exactly the shape that silently
 null-pads when the worker's registry is missing the implementation
 (the bug the equivalence test guards against)."""
@@ -23,7 +23,7 @@ import polars as pl
 
 from corroborate.measurables import measurable
 
-#: Trace column the synthetic corpora carry per cell. The
+#: Trace column the synthetic corpora carry per row. The
 #: measurable reduces it; if the worker registry lacks the
 #: measurable, this column is joined-then-dropped and the
 #: measurable's output column never appears.
@@ -37,7 +37,7 @@ MEASURABLE_NAME = 'trace_doubled_sum'
 
 @measurable(name=MEASURABLE_NAME, reads=(TRACE_COLUMN,))
 def trace_doubled_sum(record: Mapping[str, object]) -> float:
-    """Closed-form reduction of the per-cell `signal` trace:
+    """Closed-form reduction of the per-row `signal` trace:
     `2 * sum(signal)`. Deliberately trivial — the test asserts
     the parallel and sequential ingest paths agree on this value,
     so the reduction only needs to be deterministic and
@@ -65,20 +65,20 @@ def write_corpus(
     corpus_dir: Path,
     *,
     env_name: str,
-    cell_signals: Mapping[str, Sequence[float]],
+    row_signals: Mapping[str, Sequence[float]],
 ) -> None:
     """Materialise a minimal two-store corpus under `corpus_dir`:
 
     - `runs.parquet` — `id` + provenance columns the ingest path
       stamps / dedups on (`env_name`, `arm_key`, `seed`).
-    - `traces.parquet` — `id` + the `signal` per-cell trace column
+    - `traces.parquet` — `id` + the `signal` per-row trace column
       the measurable reads.
 
-    `cell_signals` maps each cell `id` to its per-cell signal
+    `row_signals` maps each row `id` to its per-row signal
     array. Distinct `env_name` per corpus keeps CI4 content-dedup
-    from collapsing cells across corpora."""
+    from collapsing rows across corpora."""
     corpus_dir.mkdir(parents=True, exist_ok=True)
-    ids = list(cell_signals)
+    ids = list(row_signals)
     runs = pl.DataFrame({
         'id': ids,
         'env_name': [env_name] * len(ids),
@@ -88,6 +88,6 @@ def write_corpus(
     runs.write_parquet(corpus_dir / 'runs.parquet')
     traces = pl.DataFrame({
         'id': ids,
-        TRACE_COLUMN: [list(cell_signals[i]) for i in ids],
+        TRACE_COLUMN: [list(row_signals[i]) for i in ids],
     })
     traces.write_parquet(corpus_dir / 'traces.parquet')

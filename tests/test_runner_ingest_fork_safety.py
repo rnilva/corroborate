@@ -31,7 +31,7 @@ Three guards here:
    the fork-after-threading hazard the fix addresses is real
    regardless.
 3. `test_parallel_matches_sequential_ingest` — results-equivalence.
-   The parallel path must produce the SAME cells + measurable
+   The parallel path must produce the SAME rows + measurable
    values as the sequential path; this catches the registry NOT
    being re-established in workers (which would silently null-out
    the implementation measurable).
@@ -57,14 +57,14 @@ from tests import _ingest_fork_fixture as fix
 # so a slow-but-not-hung regression still trips it.
 _DEADLOCK_TIMEOUT_S = 60.0
 
-#: Per-cell signal arrays. Distinct values per cell so the
-#: measurable output discriminates cells (a null-out bug can't
+#: Per-row signal arrays. Distinct values per row so the
+#: measurable output discriminates rows (a null-out bug can't
 #: accidentally match).
-_CELL_SIGNALS: dict[str, list[float]] = {
-    'cell-a': [1.0, 2.0, 3.0, 4.0],
-    'cell-b': [5.0, 6.0, 7.0, 8.0],
-    'cell-c': [10.0, 20.0, 30.0],
-    'cell-d': [0.5, 1.5, 2.5, 3.5],
+_ROW_SIGNALS: dict[str, list[float]] = {
+    'row-a': [1.0, 2.0, 3.0, 4.0],
+    'row-b': [5.0, 6.0, 7.0, 8.0],
+    'row-c': [10.0, 20.0, 30.0],
+    'row-d': [0.5, 1.5, 2.5, 3.5],
 }
 
 
@@ -73,16 +73,16 @@ def _build_two_corpora(root: Path) -> None:
     each with its own runs + traces store."""
     fix.write_corpus(
         root / 'corpus_a', env_name='Env_A',
-        cell_signals={
-            'cell-a': _CELL_SIGNALS['cell-a'],
-            'cell-b': _CELL_SIGNALS['cell-b'],
+        row_signals={
+            'row-a': _ROW_SIGNALS['row-a'],
+            'row-b': _ROW_SIGNALS['row-b'],
         },
     )
     fix.write_corpus(
         root / 'corpus_b', env_name='Env_B',
-        cell_signals={
-            'cell-c': _CELL_SIGNALS['cell-c'],
-            'cell-d': _CELL_SIGNALS['cell-d'],
+        row_signals={
+            'row-c': _ROW_SIGNALS['row-c'],
+            'row-d': _ROW_SIGNALS['row-d'],
         },
     )
 
@@ -185,7 +185,7 @@ def _warmup_fork_unsafe_libs() -> None:
         boto3.session.Session()
 
 
-#: Queue payload: ('ok', cell_count) on success, ('err', message)
+#: Queue payload: ('ok', row_count) on success, ('err', message)
 #: on failure. A closed-set discriminated tuple keeps the parent's
 #: unpack typed without an `object`-narrowing dance.
 _IngestResult = tuple[str, int | str]
@@ -196,7 +196,7 @@ def _ingest_child(
 ) -> None:
     """Top-level (picklable) child body: warm up fork-unsafe libs in
     the child's parent context, then run the parallel ingest. Pushes
-    the resulting cell count (or an error string) onto `result_q`.
+    the resulting row count (or an error string) onto `result_q`.
 
     Runs as its own process so that (a) a hang doesn't wedge the
     pytest worker and (b) the JAX/BLAS warmup is isolated from the
@@ -249,7 +249,7 @@ def test_parallel_ingest_does_not_deadlock_after_fork_unsafe_import(
     )
     status, payload = result_q.get()
     assert status == 'ok', f'ingest child errored: {payload}'
-    assert payload == 4, f'expected 4 cells ingested, got {payload}'
+    assert payload == 4, f'expected 4 rows ingested, got {payload}'
 
 
 # ----------------------------------------------------------------------
@@ -291,7 +291,7 @@ def _run_ingest_isolated(root: Path, workers: str, out: Path) -> None:
 
 def test_parallel_matches_sequential_ingest(tmp_path: Path) -> None:
     """The parallel (workers=2, forkserver) and sequential
-    (workers=1, in-process) paths must agree on the ingested cells
+    (workers=1, in-process) paths must agree on the ingested rows
     AND the trace-derived measurable values — the latter is the
     real guard that the worker registry was re-established (a
     missing registry silently null-pads the measurable column).
@@ -314,8 +314,8 @@ def test_parallel_matches_sequential_ingest(tmp_path: Path) -> None:
     seq_df = pl.read_parquet(seq_out)
     par_df = pl.read_parquet(par_out)
 
-    # Same cells in both.
-    assert seq_df['id'].to_list() == ['cell-a', 'cell-b', 'cell-c', 'cell-d']
+    # Same rows in both.
+    assert seq_df['id'].to_list() == ['row-a', 'row-b', 'row-c', 'row-d']
     assert par_df['id'].to_list() == seq_df['id'].to_list()
 
     # The measurable column is present + finite in BOTH paths (a
@@ -336,12 +336,12 @@ def _assert_measurable_matches(df: pl.DataFrame) -> None:
     by_id: Mapping[str, object] = dict(
         zip(df['id'].to_list(), df[fix.MEASURABLE_NAME].to_list()),
     )
-    for cell_id, signal in _CELL_SIGNALS.items():
-        got = by_id[cell_id]
+    for row_id, signal in _ROW_SIGNALS.items():
+        got = by_id[row_id]
         assert isinstance(got, float)
         expected = fix.expected_value(signal)
         assert got == pytest.approx(expected), (
-            f'{cell_id}: framework computed {got}, closed form '
+            f'{row_id}: framework computed {got}, closed form '
             f'{expected} (= 2 * sum({signal}))'
         )
 

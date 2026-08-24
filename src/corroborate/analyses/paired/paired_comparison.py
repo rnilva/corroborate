@@ -1,6 +1,6 @@
 """`paired_comparison` — the canonical paired-comparison analysis.
 
-Pairs cells on `pair_by` (e.g. `('seed',)`), optionally stratifies
+Pairs rows on `pair_by` (e.g. `('seed',)`), optionally stratifies
 by `group_by` (e.g. `'env_name'`) for random-effects pooling, and
 computes Hedges' g + se across paired Δs on `outcome_path`.
 
@@ -21,7 +21,7 @@ NO_EFFECT / etc. means for their claim.
 Consumed two ways:
 1. As a bridge fixture (parameter named `paired_comparison`)
    resolved by the framework's fixture-injection.
-2. Directly: `paired_comparison(cells, treatment_arm=...,
+2. Directly: `paired_comparison(df, treatment_arm=...,
    baseline_arm=..., ...)` — the registered analysis is callable
    like any other function."""
 from __future__ import annotations
@@ -102,44 +102,44 @@ class PairedComparisonResult:
     n_dropped_unpaired: int
 
 
-def _cell_pair_key(
-    cell: Mapping[str, object],
+def _row_pair_key(
+    row: Mapping[str, object],
     pair_by: tuple[str, ...],
 ) -> tuple[MeasurementLeaf, ...]:
-    """Read the tuple of values at `pair_by` keys off a cell.
+    """Read the tuple of values at `pair_by` keys off a row.
     Loud error if any key is missing or non-scalar."""
     out: list[MeasurementLeaf] = []
     for k in pair_by:
-        v = cell.get(k)
+        v = row.get(k)
         if v is None:
             raise TypeError(
-                f"paired_comparison: cell missing scalar pair-key "
+                f"paired_comparison: row missing scalar pair-key "
                 f"{k!r} (pair_by={pair_by!r})",
             )
         if not isinstance(v, (str, int, float, bool)):
             raise TypeError(
-                f"paired_comparison: cell {k!r} value is "
+                f"paired_comparison: row {k!r} value is "
                 f"non-scalar: {v!r}",
             )
         out.append(v)
     return tuple(out)
 
 
-def _cell_outcome(
-    cell: Mapping[str, object], outcome_path: str,
+def _row_outcome(
+    row: Mapping[str, object], outcome_path: str,
 ) -> float:
-    """Read a scalar outcome off a cell; loud error if absent or
+    """Read a scalar outcome off a row; loud error if absent or
     non-numeric."""
-    v = cell.get(outcome_path)
+    v = row.get(outcome_path)
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         raise TypeError(
-            f"paired_comparison: cell missing scalar "
+            f"paired_comparison: row missing scalar "
             f"{outcome_path!r} value",
         )
     return float(v)
 
 
-def _pair_cells_by_key(
+def _pair_rows_by_key(
     treatment: Sequence[Mapping[str, object]],
     baseline: Sequence[Mapping[str, object]],
     *,
@@ -151,19 +151,19 @@ def _pair_cells_by_key(
     dict[tuple[MeasurementLeaf, ...], Mapping[str, object]],
     int,
 ]:
-    """Index treatment + baseline cells by `pair_by`-key; return
-    paired keys (sorted), the two key→cell dicts, and the count of
-    unpaired-and-dropped cells. Raises on duplicate pair-keys
+    """Index treatment + baseline rows by `pair_by`-key; return
+    paired keys (sorted), the two key→row dicts, and the count of
+    unpaired-and-dropped df. Raises on duplicate pair-keys
     within either arm — silent dedup would mask a misconfigured
     slice."""
     def _index(
-        cells: Sequence[Mapping[str, object]], side: str,
+        rows: Sequence[Mapping[str, object]], side: str,
     ) -> dict[tuple[MeasurementLeaf, ...], Mapping[str, object]]:
         out: dict[
             tuple[MeasurementLeaf, ...], Mapping[str, object],
         ] = {}
-        for c in cells:
-            pk = _cell_pair_key(c, pair_by)
+        for c in rows:
+            pk = _row_pair_key(c, pair_by)
             if pk in out:
                 tag = (
                     f' for group {group_label!r}'
@@ -188,8 +188,8 @@ def _pair_cells_by_key(
 
 def _per_group_stats(
     group_value: object,
-    treatment_cells: Sequence[Mapping[str, object]],
-    baseline_cells: Sequence[Mapping[str, object]],
+    treatment_rows: Sequence[Mapping[str, object]],
+    baseline_rows: Sequence[Mapping[str, object]],
     *,
     outcome_path: str,
     pair_by: tuple[str, ...],
@@ -197,16 +197,16 @@ def _per_group_stats(
     """Pair within one group → GroupStats. Returns
     (GroupStats | None, n_dropped_unpaired). None when no pairs
     survive the outcome-finite filter."""
-    paired, t_by, b_by, n_dropped = _pair_cells_by_key(
-        treatment_cells, baseline_cells,
+    paired, t_by, b_by, n_dropped = _pair_rows_by_key(
+        treatment_rows, baseline_rows,
         pair_by=pair_by, group_label=group_value,
     )
     a_values: list[float] = []
     b_values: list[float] = []
     deltas: list[float] = []
     for pk in paired:
-        a = _cell_outcome(t_by[pk], outcome_path)
-        b = _cell_outcome(b_by[pk], outcome_path)
+        a = _row_outcome(t_by[pk], outcome_path)
+        b = _row_outcome(b_by[pk], outcome_path)
         if not (math.isfinite(a) and math.isfinite(b)):
             continue
         a_values.append(a)
@@ -247,7 +247,7 @@ def _per_group_stats(
 
 @analysis(reads=())
 def paired_comparison(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -259,14 +259,14 @@ def paired_comparison(
 ) -> PairedComparisonResult:
     """The canonical paired-comparison analysis.
 
-    Pairs cells on `pair_by` (e.g. `('seed',)`), optionally
+    Pairs rows on `pair_by` (e.g. `('seed',)`), optionally
     stratifies by `group_by` (e.g. `'env_name'`) for random-effects
     pooling, computes Hedges' g + se across paired Δs on
     `outcome_path`. Returns raw paired stats; the verdict is
     bridge-author-controlled.
 
     `treatment_arm` / `baseline_arm` are matched against
-    `cell[arm_field]` to partition the corpus. `arm_field`
+    `row[arm_field]` to partition the corpus. `arm_field`
     defaults to `'arm_key'`; legacy parquets keyed on the older
     `'intervention_name'` column can pass that explicitly.
 
@@ -275,14 +275,14 @@ def paired_comparison(
 
     Raises:
     - `ValueError` when `treatment_arm == baseline_arm` (HPO-smuggle).
-    - `ValueError` when no cells match either arm.
+    - `ValueError` when no rows match either arm.
     - `ValueError` on duplicate `pair_by` keys within an arm
       within a group (silent dedup would mask a misconfigured
       slice).
-    - `KeyError` when a cell is missing the `group_by` value.
-    - `TypeError` when a cell is missing/non-scalar at `pair_by`
+    - `KeyError` when a row is missing the `group_by` value.
+    - `TypeError` when a row is missing/non-scalar at `pair_by`
       keys or `outcome_path`."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     if treatment_arm == baseline_arm:
         raise ValueError(
             f'paired_comparison: treatment_arm and baseline_arm '
@@ -294,21 +294,21 @@ def paired_comparison(
             'paired_comparison: pair_by must be non-empty',
         )
 
-    treatment_cells: list[Mapping[str, object]] = []
-    baseline_cells: list[Mapping[str, object]] = []
+    treatment_rows: list[Mapping[str, object]] = []
+    baseline_rows: list[Mapping[str, object]] = []
     for c in rows:
         arm = c.get(arm_field)
         if arm == treatment_arm:
-            treatment_cells.append(c)
+            treatment_rows.append(c)
         elif arm == baseline_arm:
-            baseline_cells.append(c)
+            baseline_rows.append(c)
 
-    if not treatment_cells:
+    if not treatment_rows:
         raise ValueError(
             f'paired_comparison: no rows with '
             f'{arm_field}={treatment_arm!r}',
         )
-    if not baseline_cells:
+    if not baseline_rows:
         raise ValueError(
             f'paired_comparison: no rows with '
             f'{arm_field}={baseline_arm!r}',
@@ -317,8 +317,8 @@ def paired_comparison(
     if group_by is None:
         gs, n_dropped = _per_group_stats(
             group_value=None,
-            treatment_cells=treatment_cells,
-            baseline_cells=baseline_cells,
+            treatment_rows=treatment_rows,
+            baseline_rows=baseline_rows,
             outcome_path=outcome_path,
             pair_by=pair_by,
         )
@@ -351,19 +351,19 @@ def paired_comparison(
     # Stratified mode.
     treatment_groups: dict[object, list[Mapping[str, object]]] = {}
     baseline_groups: dict[object, list[Mapping[str, object]]] = {}
-    for c in treatment_cells:
+    for c in treatment_rows:
         v = c.get(group_by)
         if v is None:
             raise KeyError(
-                f'paired_comparison: cell missing group_by key '
+                f'paired_comparison: row missing group_by key '
                 f'{group_by!r}',
             )
         treatment_groups.setdefault(v, []).append(c)
-    for c in baseline_cells:
+    for c in baseline_rows:
         v = c.get(group_by)
         if v is None:
             raise KeyError(
-                f'paired_comparison: cell missing group_by key '
+                f'paired_comparison: row missing group_by key '
                 f'{group_by!r}',
             )
         baseline_groups.setdefault(v, []).append(c)
@@ -387,8 +387,8 @@ def paired_comparison(
             continue
         gs, dropped = _per_group_stats(
             group_value=gkey,
-            treatment_cells=t_g,
-            baseline_cells=b_g,
+            treatment_rows=t_g,
+            baseline_rows=b_g,
             outcome_path=outcome_path,
             pair_by=pair_by,
         )

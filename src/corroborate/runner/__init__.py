@@ -7,7 +7,7 @@ Three sub-modules:
   (`corroborate.core.hypothesis.Hypothesis`).
 - `runner.sweep` — `Runner[R]` Protocol, `run_intervention`
   paired-sweep driver, `SweepResult`, `SweepCellResult`,
-  `CellFailure`.
+  `RowFailure`.
 - `runner.registry` — substrate-facing string→handle
   `Registry` (FnClaim + frozen-dataclass auto-discovery).
 
@@ -30,7 +30,7 @@ from corroborate.runner.runner import (
     run,
 )
 from corroborate.runner.sweep import (
-    CellFailure,
+    RowFailure,
     Runner,
     SweepCellResult,
     SweepResult,
@@ -54,7 +54,7 @@ from corroborate.runner.yaml_sweep import (
 
 __all__ = [
     'BridgeCommitmentInput',
-    'CellFailure',
+    'RowFailure',
     'ConfigName',
     'Registry',
     'Runner',

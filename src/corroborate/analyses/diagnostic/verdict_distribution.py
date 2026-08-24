@@ -1,6 +1,6 @@
 """`verdict_distribution_per_env` — per-(env, arm) verdict tally.
 
-Reads a verdict-string column from each cell, groups by env and
+Reads a verdict-string column from each row, groups by env and
 arm, returns counts of `HELD` / `INVARIANT_VIOLATION` /
 `POWER_INSUFFICIENT` / other. Bridges then assert "this env's
 dominant verdict on this column should be X" — the dormancy-
@@ -8,7 +8,7 @@ classifier check at the heart of FINDINGS revision 7.
 
 Distinct from `paired_g` family: that family asks "does the
 treatment shift a continuous outcome relative to baseline"; this
-asks "is the categorical verdict on a (per-cell) invariant
+asks "is the categorical verdict on a (per-row) invariant
 column what we predicted from theory". Both are evidence
 generators for typed Bridge verdicts."""
 from __future__ import annotations
@@ -24,8 +24,8 @@ from corroborate.bridge.analysis import analysis
 
 @dataclass(frozen=True, slots=True)
 class VerdictCounts:
-    """Counts of each verdict value for one (env, arm) cell.
-    `total` is the total cells observed; `dominant` is whichever
+    """Counts of each verdict value for one (env, arm) row.
+    `total` is the total rows observed; `dominant` is whichever
     verdict has strictly the highest count (or `''` on tie /
     empty)."""
     held: int
@@ -79,25 +79,25 @@ def _dominant(
 
 @analysis
 def verdict_distribution_per_env(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     arm_filter: str,
     arm_field: str = 'arm_key',
     verdict_column: str,
 ) -> VerdictDistributionResult:
-    """Per-env tally of `verdict_column` values for cells whose
+    """Per-env tally of `verdict_column` values for rows whose
     `arm_field` equals `arm_filter`. Verdict strings are
     case-folded to lowercase before matching the four canonical
     buckets — the persisted column uses the lowercased
     `Verdict.value` enum strings."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     per_env_counts: dict[str, list[int]] = {}
-    for cell in rows:
-        env_v = cell.get('env_name')
-        arm_v = cell.get(arm_field)
+    for row in rows:
+        env_v = row.get('env_name')
+        arm_v = row.get(arm_field)
         if not isinstance(env_v, str) or arm_v != arm_filter:
             continue
-        verdict_v = cell.get(verdict_column)
+        verdict_v = row.get(verdict_column)
         if not isinstance(verdict_v, str):
             continue
         bucket = per_env_counts.setdefault(env_v, [0, 0, 0, 0])

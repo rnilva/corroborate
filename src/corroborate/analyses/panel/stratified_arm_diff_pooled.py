@@ -2,7 +2,7 @@
 Cohen's d + DerSimonian-Laird random-effects pooling.
 
 The principled cross-env aggregator (per `findings_within_stratum_primitives.md`):
-strata are the unit of inference, not cells. 30 seeds in MountainCar
+strata are the unit of inference, not df. 30 seeds in MountainCar
 aren't 30 independent observations of "DDQN's effect on MountainCar"; they
 are 30 noisy measurements of the same stratum-level effect. Aggregate seeds
 first → one `(arm_mean, arm_sd, n_seeds)` per `(stratum, arm)`. Then:
@@ -16,7 +16,7 @@ first → one `(arm_mean, arm_sd, n_seeds)` per `(stratum, arm)`. Then:
      (existing `random_effects_summary` in `corroborate.stats.effect_size`).
   4. Report pooled estimate + heterogeneity (τ², I²) + per-stratum panel.
 
-This is conceptually distinct from `paired_g`: paired_g pairs cells across
+This is conceptually distinct from `paired_g`: paired_g pairs rows across
 arms by `pair_by` tuple, computes per-pair Δs, treats them as i.i.d.
 samples (pseudo-replication when seeds within a stratum aren't independent
 draws of "the env's effect"). This primitive treats each stratum as ONE
@@ -153,7 +153,7 @@ class StratifiedArmDiffPooledResult:
 
 @analysis
 def stratified_arm_diff_pooled(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -170,7 +170,7 @@ def stratified_arm_diff_pooled(
     """Per-stratum independent-samples Cohen's d, DL-pooled.
 
     Phase 5 migration (2026-05-13): delegates to `stratum_panel`
-    for the cell→panel build, then builds the rich
+    for the row→panel build, then builds the rich
     `StratifiedArmDiffPooledResult` from panel data + applies the
     `min_baseline_predictor` stratum-level filter +
     `random_effects_summary` for the DL pool. Result type and
@@ -189,7 +189,7 @@ def stratified_arm_diff_pooled(
       - `n_seeds_baseline >= min_seeds_per_arm`
       - `baseline_predictor > min_baseline_predictor`
 
-    Per-bridge cell-level filters (env, config exclusions) belong
+    Per-bridge row-level filters (env, config exclusions) belong
     on `Bridge.scope` upstream; this primitive only handles
     stratum-level filters that depend on per-arm aggregates.
 
@@ -210,7 +210,7 @@ def stratified_arm_diff_pooled(
         else (source, scope_predictor)
     )
     panel = stratum_panel.fn(
-        cells,
+        df,
         measurables=measurables_for_panel,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
@@ -225,7 +225,7 @@ def stratified_arm_diff_pooled(
     per_stratum: list[StratumDiff] = []
     for i, stratum_id in enumerate(panel.strata):
         # n_seeds reflects FINITE-VALUE counts for `source`,
-        # matching legacy semantics where cells with NaN source
+        # matching legacy semantics where rows with NaN source
         # were excluded before counting.
         n_t = panel.n_treatment_per_measurable[source][i]
         n_b = panel.n_baseline_per_measurable[source][i]
@@ -274,7 +274,7 @@ def stratified_arm_diff_pooled(
             tau2=float('nan'), I2=float('nan'), Q=float('nan'),
             pi_lo=float('nan'), pi_hi=float('nan'),
             empirical_min_g=float('nan'), empirical_max_g=float('nan'),
-            n_cells=len(obs), assumption_violations=(),
+            n_rows=len(obs), assumption_violations=(),
         )
         pooled_d = float('nan')
         pooled_se = float('nan')

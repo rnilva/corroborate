@@ -31,7 +31,7 @@ import scipy.stats as _stats
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.analyses._cell_value import evaluate_per_burst_source
+from corroborate.analyses._row_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables import Measurable
 
@@ -97,7 +97,7 @@ def _pearson_r_p_slope(
 
 @analysis
 def paired_link_per_burst(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -114,7 +114,7 @@ def paired_link_per_burst(
 ) -> PerBurstLinkResult:
     """Per-(env, burst) paired link r(Δ_target, Δ_predictor) panel.
 
-    For each cell, evaluate `target` and `predictor` to per-burst
+    For each row, evaluate `target` and `predictor` to per-burst
     vectors. For each (env, burst), pair treatment ↔ baseline on
     `pair_by`, compute Δ_target and Δ_predictor across seeds, then
     Pearson r between them.
@@ -136,13 +136,13 @@ def paired_link_per_burst(
 
     `env_name`, when supplied, restricts the analysis to one env.
 
-    `dedupe_strategy` mirrors `paired_g`: when multiple cells
+    `dedupe_strategy` mirrors `paired_g`: when multiple rows
     share the same `(env, arm, pair_by)` tuple,
     - `'raise'` (default) errors loudly so the bridge author
       tightens scope or opts into aggregation;
     - `'mean'` averages the per-burst (target, predictor) vectors
       element-wise within each duplicate bucket."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     if dedupe_strategy not in ('raise', 'mean'):
         raise ValueError(
             f'paired_link_per_burst: unknown dedupe_strategy '
@@ -153,34 +153,34 @@ def paired_link_per_burst(
         distinguishing_columns, format_diff,
     )
 
-    # Carry the cell mapping with each (target, predictor) pair so
+    # Carry the row mapping with each (target, predictor) pair so
     # duplicate detection can introspect distinguishing columns.
     by_env_arm: dict[tuple[str, str], dict[
         tuple[object, ...],
         list[tuple[Mapping[str, object], np.ndarray, np.ndarray]],
     ]] = {}
-    for cell in rows:
-        env = cell.get('env_name')
-        arm = cell.get(arm_field)
+    for row in rows:
+        env = row.get('env_name')
+        arm = row.get(arm_field)
         if not isinstance(env, str) or not isinstance(arm, str):
             continue
         if env_name is not None and env != env_name:
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
-        target_v = evaluate_per_burst_source(target, cell)
-        predictor_v = evaluate_per_burst_source(predictor, cell)
+        target_v = evaluate_per_burst_source(target, row)
+        predictor_v = evaluate_per_burst_source(predictor, row)
         if target_v.size == 0 or predictor_v.size == 0:
             continue
         if target_v.shape[0] != predictor_v.shape[0]:
             continue
         bucket = by_env_arm.setdefault((env, arm), {})
-        key = tuple(cell[k] for k in pair_by)
+        key = tuple(row[k] for k in pair_by)
         existing = bucket.setdefault(key, [])
         if existing and dedupe_strategy == 'raise':
-            prior_cells = [c for c, _, _ in existing]
+            prior_rows = [c for c, _, _ in existing]
             diff = distinguishing_columns(
-                [*prior_cells, cell],
+                [*prior_rows, row],
                 skip=frozenset(pair_by) | {'env_name', arm_field},
             )
             if not diff:
@@ -199,7 +199,7 @@ def paired_link_per_burst(
                 f'each regime is its own stratum, or scope the '
                 f'bridge to a single regime.',
             )
-        existing.append((cell, target_v, predictor_v))
+        existing.append((row, target_v, predictor_v))
 
     # Collapse via element-wise mean. Shape mismatch → not
     # replicates; raise with the regime-mismatch report.
@@ -221,9 +221,9 @@ def paired_link_per_burst(
             if len({t.shape for t in target_arrays}) > 1 or len(
                 {p.shape for p in predictor_arrays},
             ) > 1:
-                cells_with_dup = [c for c, _, _ in items]
+                rows_with_dup = [c for c, _, _ in items]
                 diff = distinguishing_columns(
-                    cells_with_dup,
+                    rows_with_dup,
                     skip=frozenset(pair_by) | {'env_name', arm_field},
                 )
                 raise ValueError(

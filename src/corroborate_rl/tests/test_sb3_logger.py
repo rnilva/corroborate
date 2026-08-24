@@ -120,7 +120,7 @@ def test_load_walks_every_progress_file(tmp_path: Path) -> None:
     )
     panel = load_sb3_logger_runs(tmp_path)
     assert isinstance(panel, Panel)
-    df = panel.cells.sort('id')
+    df = panel.df.sort('id')
     assert df['id'].to_list() == [
         'a-s0/progress.json', 'a-s1/progress.json',
     ]
@@ -141,10 +141,10 @@ def test_glob_declares_the_rows(tmp_path: Path) -> None:
     run = tmp_path / 'run'
     _write_json(run / 'progress.json', [{'train/loss': 0.5}])
     _ = (run / 'progress.csv').write_text('train/loss\n0.9\n')
-    assert load_sb3_logger_runs(tmp_path).cells.height == 1
+    assert load_sb3_logger_runs(tmp_path).df.height == 1
     both = load_sb3_logger_runs(tmp_path, glob='**/progress.*')
-    assert both.cells.height == 2
-    assert sorted(both.cells['id'].to_list()) == [
+    assert both.df.height == 2
+    assert sorted(both.df['id'].to_list()) == [
         'run/progress.csv', 'run/progress.json',
     ]
 
@@ -156,7 +156,7 @@ def test_nested_logs_get_distinct_path_ids(tmp_path: Path) -> None:
     _write_json(root / 'progress.json', [{'train/loss': 0.5}])
     _write_json(root / 'runs' / 'progress.json', [{'train/loss': 0.7}])
     panel = load_sb3_logger_runs(root)
-    assert sorted(panel.cells['id'].to_list()) == [
+    assert sorted(panel.df['id'].to_list()) == [
         'progress.json', 'runs/progress.json',
     ]
 

@@ -2,7 +2,7 @@
 `dynamic_partial_spearman`.
 
 Sibling to `corroborate.analyses.spearman.partial_spearman`. Where
-the static primitive iterates one observation per (cell, burst)
+the static primitive iterates one observation per (row, burst)
 and Fisher-z-pools across strata, this primitive iterates one ρ
 per BURST INDEX and surfaces the trajectory plus a
 `TimeAggregationStatus` enum that flags three pathologies of
@@ -82,7 +82,7 @@ class DynamicMediationResult:
     introspection that's implementation-specific).
 
     `rho_marginal[b]` and `rho_partial[b]` are NaN at bursts where
-    fewer than `min_n_per_burst` cells contributed — consumers
+    fewer than `min_n_per_burst` rows contributed — consumers
     must filter NaN when reading the trajectory.
 
     Both `rho_marginal_pooled` AND `rho_partial_pooled` (the
@@ -114,9 +114,9 @@ class DynamicMediationResult:
     (the default, fast path) and populated when `n_bootstrap > 0`.
     DL's PI bounds are *parametric* — they assume per-burst
     independence, which trajectory data violates (bursts within
-    one cell share network state, dynamics, replay buffer). The
-    cluster bootstrap resamples WHOLE CELLS with replacement and
-    is therefore assumption-free under any within-cell
+    one row share network state, dynamics, replay buffer). The
+    cluster bootstrap resamples WHOLE ROWS with replacement and
+    is therefore assumption-free under any within-row
     autocorrelation structure. For publication-grade CIs reach
     for `n_bootstrap=1000`; the empirical 2.5% / 97.5% percentile
     range is the 95% CI."""
@@ -162,7 +162,7 @@ def _marginal_spearman(
 
 @analysis
 def dynamic_partial_spearman(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     arm_field: str = 'arm_key',
     mediator_per_burst: (
@@ -180,7 +180,7 @@ def dynamic_partial_spearman(
     """Trajectory-resolved partial Spearman mediation per stratum.
 
     For each stratum (tuple of values at `stratify_by` columns):
-    align the per-burst arrays across cells, compute per-burst
+    align the per-burst arrays across rows, compute per-burst
     marginal Spearman `ρ(arm, outcome_per_burst[b])` and partial
     Spearman `ρ(arm, outcome | mediator)[b]` via the closed-form
     first-order partial. Pool across bursts with Fisher-z, weighted
@@ -189,7 +189,7 @@ def dynamic_partial_spearman(
     partial df). Compute the `TimeAggregationStatus` from the
     trajectory.
 
-    `min_n_per_burst` floors each burst's per-cell count; bursts
+    `min_n_per_burst` floors each burst's per-row count; bursts
     below the floor contribute NaN to the trajectory and are
     excluded from the pool. `weak_time_varying_ratio` is the
     `max(|ρ|)/min(|ρ|)` threshold across non-noise-level valid
@@ -200,9 +200,9 @@ def dynamic_partial_spearman(
     drive the WEAK ratio.
 
     `mediator_per_burst` and `outcome_per_burst` may be column
-    names (str) for cells that materialise the per-burst array as
+    names (str) for rows that materialise the per-burst array as
     a `List(Float64)` column, OR `Measurable[..., NDArray]`
-    instances for cells where the array is computed lazily from
+    instances for rows where the array is computed lazily from
     raw trace columns. The Measurable path uses
     `evaluate_per_burst_source`'s cache-first dispatch (read the
     cached column if present, else evaluate against the raw
@@ -221,7 +221,7 @@ def dynamic_partial_spearman(
     reasons (the two differ by ~1e-2 in tie-handling drift).
 
     Returns a `Mapping[Stratum, DynamicMediationResult]`. Strata
-    where no cell contributes (missing arm tag, malformed per-burst
+    where no row contributes (missing arm tag, malformed per-burst
     columns, ...) are absent from the result.
 
     Both `rho_marginal_pooled` AND `rho_partial_pooled` are NaN
@@ -232,24 +232,24 @@ def dynamic_partial_spearman(
     The input is a `pl.DataFrame` (the canonical corpus shape after
     cache materialisation). Per-burst columns are read as
     `List(Float64)`; scalar columns named at `mediator_per_burst` /
-    `outcome_per_burst` cause every cell to be dropped (the
+    `outcome_per_burst` cause every row to be dropped (the
     `_as_float_list` shape contract returns None for non-list
     inputs).
 
     Per-burst alignment is "ragged tail": `n_bursts` is the
     longest trajectory in the stratum, and at each burst index
-    only cells whose trajectory reaches that index contribute.
-    Shorter cells drop off as their trajectory ends, so
+    only rows whose trajectory reaches that index contribute.
+    Shorter rows drop off as their trajectory ends, so
     `n_per_burst[b]` is non-increasing in `b` (subject to NaN
     handling). This is the less-information-losing semantics — vs
-    truncating ALL cells to the shortest stratum length, which
-    discards every late-training burst a single short cell can
+    truncating ALL rows to the shortest stratum length, which
+    discards every late-training burst a single short row can
     cause.
 
     `n_bootstrap` (default 0) enables a cluster-bootstrap CI on
-    the DL pool. Cells are the resampling unit (each cell = one
+    the DL pool. Rows are the resampling unit (each row = one
     training trajectory = one independent unit). For each of
-    `n_bootstrap` iterations, resample `n_cells` with replacement
+    `n_bootstrap` iterations, resample `n_rows` with replacement
     and recompute the DL-pooled ρ from the resampled per-burst
     trajectories; the empirical [α/2, 1 − α/2] percentile range of
     the bootstrap distribution becomes `bootstrap_marginal` /
@@ -282,19 +282,19 @@ def dynamic_partial_spearman(
         mediators_tuple = (mediator_per_burst,)
     k = len(mediators_tuple)
 
-    # Group cells by stratum. Each entry is the list of cell-dicts
+    # Group rows by stratum. Each entry is the list of row-dicts
     # contributing to that stratum.
     by_stratum: dict[Stratum, list[Mapping[str, object]]] = {}
-    for cell in _to_dicts(cells):
-        key = stratum_key(cell, stratify_by)
+    for row in _to_dicts(df):
+        key = stratum_key(row, stratify_by)
         if key is None:
             continue
-        by_stratum.setdefault(key, []).append(cell)
+        by_stratum.setdefault(key, []).append(row)
 
     out: dict[Stratum, DynamicMediationResult] = {}
-    for stratum, stratum_cells in by_stratum.items():
+    for stratum, stratum_rows in by_stratum.items():
         result = _compute_one_stratum(
-            stratum_cells,
+            stratum_rows,
             arm_field=arm_field,
             mediators_per_burst=mediators_tuple,
             outcome_per_burst=outcome_per_burst,
@@ -312,7 +312,7 @@ def dynamic_partial_spearman(
 
 
 def _compute_one_stratum(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     arm_field: str,
     mediators_per_burst: tuple[ColumnOrMeasurable, ...],
@@ -325,7 +325,7 @@ def _compute_one_stratum(
     bootstrap_alpha: float,
     k: int,
 ) -> DynamicMediationResult | None:
-    """Per-stratum core. Returns None when no per-cell row has
+    """Per-stratum core. Returns None when no per-row row has
     valid arm + per-burst columns at all.
 
     `k = len(mediators_per_burst)` parameterises the dispatch:
@@ -338,7 +338,7 @@ def _compute_one_stratum(
     Both paths feed into the same DL pool / cluster bootstrap with
     `df_offset = 3 + k`."""
     collected = collect_arm_and_per_burst_multi(
-        cells,
+        rows,
         arm_field=arm_field,
         mediators_per_burst=mediators_per_burst,
         outcome_per_burst=outcome_per_burst,
@@ -352,14 +352,14 @@ def _compute_one_stratum(
         # stratum gives ρ=NaN at every burst. Skip.
         return None
 
-    # Ragged-tail alignment: take the LONGEST per-cell trajectory
-    # in the stratum as the burst-index axis. Cells with shorter
+    # Ragged-tail alignment: take the LONGEST per-row trajectory
+    # in the stratum as the burst-index axis. Rows with shorter
     # trajectories contribute only their prefix — they're absent
     # from late-burst observations and the per-burst NaN filter
     # naturally excludes them. This preserves late-burst signal
-    # from longer cells (truncate-to-min would discard every burst
-    # past the shortest cell's tail, which is information loss in
-    # the common case of one short cell in a stratum of long ones).
+    # from longer rows (truncate-to-min would discard every burst
+    # past the shortest row's tail, which is information loss in
+    # the common case of one short row in a stratum of long ones).
     n_bursts = n_bursts_multi(mediator_lists, outcome_lists)
     if n_bursts == 0:
         return None
@@ -446,12 +446,12 @@ def _compute_one_stratum(
     bootstrap_part: ClusterBootstrapInterval | None = None
     if n_bootstrap > 0:
         if k == 1:
-            # Project the per-cell list-of-1 mediator back to the
+            # Project the per-row list-of-1 mediator back to the
             # depth-1 shape so the closed-form bootstrap kernel sees
             # the same (arm, single-mediator, outcome) buffer it did
             # before the multi-mediator refactor.
             flat_med: list[Sequence[float]] = [
-                cell_meds[0] for cell_meds in mediator_lists
+                row_meds[0] for row_meds in mediator_lists
             ]
             bootstrap_marg = cluster_bootstrap_pool(
                 arm_codes=arm_codes,

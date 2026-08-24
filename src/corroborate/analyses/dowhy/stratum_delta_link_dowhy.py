@@ -42,7 +42,7 @@ from corroborate.analyses.dowhy import (
     BackdoorResult,
     RefutationResult,
 )
-from corroborate.analyses._cell_value import evaluate_per_burst_source
+from corroborate.analyses._row_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables import Measurable
 
@@ -62,7 +62,7 @@ class StratumDeltaLinkDowhyResult:
 
 
 def _build_stratum_panel(
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -90,17 +90,17 @@ def _build_stratum_panel(
         list[tuple[npt.NDArray[np.floating], npt.NDArray[np.floating]]],
     ] = {}
     env_filter_set = set(env_filter) if env_filter else None
-    for cell in cells:
-        env = cell.get('env_name')
-        arm = cell.get(arm_field)
+    for row in rows:
+        env = row.get('env_name')
+        arm = row.get(arm_field)
         if not isinstance(env, str) or not isinstance(arm, str):
             continue
         if env_filter_set is not None and env not in env_filter_set:
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
-        target_v = evaluate_per_burst_source(link_target, cell)
-        predictor_v = evaluate_per_burst_source(link_predictor, cell)
+        target_v = evaluate_per_burst_source(link_target, row)
+        predictor_v = evaluate_per_burst_source(link_predictor, row)
         if target_v.size == 0 or predictor_v.size == 0:
             continue
         if target_v.shape[0] != predictor_v.shape[0]:
@@ -113,29 +113,29 @@ def _build_stratum_panel(
     bursts_seen: set[int] = set()
     envs = sorted({e for (e, _) in by_env_arm})
     for env in envs:
-        t_cells = by_env_arm.get((env, treatment_arm), [])
-        b_cells = by_env_arm.get((env, baseline_arm), [])
-        if not t_cells or not b_cells:
+        t_rows = by_env_arm.get((env, treatment_arm), [])
+        b_rows = by_env_arm.get((env, baseline_arm), [])
+        if not t_rows or not b_rows:
             continue
         # Per (env, burst): pool DDQN seeds, pool vanilla seeds,
         # independent-samples Δ. burst index must exist in both arms.
-        t_min_bursts = min(c[0].shape[0] for c in t_cells)
-        b_min_bursts = min(c[0].shape[0] for c in b_cells)
+        t_min_bursts = min(c[0].shape[0] for c in t_rows)
+        b_min_bursts = min(c[0].shape[0] for c in b_rows)
         common_bursts = min(t_min_bursts, b_min_bursts)
         if common_bursts == 0:
             continue
         for b in range(common_bursts):
             t_target_b = np.array(
-                [float(c[0][b]) for c in t_cells], dtype=np.float64,
+                [float(c[0][b]) for c in t_rows], dtype=np.float64,
             )
             t_pred_b = np.array(
-                [float(c[1][b]) for c in t_cells], dtype=np.float64,
+                [float(c[1][b]) for c in t_rows], dtype=np.float64,
             )
             b_target_b = np.array(
-                [float(c[0][b]) for c in b_cells], dtype=np.float64,
+                [float(c[0][b]) for c in b_rows], dtype=np.float64,
             )
             b_pred_b = np.array(
-                [float(c[1][b]) for c in b_cells], dtype=np.float64,
+                [float(c[1][b]) for c in b_rows], dtype=np.float64,
             )
             # NaN-aware means; require ≥1 finite per arm
             mean_t_target = float(np.nanmean(t_target_b))
@@ -166,20 +166,20 @@ def _build_stratum_panel(
 
     bursts_sorted = sorted(bursts_seen)
     burst_dummy_cols = [f'__burst__{b}' for b in bursts_sorted[1:]]
-    rows: list[Mapping[str, object]] = []
+    dummy_rows: list[Mapping[str, object]] = []
     for r in stratum_rows:
         row = dict(r)
         b = r['burst_index']
         for col in burst_dummy_cols:
             row[col] = 1.0 if col == f'__burst__{b}' else 0.0
-        rows.append(row)
+        dummy_rows.append(row)
 
     dag: list[tuple[str, str]] = []
     for c in burst_dummy_cols:
         dag.append((c, treatment_col))
         dag.append((c, outcome_col))
     dag.append((treatment_col, outcome_col))
-    return rows, dag, treatment_col, outcome_col
+    return dummy_rows, dag, treatment_col, outcome_col
 
 
 def _nan_backdoor(
@@ -214,7 +214,7 @@ def _nan_refutation(
 
 @analysis
 def stratum_delta_link_dowhy(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -241,10 +241,10 @@ def stratum_delta_link_dowhy(
 
     Empty panel (no env survives filter, no paired strata, or all
     strata fail mech filter) yields a NaN-everywhere result."""
-    rows = to_dicts(cells)
-    cells_list = list(rows)
+    rows = to_dicts(df)
+    rows_list = list(rows)
     rows, dag, treatment_col, outcome_col = _build_stratum_panel(
-        cells_list,
+        rows_list,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         link_predictor=link_predictor,

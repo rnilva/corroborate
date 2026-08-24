@@ -6,7 +6,7 @@ DoWhy backdoor, DerSimonian-Laird pool).
 The two-layer architecture this primitive enables:
 
   Layer 1 (this primitive):
-    cells → StratumEffectPanel
+    rows → StratumEffectPanel
     For each stratum: Δ_X = mean(X|T, stratum) − mean(X|B, stratum)
     No per-pair Δs.
 
@@ -24,7 +24,7 @@ The two-layer architecture this primitive enables:
   R²-framing over rank-correlation.)
 
 **Why this design.** Per-pair Δs (`paired_g`, `paired_link_*`)
-assume vanilla and DDQN cells share a unit through pairing.
+assume vanilla and DDQN rows share a unit through pairing.
 In RL, the two arms
 diverge from step 1: same seed only matches RNG state at
 initialization. The "paired" Δ measures init-distribution-
@@ -41,7 +41,7 @@ The framework stays implementation-neutral here: this primitive
 knows nothing about RL, envs, or any implementation-specific
 measurable. The implementation's bridge declares which measurables
 to populate and what stratify_by to use. Same primitive
-serves any implementation whose cells admit (treatment, baseline,
+serves any implementation whose rows admit (treatment, baseline,
 strata) decomposition.
 """
 from __future__ import annotations
@@ -57,7 +57,7 @@ import numpy as np
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.analyses._cell_value import resolve_value
+from corroborate.analyses._row_value import resolve_value
 from corroborate.bridge.analysis import analysis
 
 
@@ -73,7 +73,7 @@ class StratumEffectPanel:
     `measurables` — tuple of column names whose Δs were computed.
     `deltas` — `{measurable_name: per-stratum Δ tuple}`. Each
     Δ_X[s] = `mean(X | T, stratum s) − mean(X | B, stratum s)`.
-    `n_treatment` / `n_baseline` — per-stratum cell counts for
+    `n_treatment` / `n_baseline` — per-stratum row counts for
     each arm (downstream consumers use them for inverse-variance
     weighting or SE estimation).
     """
@@ -94,7 +94,7 @@ class StratumEffectPanel:
 
 @analysis
 def stratum_effect_panel(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -108,7 +108,7 @@ def stratum_effect_panel(
     measurable. Returns the panel for downstream consumption.
 
     A stratum is included iff BOTH arms have ≥ `min_seeds_per_arm`
-    cells in it. Strata where either arm is sparse get dropped
+    rows in it. Strata where either arm is sparse get dropped
     (their Δ would be a noisy point estimate; downstream analyses
     should see a clean panel).
 
@@ -131,7 +131,7 @@ def stratum_effect_panel(
     is plausibly bimodal — together they characterize the
     population mean and the typical case.
     """
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     # Group by (arm, stratum).
     per_arm_stratum: dict[
         tuple[str, tuple[object, ...]], list[Mapping[str, object]],
@@ -150,9 +150,9 @@ def stratum_effect_panel(
     # Find strata with adequate seeds in both arms.
     valid_strata: list[tuple[object, ...]] = []
     for sk in sorted(all_strata, key=lambda s: tuple(repr(v) for v in s)):
-        t_cells = per_arm_stratum.get((treatment_arm, sk), [])
-        b_cells = per_arm_stratum.get((baseline_arm, sk), [])
-        if len(t_cells) >= min_seeds_per_arm and len(b_cells) >= min_seeds_per_arm:
+        t_rows = per_arm_stratum.get((treatment_arm, sk), [])
+        b_rows = per_arm_stratum.get((baseline_arm, sk), [])
+        if len(t_rows) >= min_seeds_per_arm and len(b_rows) >= min_seeds_per_arm:
             valid_strata.append(sk)
 
     # Per stratum, per measurable: compute mean(T) - mean(B).
@@ -160,13 +160,13 @@ def stratum_effect_panel(
     n_t_list: list[int] = []
     n_b_list: list[int] = []
     for sk in valid_strata:
-        t_cells = per_arm_stratum[(treatment_arm, sk)]
-        b_cells = per_arm_stratum[(baseline_arm, sk)]
-        n_t_list.append(len(t_cells))
-        n_b_list.append(len(b_cells))
+        t_rows = per_arm_stratum[(treatment_arm, sk)]
+        b_rows = per_arm_stratum[(baseline_arm, sk)]
+        n_t_list.append(len(t_rows))
+        n_b_list.append(len(b_rows))
         for m in measurables:
-            t_vals = [resolve_value(c, m) for c in t_cells]
-            b_vals = [resolve_value(c, m) for c in b_cells]
+            t_vals = [resolve_value(c, m) for c in t_rows]
+            b_vals = [resolve_value(c, m) for c in b_rows]
             t_vals_finite = [v for v in t_vals if not math.isnan(v)]
             b_vals_finite = [v for v in b_vals if not math.isnan(v)]
             if len(t_vals_finite) >= 1 and len(b_vals_finite) >= 1:

@@ -1,7 +1,7 @@
 """End-to-end smoke for the claim-bridge + analysis pattern.
 
-Synthetic corpus where the truth is known: treatment cells have
-outcome ≈ 1.0, baseline cells have outcome ≈ 0.0, paired by
+Synthetic corpus where the truth is known: treatment rows have
+outcome ≈ 1.0, baseline rows have outcome ≈ 0.0, paired by
 seed across 30 seeds. A bridge that asserts "treatment moves
 outcome by g > 0.3 with p < 0.05" should HELD; one with a
 much higher threshold should NO_EFFECT.
@@ -10,7 +10,7 @@ The smoke proves:
 - The `@analysis` decorator + registry round-trip.
 - The `@claim_bridge` decorator factory accepts bridge metadata as
   kwargs and produces a typed Bridge.
-- `evaluate(bridge, cells)` resolves each fixture (parameter
+- `evaluate(bridge, rows)` resolves each fixture (parameter
   without a default) by name against the analysis registry,
   parameterises from the bridge's structural fields + params
   bag, runs, injects, and routes through the bridge body.
@@ -33,7 +33,7 @@ from corroborate.bridge.bridge import (
 )
 from corroborate.core.claim import claim
 from corroborate.core.intervention import DoEffect, Intervention
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 from corroborate.bridge.verdict import Verdict
 
 
@@ -63,7 +63,7 @@ INTERVENTION = DoEffect(arms=(_BASELINE_ARMS, _TREATMENT_ARMS))
 _BASELINE_KEY, _TREATMENT_KEY = INTERVENTION.arm_keys()
 
 
-def _synthetic_cells(
+def _synthetic_rows(
     *,
     n_seeds: int = 30,
     treatment_mean: float = 1.0,
@@ -95,15 +95,15 @@ def _synthetic_cells(
 
 def test_paired_g_analysis_runs_directly() -> None:
     """The analysis is callable on its own — no bridge needed.
-    Cell-level filtering lives upstream on `Bridge.scope`;
-    when calling paired_g.fn directly the test pre-filters cells."""
+    Row-level filtering lives upstream on `Bridge.scope`;
+    when calling paired_g.fn directly the test pre-filters rows."""
     from corroborate.analyses.paired.paired_g import paired_g
-    cells = [
-        c for c in _synthetic_cells()
+    rows = [
+        c for c in _synthetic_rows()
         if c.get('env_name') == 'TestEnv'
     ]
     result = paired_g.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm=_TREATMENT_KEY,
         baseline_arm=_BASELINE_KEY,
         pair_by=('seed',),
@@ -145,8 +145,8 @@ def treatment_helps_outcome(
 def test_bridge_held_under_explicit_threshold() -> None:
     """Authoring path: the bridge is declared via decorator args.
     Synthetic corpus with strong effect → HELD."""
-    cells = _synthetic_cells()
-    out = evaluate(treatment_helps_outcome, cells)
+    rows = _synthetic_rows()
+    out = evaluate(treatment_helps_outcome, rows)
     assert out.verdict == Verdict.HELD
     assert out.bridge_name == 'treatment_helps_outcome'
     pg = cast(PairedGResult, out.analysis_results['paired_g'])
@@ -156,15 +156,15 @@ def test_bridge_held_under_explicit_threshold() -> None:
 
 def test_bridge_no_effect_when_signal_absent() -> None:
     """Treatment ≈ baseline → NO_EFFECT."""
-    cells = _synthetic_cells(treatment_mean=0.0, baseline_mean=0.0)
-    out = evaluate(treatment_helps_outcome, cells)
+    rows = _synthetic_rows(treatment_mean=0.0, baseline_mean=0.0)
+    out = evaluate(treatment_helps_outcome, rows)
     assert out.verdict == Verdict.NO_EFFECT
 
 
-def _contrast_cells(
+def _contrast_rows(
     seeds: range = range(12),
 ) -> list[dict[str, object]]:
-    """External-style cells: parameter value + outcome, no arm
+    """External-style rows: parameter value + outcome, no arm
     vocabulary of any kind."""
     rows: list[dict[str, object]] = []
     for seed in seeds:
@@ -211,16 +211,16 @@ def test_value_effect_uses_declared_values_and_symbolic_arms() -> None:
     evaluates, but the record shows what went unchecked: knob-ness
     of the declared source (WARN) and registered-configuration
     balance (INFO). With the registry, both clear."""
-    cells = _contrast_cells()
-    out = evaluate(higher_gamma_value_helps, cells)
+    rows = _contrast_rows()
+    out = evaluate(higher_gamma_value_helps, rows)
     assert out.verdict is Verdict.HELD
     result = cast(PairedGResult, out.analysis_results['paired_g'])
     assert result.measurable == 'return_mean'
     assert result.baseline_arm == 'baseline'
     assert result.treatment_arm == 'treatment'
     assert result.n_pairs == 12
-    # The caller's cells are not mutated by the label derivation.
-    assert all('contrast_arm' not in c for c in cells)
+    # The caller's rows are not mutated by the label derivation.
+    assert all('contrast_arm' not in c for c in rows)
     knobness = next(
         warning for warning in out.warnings
         if warning.gate_name == 'exogenous_source'
@@ -234,16 +234,16 @@ def test_value_effect_uses_declared_values_and_symbolic_arms() -> None:
     assert balance.level.value == 'info'
     assert 'unassessed' in balance.message
 
-    registered = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    registered = evaluate(higher_gamma_value_helps, rows, leaves=_LEAVES)
     assert registered.verdict is Verdict.HELD
     assert registered.warnings == ()
 
 
 def test_value_effect_preserves_declared_categorical_orientation() -> None:
     """Orientation is declared, not lexicographically inferred."""
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for seed in range(6):
-        cells.extend((
+        rows.extend((
             {'id': f'adam-{seed}', 'seed': seed, 'optimizer': 'adam',
              'return_mean': float(seed)},
             {'id': f'sgd-{seed}', 'seed': seed, 'optimizer': 'sgd',
@@ -263,7 +263,7 @@ def test_value_effect_preserves_declared_categorical_orientation() -> None:
     def _adam_is_lower(paired_g: PairedGResult) -> Verdict:
         return Verdict.HELD if paired_g.mean_diff < 0 else Verdict.NO_EFFECT
 
-    out = evaluate(_adam_is_lower, cells)
+    out = evaluate(_adam_is_lower, rows)
     assert out.verdict is Verdict.HELD
     result = cast(PairedGResult, out.analysis_results['paired_g'])
     assert result.baseline_arm == 'baseline'
@@ -277,9 +277,9 @@ def test_joint_value_effect_owns_its_lockstep_partner() -> None:
     singly, the same registered partner is a co-varied knob and
     the contrast blocks; the fix the message names is widening the
     declaration."""
-    cells: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for seed in range(6):
-        cells.extend((
+        rows.extend((
             {'id': f'lo-{seed}', 'seed': seed, 'gamma': 0.8,
              'n_step': 1, 'return_mean': float(seed)},
             {'id': f'hi-{seed}', 'seed': seed, 'gamma': 0.99,
@@ -301,14 +301,14 @@ def test_joint_value_effect_owns_its_lockstep_partner() -> None:
     def _joint_helps(paired_g: PairedGResult) -> Verdict:
         return Verdict.HELD if paired_g.mean_diff > 0 else Verdict.NO_EFFECT
 
-    joint = evaluate(_joint_helps, cells, leaves=registry)
+    joint = evaluate(_joint_helps, rows, leaves=registry)
     assert joint.verdict is Verdict.HELD
     assert joint.blocked_by is None
     assert joint.warnings == ()
     result = cast(PairedGResult, joint.analysis_results['paired_g'])
     assert result.n_pairs == 6
 
-    single = evaluate(higher_gamma_value_helps, cells, leaves=registry)
+    single = evaluate(higher_gamma_value_helps, rows, leaves=registry)
     assert single.verdict is Verdict.INADMISSIBLE
     assert single.blocked_by is not None
     assert single.blocked_by.gate_name == 'contrast_isolation'
@@ -331,13 +331,13 @@ def test_value_effect_does_not_format_float_arm_identity() -> None:
     def _nearby_values(paired_g: PairedGResult) -> Verdict:
         return Verdict.HELD if paired_g.mean_diff > 0 else Verdict.NO_EFFECT
 
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for seed in range(4):
-        cells.extend((
+        rows.extend((
             {'seed': seed, 'gamma': 0.8000001, 'return_mean': 0.0},
             {'seed': seed, 'gamma': 0.8000002, 'return_mean': 1.0},
         ))
-    out = evaluate(_nearby_values, cells, leaves=frozenset({'gamma'}))
+    out = evaluate(_nearby_values, rows, leaves=frozenset({'gamma'}))
     result = cast(PairedGResult, out.analysis_results['paired_g'])
     assert out.verdict is Verdict.HELD
     assert result.n_pairs == 4
@@ -385,7 +385,7 @@ def test_native_claim_reasserts_the_endogenous_source_doctrine() -> None:
 
     out = evaluate(
         _native_leaf,
-        _contrast_cells(),
+        _contrast_rows(),
         claim=_external_program,
     )
     assert out.verdict is Verdict.INADMISSIBLE
@@ -405,7 +405,7 @@ def test_bare_interventional_without_any_registry_blocks() -> None:
         return Verdict.HELD
 
     out = evaluate(
-        _undeclared_effect, _contrast_cells(), leaves=_LEAVES,
+        _undeclared_effect, _contrast_rows(), leaves=_LEAVES,
     )
     assert out.verdict is Verdict.INADMISSIBLE
     assert out.blocked_by is not None
@@ -429,7 +429,7 @@ def test_measured_source_cannot_claim_interventional() -> None:
     def _measured_source(paired_g: PairedGResult) -> Verdict:
         return Verdict.HELD
 
-    out = evaluate(_measured_source, _contrast_cells(), leaves=_LEAVES)
+    out = evaluate(_measured_source, _contrast_rows(), leaves=_LEAVES)
     assert out.verdict is Verdict.INADMISSIBLE
     assert out.blocked_by is not None
     assert out.blocked_by.gate_name == 'exogenous_source'
@@ -453,7 +453,7 @@ def test_associational_tier_keeps_the_effective_n_guard() -> None:
     def _correlational_gamma(paired_g: PairedGResult) -> Verdict:
         return Verdict.HELD
 
-    out = evaluate(_correlational_gamma, _contrast_cells(), leaves=_LEAVES)
+    out = evaluate(_correlational_gamma, _contrast_rows(), leaves=_LEAVES)
     assert out.verdict is Verdict.INADMISSIBLE
     assert out.blocked_by is not None
     assert out.blocked_by.gate_name == 'distinct_units'
@@ -464,7 +464,7 @@ def test_contrast_present_blocks_a_record_without_the_contrast() -> None:
     in this record — INADMISSIBLE, not a raise: the record can
     grow the missing condition later."""
     only_baseline = [
-        c for c in _contrast_cells() if c['gamma'] == 0.8
+        c for c in _contrast_rows() if c['gamma'] == 0.8
     ]
     out = evaluate(higher_gamma_value_helps, only_baseline)
     assert out.verdict is Verdict.INADMISSIBLE
@@ -474,11 +474,11 @@ def test_contrast_present_blocks_a_record_without_the_contrast() -> None:
 
 
 def test_value_effect_reports_an_absent_source_column() -> None:
-    cells = [
-        {key: value for key, value in cell.items() if key != 'gamma'}
-        for cell in _contrast_cells()
+    rows = [
+        {key: value for key, value in row.items() if key != 'gamma'}
+        for row in _contrast_rows()
     ]
-    out = evaluate(higher_gamma_value_helps, cells)
+    out = evaluate(higher_gamma_value_helps, rows)
     assert out.verdict is Verdict.INADMISSIBLE
     assert out.blocked_by is not None
     assert out.blocked_by.gate_name == 'resolved_source'
@@ -486,10 +486,10 @@ def test_value_effect_reports_an_absent_source_column() -> None:
 
 
 def test_value_contrast_rejects_reserved_column_collision() -> None:
-    cells = _contrast_cells()
-    cells[0]['contrast_arm'] = 'stale-label'
+    rows = _contrast_rows()
+    rows[0]['contrast_arm'] = 'stale-label'
     with pytest.raises(ValueError, match='reserved column'):
-        _ = evaluate(higher_gamma_value_helps, cells)
+        _ = evaluate(higher_gamma_value_helps, rows)
 
 
 def test_value_contrast_pools_batches_of_the_same_study() -> None:
@@ -497,7 +497,7 @@ def test_value_contrast_pools_batches_of_the_same_study() -> None:
     earlier one and the fixed declaration selects both batches.
     The verdict recomputes over all matching evidence; unrelated
     values may accumulate in the same record."""
-    pooled = _contrast_cells(range(12)) + _contrast_cells(range(12, 20))
+    pooled = _contrast_rows(range(12)) + _contrast_rows(range(12, 20))
     # A third accumulated arm belongs to a different estimand and is
     # ignored without invalidating this declaration.
     pooled.extend({
@@ -508,23 +508,23 @@ def test_value_contrast_pools_batches_of_the_same_study() -> None:
     } for seed in range(20))
     out = evaluate(higher_gamma_value_helps, pooled)
     assert out.verdict is Verdict.HELD
-    assert out.n_cells_in_scope == 40
+    assert out.n_rows_in_scope == 40
     result = cast(PairedGResult, out.analysis_results['paired_g'])
     assert result.n_pairs == 20
 
 
 def test_value_effect_ignores_heterogeneous_rows_without_source() -> None:
     """A live heterogeneous stream may contain unrelated row shapes."""
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {'id': 'unrelated', 'other_measurement': 1.0},
-        *_contrast_cells(range(3)),
+        *_contrast_rows(range(3)),
     ]
 
-    out = evaluate(higher_gamma_value_helps, cells)
+    out = evaluate(higher_gamma_value_helps, rows)
 
     assert out.verdict is Verdict.HELD
     assert out.blocked_by is None
-    assert out.n_cells_in_scope == 6
+    assert out.n_rows_in_scope == 6
     result = cast(PairedGResult, out.analysis_results['paired_g'])
     assert result.n_pairs == 3
 
@@ -532,15 +532,15 @@ def test_value_effect_ignores_heterogeneous_rows_without_source() -> None:
 def test_contrast_isolation_blocks_a_co_varied_leaf() -> None:
     """A leaf may vary globally yet still differ inside every pair;
     isolation is checked per pairing unit rather than per arm."""
-    cells = _contrast_cells()
-    for cell in cells:
-        seed = cast(int, cell['seed'])
-        cell['exploration_schedule'] = seed + (
-            100 if cell['gamma'] == 0.99 else 0
+    rows = _contrast_rows()
+    for row in rows:
+        seed = cast(int, row['seed'])
+        row['exploration_schedule'] = seed + (
+            100 if row['gamma'] == 0.99 else 0
         )
     out = evaluate(
         higher_gamma_value_helps,
-        cells,
+        rows,
         leaves=frozenset({'gamma', 'exploration_schedule'}),
     )
     assert out.verdict is Verdict.INADMISSIBLE
@@ -550,12 +550,12 @@ def test_contrast_isolation_blocks_a_co_varied_leaf() -> None:
 
 
 def test_missing_leaf_does_not_hide_observed_pair_imbalance() -> None:
-    cells = _contrast_cells()
-    for cell in cells:
-        cell['schedule'] = 'high' if cell['gamma'] == 0.99 else 'low'
+    rows = _contrast_rows()
+    for row in rows:
+        row['schedule'] = 'high' if row['gamma'] == 0.99 else 'low'
     out = evaluate(
         higher_gamma_value_helps,
-        cells,
+        rows,
         leaves=frozenset({'gamma', 'schedule', 'absent_setting'}),
     )
     assert out.verdict is Verdict.INADMISSIBLE
@@ -569,10 +569,10 @@ def test_contrast_isolation_warns_on_an_unregistered_rider() -> None:
     contrast may be a producer label (harmless) or an unlogged
     knob (a confound) — only the author can say, so it lands on
     the record as a WARN, never a block and never silence."""
-    cells = _contrast_cells()
-    for cell in cells:
-        cell['physical_arm'] = 'exp' if cell['gamma'] == 0.99 else 'ctl'
-    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    rows = _contrast_rows()
+    for row in rows:
+        row['physical_arm'] = 'exp' if row['gamma'] == 0.99 else 'ctl'
+    out = evaluate(higher_gamma_value_helps, rows, leaves=_LEAVES)
     assert out.verdict is Verdict.HELD
     rider = next(
         w for w in out.warnings if w.gate_name == 'contrast_isolation'
@@ -589,12 +589,12 @@ def test_contrast_isolation_sees_a_per_dump_logged_rider() -> None:
     different lengths read as one value and the rider scan sees
     the knob move with the contrast; a genuine trajectory varies
     within each arm and drops out like any scalar outcome."""
-    cells = _contrast_cells()
-    for i, cell in enumerate(cells):
-        knob = 5e-4 if cell['gamma'] == 0.99 else 1e-3
-        cell['train/learning_rate'] = [knob] * (3 + i)
-        cell['train/loss'] = [float(i), float(i) + 0.5]
-    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    rows = _contrast_rows()
+    for i, row in enumerate(rows):
+        knob = 5e-4 if row['gamma'] == 0.99 else 1e-3
+        row['train/learning_rate'] = [knob] * (3 + i)
+        row['train/loss'] = [float(i), float(i) + 0.5]
+    out = evaluate(higher_gamma_value_helps, rows, leaves=_LEAVES)
     rider = next(
         w for w in out.warnings if w.gate_name == 'contrast_isolation'
     )
@@ -607,13 +607,13 @@ def test_registered_record_array_reorder_still_blocks() -> None:
     multiplicity intact — so a reordered schedule on a REGISTERED
     leaf is still a co-varied knob, not two spellings of one
     value set."""
-    cells = _contrast_cells()
-    for cell in cells:
-        cell['lr_schedule'] = (
-            [1e-3, 5e-4] if cell['gamma'] == 0.99 else [5e-4, 1e-3]
+    rows = _contrast_rows()
+    for row in rows:
+        row['lr_schedule'] = (
+            [1e-3, 5e-4] if row['gamma'] == 0.99 else [5e-4, 1e-3]
         )
     out = evaluate(
-        higher_gamma_value_helps, cells,
+        higher_gamma_value_helps, rows,
         leaves=frozenset({'gamma', 'lr_schedule'}),
     )
     assert out.verdict is Verdict.INADMISSIBLE
@@ -626,24 +626,24 @@ def test_all_missing_record_array_reads_as_absent() -> None:
     """An all-NaN record array carries zero data; it must compare
     equal to a column that is absent entirely — not fire a rider
     warning naming a knob that never had a value."""
-    cells = _contrast_cells()
-    for cell in cells:
-        if cell['gamma'] == 0.99:
-            cell['train/ent_coef'] = [float('nan'), float('nan')]
-    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    rows = _contrast_rows()
+    for row in rows:
+        if row['gamma'] == 0.99:
+            row['train/ent_coef'] = [float('nan'), float('nan')]
+    out = evaluate(higher_gamma_value_helps, rows, leaves=_LEAVES)
     assert not any(
         w.gate_name == 'contrast_isolation' for w in out.warnings
     )
 
 
 def test_target_finiteness_warns_on_dropped_pairs() -> None:
-    """A cell whose target resolves to no finite value vanishes
+    """A row whose target resolves to no finite value vanishes
     from paired analyses; the gate puts the count on the verdict
     record instead of leaving an unexplained n_pairs."""
-    cells = _contrast_cells()
-    for cell in cells[:3]:
-        cell['return_mean'] = float('nan')
-    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    rows = _contrast_rows()
+    for row in rows[:3]:
+        row['return_mean'] = float('nan')
+    out = evaluate(higher_gamma_value_helps, rows, leaves=_LEAVES)
     warn = next(
         w for w in out.warnings if w.gate_name == 'target_finiteness'
     )
@@ -654,11 +654,11 @@ def test_target_finiteness_warns_on_dropped_pairs() -> None:
 def test_resolve_value_falls_through_null_pad_to_registry() -> None:
     """Diagonal pooling null-pads a materialised measurable column
     onto fresh batches whose raw inputs ARE present; resolution
-    must recompute those cells (compute_missing_columns's
+    must recompute those rows (compute_missing_columns's
     null|NaN contract), not read the pad as a cached miss."""
     import math as _math
 
-    from corroborate.analyses._cell_value import resolve_value
+    from corroborate.analyses._row_value import resolve_value
     from corroborate.measurables import measurable
 
     @measurable(name='_tcb_last_return', reads=('returns',))
@@ -686,12 +686,12 @@ def test_resolve_value_falls_through_null_pad_to_registry() -> None:
 def test_contrast_isolation_balances_registered_leaves_per_pair() -> None:
     """A setting may vary between seeds provided each matched pair
     shares it."""
-    cells = _contrast_cells()
-    for cell in cells:
-        cell['learning_rate'] = 1e-3 / (1 + cast(int, cell['seed']))
+    rows = _contrast_rows()
+    for row in rows:
+        row['learning_rate'] = 1e-3 / (1 + cast(int, row['seed']))
     out = evaluate(
         higher_gamma_value_helps,
-        cells,
+        rows,
         leaves=frozenset({'gamma', 'learning_rate'}),
     )
     assert out.verdict is Verdict.HELD
@@ -704,12 +704,12 @@ def test_contrast_isolation_balances_registered_leaves_per_pair() -> None:
 
 def test_contrast_isolation_detects_balance_at_one_complete_pair() -> None:
     """A registered mismatch is observable even with one complete pair."""
-    cells = _contrast_cells(range(1))
-    for cell in cells:
-        cell['schedule'] = 'high' if cell['gamma'] == 0.99 else 'low'
+    rows = _contrast_rows(range(1))
+    for row in rows:
+        row['schedule'] = 'high' if row['gamma'] == 0.99 else 'low'
     out = evaluate(
         higher_gamma_value_helps,
-        cells,
+        rows,
         leaves=frozenset({'gamma', 'schedule'}),
     )
     assert out.verdict is Verdict.INADMISSIBLE
@@ -720,10 +720,10 @@ def test_contrast_isolation_detects_balance_at_one_complete_pair() -> None:
 def test_pair_completeness_warns_on_missing_partner() -> None:
     """Paired analyses drop incomplete pairs silently; the gate
     makes the drop visible on the verdict record."""
-    cells = [
-        c for c in _contrast_cells(range(3)) if c['id'] != 'high-2'
+    rows = [
+        c for c in _contrast_rows(range(3)) if c['id'] != 'high-2'
     ]
-    out = evaluate(higher_gamma_value_helps, cells)
+    out = evaluate(higher_gamma_value_helps, rows)
     assert out.verdict is Verdict.HELD
     warning = next(
         w for w in out.warnings if w.gate_name == 'pair_completeness'
@@ -753,19 +753,19 @@ def want_30_pairs(
 def test_bridge_power_insufficient_with_few_seeds() -> None:
     """Few pairs → POWER_INSUFFICIENT. The threshold is encoded in
     the bridge body, not the analysis."""
-    cells = _synthetic_cells(n_seeds=5)
-    out = evaluate(want_30_pairs, cells)
+    rows = _synthetic_rows(n_seeds=5)
+    out = evaluate(want_30_pairs, rows)
     assert out.verdict == Verdict.POWER_INSUFFICIENT
 
 
 def test_scope_with_repeated_column_reference_in_predicate() -> None:
-    """Regression: `filter_cells` must dedupe
+    """Regression: `filter_with_measurables` must dedupe
     `expr.meta.root_names()` before resolving missing columns.
 
     A bridge predicate like `(pl.col('n_step') == 1) | (pl.col('n_step') == 3)`
     references the same column TWICE — `root_names()` returns
     `['n_step', 'n_step']`. If the column is truly missing (not
-    a registered measurable, not in the cell DataFrame), the
+    a registered measurable, not in the row DataFrame), the
     pre-fix code emitted `[pl.lit(None).alias('n_step'),
     pl.lit(None).alias('n_step')]` which polars rejects with:
         ComputeError: the name 'n_step' passed to
@@ -774,9 +774,9 @@ def test_scope_with_repeated_column_reference_in_predicate() -> None:
     After the fix (`list(dict.fromkeys(...))`), the duplicate is
     collapsed before the missing-column resolution runs.
 
-    Construction: cells WITHOUT an `n_step` column; bridge's scope
+    Construction: rows WITHOUT an `n_step` column; bridge's scope
     references `n_step` twice. The bridge should evaluate without
-    crashing. The filtered cell-set is empty (n_step is missing
+    crashing. The filtered row-set is empty (n_step is missing
     everywhere → null → predicate False), so the verdict routes
     through whatever the bridge body returns on n_pairs=0.
     """
@@ -792,14 +792,14 @@ def test_scope_with_repeated_column_reference_in_predicate() -> None:
             return Verdict.POWER_INSUFFICIENT
         return Verdict.HELD
 
-    cells = _synthetic_cells()    # no n_step column
+    rows = _synthetic_rows()    # no n_step column
     # Pre-fix: this `evaluate` call raised polars ComputeError.
-    out = evaluate(repeats_n_step, cells)
+    out = evaluate(repeats_n_step, rows)
     assert out.verdict == Verdict.POWER_INSUFFICIENT
     # n_step missing → all rows null on that column → both branches
     # of the disjunction are null → predicate is null → polars
-    # `filter` excludes them → 0 cells in scope.
-    assert out.n_cells_in_scope == 0
+    # `filter` excludes them → 0 rows in scope.
+    assert out.n_rows_in_scope == 0
 
 
 def test_unknown_fixture_raises() -> None:
@@ -812,12 +812,12 @@ def test_unknown_fixture_raises() -> None:
         del not_a_real_analysis
         return Verdict.HELD
 
-    # `x` and `y` columns must exist in cells so RESOLVED_SOURCE
+    # `x` and `y` columns must exist in rows so RESOLVED_SOURCE
     # passes — the test exercises the fixture-resolution path,
     # not gate behaviour.
-    cells: list[Mapping[str, object]] = [{'x': 0.0, 'y': 0.0, 'env_name': 'X'}]
+    rows: list[Mapping[str, object]] = [{'x': 0.0, 'y': 0.0, 'env_name': 'X'}]
     with pytest.raises(KeyError, match='not_a_real_analysis'):
-        _ = evaluate(broken, cells)
+        _ = evaluate(broken, rows)
 
 
 def test_bridge_carries_typed_intervention() -> None:
@@ -958,12 +958,12 @@ def test_evaluate_forwards_predicted_direction_to_analyses() -> None:
 
     @analysis
     def _captures_pd(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
         *,
         predicted_direction: object,
         source: str = 'A',
     ) -> int:
-        del cells, source
+        del df, source
         captured['predicted_direction'] = predicted_direction
         return 1
 
@@ -978,10 +978,10 @@ def test_evaluate_forwards_predicted_direction_to_analyses() -> None:
         del _captures_pd
         return Verdict.HELD
 
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {'A': 0.0, 'B': 0.0, 'env_name': 'X'},
     ]
-    _ = evaluate(consumer, cells)
+    _ = evaluate(consumer, rows)
     assert captured['predicted_direction'] == 'a_lt_b'
 
 
@@ -1032,52 +1032,52 @@ def test_bridge_accepts_measurable_as_source() -> None:
 def test_evaluate_module_scope_intersects_with_bridge_scope() -> None:
     """`evaluate(..., module_scope=expr)` AND-combines with the
     bridge's own `scope=` — a hypothesis-module-level filter.
-    Cells matching bridge.scope but NOT module_scope are excluded.
+    Rows matching bridge.scope but NOT module_scope are excluded.
     """
-    cells = _synthetic_cells(n_seeds=30)
-    # Half the cells get an 'excluded'-tagged env so module_scope
+    rows = _synthetic_rows(n_seeds=30)
+    # Half the rows get an 'excluded'-tagged env so module_scope
     # can reject them at the file level.
-    for c in cells[:30]:  # first 30 → 15 pairs
+    for c in rows[:30]:  # first 30 → 15 pairs
         c['env_class'] = 'excluded'
-    for c in cells[30:]:
+    for c in rows[30:]:
         c['env_class'] = 'included'
 
     # No module_scope: all 30 pairs visible → HELD.
-    out_full = evaluate(treatment_helps_outcome, cells)
+    out_full = evaluate(treatment_helps_outcome, rows)
     assert out_full.verdict == Verdict.HELD
-    assert out_full.n_cells_in_scope == 60
+    assert out_full.n_rows_in_scope == 60
 
-    # With module_scope: only 'included' cells survive → 15 pairs.
+    # With module_scope: only 'included' rows survive → 15 pairs.
     # treatment_helps_outcome's body keeps HELD if g > 0.3 sig
     # AND n_pairs ≥ 10, which 15 pairs still satisfies.
     out_filtered = evaluate(
-        treatment_helps_outcome, cells,
+        treatment_helps_outcome, rows,
         module_scope=pl.col('env_class') == 'included',
     )
-    assert out_filtered.n_cells_in_scope == 30
-    # Cells halved → still enough power.
+    assert out_filtered.n_rows_in_scope == 30
+    # Rows halved → still enough power.
     assert out_filtered.verdict == Verdict.HELD
 
 
 def test_evaluate_module_scope_can_zero_a_bridge() -> None:
     """When bridge.scope is incompatible with module_scope (e.g.
     bridge filters to env=A, module_scope excludes A), the
-    intersection is empty and the bridge sees zero cells.
+    intersection is empty and the bridge sees zero rows.
     """
-    cells = _synthetic_cells(n_seeds=30)
+    rows = _synthetic_rows(n_seeds=30)
     out = evaluate(
         # treatment_helps_outcome.scope is `env_name == 'TestEnv'`.
         # module_scope says `env_name != 'TestEnv'` → no overlap.
-        treatment_helps_outcome, cells,
+        treatment_helps_outcome, rows,
         module_scope=pl.col('env_name') != 'TestEnv',
     )
-    assert out.n_cells_in_scope == 0
+    assert out.n_rows_in_scope == 0
     assert out.verdict == Verdict.POWER_INSUFFICIENT
 
 
 def test_evaluate_module_scope_alone_when_bridge_scope_none() -> None:
     """A bridge with `scope=None` picks up the module_scope alone.
-    Without module_scope, all cells flow through; with it, only
+    Without module_scope, all rows flow through; with it, only
     the matching subset reaches the analysis.
     """
     @claim_bridge(
@@ -1094,27 +1094,27 @@ def test_evaluate_module_scope_alone_when_bridge_scope_none() -> None:
             return Verdict.HELD
         return Verdict.NO_EFFECT
 
-    cells = _synthetic_cells(n_seeds=30)
-    for c in cells[:30]:
+    rows = _synthetic_rows(n_seeds=30)
+    for c in rows[:30]:
         c['kind'] = 'A'
-    for c in cells[30:]:
+    for c in rows[30:]:
         c['kind'] = 'B'
 
-    # With module_scope filtering to half the cells — fewer pairs,
+    # With module_scope filtering to half the rows — fewer pairs,
     # but enough to still yield a verdict.
     out = evaluate(
-        unscoped_bridge, cells,
+        unscoped_bridge, rows,
         module_scope=pl.col('kind') == 'B',
     )
-    assert out.n_cells_in_scope == 30
+    assert out.n_rows_in_scope == 30
 
 
 def test_evaluate_no_module_scope_preserves_legacy_behavior() -> None:
     """Default (kwarg unset) → bridge.scope alone. Existing
     callers don't see behavior change."""
-    cells = _synthetic_cells(n_seeds=30)
-    out = evaluate(treatment_helps_outcome, cells)
-    assert out.n_cells_in_scope == 60
+    rows = _synthetic_rows(n_seeds=30)
+    out = evaluate(treatment_helps_outcome, rows)
+    assert out.n_rows_in_scope == 60
     assert out.verdict == Verdict.HELD
 
 
@@ -1133,11 +1133,11 @@ def test_module_scope_via_hypothesis_attribute() -> None:
         BRIDGES=(treatment_helps_outcome,),
         MODULE_SCOPE=pl.col('env_name') != 'TestEnv',  # excludes ALL
     )
-    cells = _synthetic_cells(n_seeds=30)
-    df = pl.from_dicts(cells)
+    rows = _synthetic_rows(n_seeds=30)
+    df = pl.from_dicts(rows)
     module_scope = getattr(h, 'MODULE_SCOPE', None)
     out = evaluate(treatment_helps_outcome, df, module_scope=module_scope)
-    assert out.n_cells_in_scope == 0
+    assert out.n_rows_in_scope == 0
     assert out.verdict == Verdict.POWER_INSUFFICIENT
 
 
@@ -1153,12 +1153,12 @@ def test_module_scope_attribute_absent_means_none() -> None:
         BRIDGES=(treatment_helps_outcome,),
         # No MODULE_SCOPE attribute.
     )
-    cells = _synthetic_cells(n_seeds=30)
-    df = pl.from_dicts(cells)
+    rows = _synthetic_rows(n_seeds=30)
+    df = pl.from_dicts(rows)
     module_scope = getattr(h, 'MODULE_SCOPE', None)
     assert module_scope is None
     out = evaluate(treatment_helps_outcome, df, module_scope=module_scope)
-    assert out.n_cells_in_scope == 60
+    assert out.n_rows_in_scope == 60
     assert out.verdict == Verdict.HELD
 
 
@@ -1176,42 +1176,42 @@ def test_analysis_wrapper_is_directly_callable() -> None:
 
     @analysis
     def _scaled_mean(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
         *,
         scale: float = 1.0,
     ) -> float:
-        vals = [float(cast(float, c['v'])) for c in to_dicts(cells)]
+        vals = [float(cast(float, c['v'])) for c in to_dicts(df)]
         return scale * sum(vals) / len(vals)
 
-    cells = cells_to_dataframe(
+    rows = to_dataframe(
         [{'v': 1.0}, {'v': 2.0}, {'v': 3.0}, {'v': 4.0}],
     )
-    assert _scaled_mean(cells, scale=10.0) == 25.0
+    assert _scaled_mean(rows, scale=10.0) == 25.0
     # With `Analysis[C, O, **P]` the mismatched kwarg is a STATIC
     # error at the call site; the ignore keeps the runtime
     # demonstration for unchecked callers (scripts outside pyright's
     # scope still get the TypeError, not a silent drop).
     with pytest.raises(TypeError):
-        _scaled_mean(cells, not_a_param=1)  # pyright: ignore[reportCallIssue]
+        _scaled_mean(rows, not_a_param=1)  # pyright: ignore[reportCallIssue]
 
 
-def test_analysis_call_passes_cells_through_unchanged() -> None:
+def test_analysis_call_passes_rows_through_unchanged() -> None:
     """`Analysis.__call__` is pure delegation — no hidden
     conversion, no registration-time signature reflection. The
     analysis takes a plain DataFrame; the probe receives exactly
     the frame the caller passed, and a rows-holding caller reaches
     the same result through the one entry boundary
-    (`cells_to_dataframe`)."""
+    (`to_dataframe`)."""
     from corroborate.bridge.analysis import Analysis, analysis
 
     received_frames: list[pl.DataFrame] = []
 
     @analysis
     def _frame_probe(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
     ) -> tuple[int, int]:
-        received_frames.append(cells)
-        return (cells.height, cells.width)
+        received_frames.append(df)
+        return (df.height, df.width)
 
     df = pl.DataFrame({'a': [1, 2, 3]})
     assert _frame_probe(df) == (3, 1)
@@ -1221,13 +1221,13 @@ def test_analysis_call_passes_cells_through_unchanged() -> None:
     assert received_frames[0] is df
     # `.fn` preserves the wrapped function's positional-or-keyword
     # first parameter instead of falsely exposing it as positional-only.
-    assert _frame_probe.fn(cells=df) == (3, 1)
+    assert _frame_probe.fn(df=df) == (3, 1)
     # A rows-holding caller converts once at the boundary and gets
     # the identical answer — the shape the registry-wide guard
     # below pins for every production analysis.
-    assert _frame_probe(cells_to_dataframe(df.to_dicts())) == (3, 1)
+    assert _frame_probe(to_dataframe(df.to_dicts())) == (3, 1)
 
-    # Public annotation spelling: cells/result generic arguments,
+    # Public annotation spelling: rows/result generic arguments,
     # ParamSpec optional third.
     typed: Analysis[pl.DataFrame, tuple[int, int]] = _frame_probe
     assert typed(df) == (3, 1)
@@ -1245,10 +1245,10 @@ def test_evaluate_hands_analyses_the_filtered_frame_itself() -> None:
 
     @analysis
     def _frame_capture(
-        cells: pl.DataFrame,
+        df: pl.DataFrame,
     ) -> int:
-        captured.append(cells)
-        return cells.height
+        captured.append(df)
+        return df.height
 
     @claim_bridge(
         source=INTERVENTION,
@@ -1259,7 +1259,7 @@ def test_evaluate_hands_analyses_the_filtered_frame_itself() -> None:
     def _passthrough_probe(_frame_capture: int) -> Verdict:
         return Verdict.HELD if _frame_capture else Verdict.NO_EFFECT
 
-    df = pl.DataFrame(_synthetic_cells(n_seeds=4))
+    df = pl.DataFrame(_synthetic_rows(n_seeds=4))
     out = evaluate(_passthrough_probe, df)
     assert out.verdict is Verdict.HELD
     assert captured and captured[0] is df
@@ -1278,12 +1278,12 @@ def test_analysis_call_preserves_wrapped_signature_statically() -> None:
 
     from corroborate.analyses.paired.paired_g import paired_g
 
-    cells = [
-        c for c in _synthetic_cells()
+    rows = [
+        c for c in _synthetic_rows()
         if c.get('env_name') == 'TestEnv'
     ]
     result = paired_g(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm=_TREATMENT_KEY,
         baseline_arm=_BASELINE_KEY,
         pair_by=('seed',),
@@ -1293,8 +1293,8 @@ def test_analysis_call_preserves_wrapped_signature_statically() -> None:
     assert result.n_pairs == 30
 
 
-def test_analysis_registration_rejects_noncanonical_cells() -> None:
-    """`@analysis` is the enforcement point for the canonical cells
+def test_analysis_registration_rejects_noncanonical_rows() -> None:
+    """`@analysis` is the enforcement point for the canonical rows
     contract: the first parameter must be a plain `pl.DataFrame` —
     a rows annotation, the retired union spelling, and a missing
     annotation all fail registration with an instructive
@@ -1306,24 +1306,24 @@ def test_analysis_registration_rejects_noncanonical_cells() -> None:
 
         @analysis
         def _rows_only_probe(
-            cells: Iterable[Mapping[str, object]],
+            rows: Iterable[Mapping[str, object]],
         ) -> int:
-            return len(list(cells))
+            return len(list(rows))
 
     with pytest.raises(TypeError, match='spelled literally'):
 
         @analysis
         def _union_probe(
-            cells: pl.DataFrame | Iterable[Mapping[str, object]],
+            rows: pl.DataFrame | Iterable[Mapping[str, object]],
         ) -> int:
-            del cells
+            del rows
             return 0
 
     with pytest.raises(TypeError, match='spelled literally'):
 
         @analysis
-        def _unannotated_probe(cells) -> int:  # pyright: ignore[reportMissingParameterType]
-            del cells
+        def _unannotated_probe(rows) -> int:  # pyright: ignore[reportMissingParameterType]
+            del rows
             return 0
 
 
@@ -1362,7 +1362,7 @@ def test_every_registered_analysis_takes_a_plain_dataframe() -> None:
         first_param = next(
             iter(inspect.signature(analysis_obj.fn).parameters.values()),
         )
-        # Name-agnostic: the cells argument is positional-first by
+        # Name-agnostic: the rows argument is positional-first by
         # contract but may be semantically named (`panel`, …).
         # `from __future__ import annotations` keeps the
         # annotation a string, so its repr carries quotes.
@@ -1370,7 +1370,7 @@ def test_every_registered_analysis_takes_a_plain_dataframe() -> None:
         if annotation != 'pl.DataFrame':
             offenders.append(f'{name}: {first_param}')
     assert not offenders, (
-        'analyses whose cells parameter is not a plain '
+        'analyses whose rows parameter is not a plain '
         f'pl.DataFrame: {offenders}'
     )
 
@@ -1380,13 +1380,13 @@ def test_deterministic_outcome_is_never_reported_as_a_rider() -> None:
     within each arm — the constancy scan's signature. The outcome
     under test is the hypothesis, not a confound; it is excluded
     from isolation diagnostics."""
-    cells: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for seed in range(4):
-        cells.append({'id': f'a{seed}', 'seed': seed, 'gamma': 0.8,
+        rows.append({'id': f'a{seed}', 'seed': seed, 'gamma': 0.8,
                       'return_mean': 5.0})
-        cells.append({'id': f'b{seed}', 'seed': seed, 'gamma': 0.99,
+        rows.append({'id': f'b{seed}', 'seed': seed, 'gamma': 0.99,
                       'return_mean': 9.0})
-    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    out = evaluate(higher_gamma_value_helps, rows, leaves=_LEAVES)
     assert out.verdict is Verdict.HELD
     assert all(
         'return_mean' not in w.message
@@ -1404,10 +1404,10 @@ def test_derived_outcome_family_is_never_reported_as_riders() -> None:
     with the target: surfacing them would advise 'register it as
     a configuration leaf', and following that advice would flip a
     valid verdict to INADMISSIBLE via the balance check."""
-    cells: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for seed in range(4):
         for arm, gamma, base in (('a', 0.8, 5.0), ('b', 0.99, 9.0)):
-            cells.append({
+            rows.append({
                 'id': f'{arm}{seed}', 'seed': seed, 'gamma': gamma,
                 'return_mean': base,
                 'return_auc': base - 1.0,
@@ -1416,7 +1416,7 @@ def test_derived_outcome_family_is_never_reported_as_riders() -> None:
                 'return_terminal_n': 5 if arm == 'a' else 4,
                 'return_terminal_attempted': 5,
             })
-    out = evaluate(higher_gamma_value_helps, cells, leaves=_LEAVES)
+    out = evaluate(higher_gamma_value_helps, rows, leaves=_LEAVES)
     assert out.verdict is Verdict.HELD
     assert out.warnings == ()
 
@@ -1442,13 +1442,13 @@ def test_unpaired_value_effect_evaluates_independent_arms() -> None:
             Verdict.NO_EFFECT
         )
 
-    cells: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for i in range(6):
-        cells.append({'id': f'r{i}', 'gamma': 0.8,
+        rows.append({'id': f'r{i}', 'gamma': 0.8,
                       'return_mean': float(i)})
-        cells.append({'id': f't{i}', 'gamma': 0.99,
+        rows.append({'id': f't{i}', 'gamma': 0.99,
                       'return_mean': 10.0 + i})
-    out = evaluate(_unpaired, cells, leaves=_LEAVES)
+    out = evaluate(_unpaired, rows, leaves=_LEAVES)
     assert out.verdict is Verdict.HELD
     assert out.blocked_by is None
     assert all(

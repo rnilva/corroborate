@@ -2,7 +2,7 @@
 under small G (number of strata).
 
 The framework's `random_effects_summary` uses the DerSimonian-
-Laird estimator for between-cell heterogeneity τ²:
+Laird estimator for between-row heterogeneity τ²:
 
     τ²_DL = max(0, (Q − df) / c_term)
 

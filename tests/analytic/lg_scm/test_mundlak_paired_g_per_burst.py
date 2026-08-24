@@ -13,10 +13,10 @@ This test wires a synthetic per-burst predictor that has known
 between-env AND within-env structure, so closed-form values for
 both `beta_b` and `beta_w` are predictable:
 
-    Per-cell predictor value at burst b:
+    Per-row predictor value at burst b:
         x_burst(env, b) = mu_x_env + 0.1 * b
 
-    Per-(env, burst) averaged across baseline cells (constant
+    Per-(env, burst) averaged across baseline rows (constant
     per (env, b) since the predictor depends only on env-level
     mu_x and the burst index):
         x_e(env)     = mu_x_env + 0.1 * mean(b)         (between)
@@ -54,7 +54,7 @@ from corroborate.analyses.paired.mundlak_paired_g_per_burst import (
     mundlak_paired_g_per_burst,
 )
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
@@ -132,7 +132,7 @@ def _build_phased_panel() -> list[Mapping[str, object]]:
     envs → spurious within-env Mundlak signal. Within-env pairing
     still works because treatment and baseline share their env's
     seed range."""
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for env_index, mu in enumerate(_MU_X_GRID):
         treatments = tuple(
             _scm(mu_x=mu, beta_xz=_BETA_XZ_TREAT) for _ in range(_N_BURSTS)
@@ -141,11 +141,11 @@ def _build_phased_panel() -> list[Mapping[str, object]]:
             _scm(mu_x=mu, beta_xz=_BETA_XZ_BASE) for _ in range(_N_BURSTS)
         )
         env_seeds = range(env_index * 10000, env_index * 10000 + _N_PAIRS)
-        cells.extend(run_multi_env_paired_phased_arms(
+        rows.extend(run_multi_env_paired_phased_arms(
             envs={f'env_mu_{mu:g}': (treatments, baselines)},
             seeds=env_seeds,
         ))
-    return cells
+    return rows
 
 
 def _expected_beta_b(*, n_pairs: int) -> float:
@@ -175,9 +175,9 @@ def test_mundlak_recovers_between_slope_and_zero_within() -> None:
       (with burst index)
     Mundlak should pick up the between covariation, ignore the
     within (which is independent of the constant within-env y)."""
-    cells = _build_phased_panel()
+    rows = _build_phased_panel()
     result = mundlak_paired_g_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -259,9 +259,9 @@ def test_mundlak_intercept_absorbs_predictor_offset() -> None:
     correctly (e.g., didn't demean by env) would land the
     intercept far from this value.
     """
-    cells = _build_phased_panel()
+    rows = _build_phased_panel()
     result = mundlak_paired_g_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -288,13 +288,13 @@ def test_mundlak_intercept_absorbs_predictor_offset() -> None:
 def test_mundlak_honours_custom_arm_field() -> None:
     """The paired panel and baseline-only predictor join share the
     caller-selected arm column."""
-    cells: list[Mapping[str, object]] = []
-    for cell in _build_phased_panel():
-        row = dict(cell)
+    rows: list[Mapping[str, object]] = []
+    for row in _build_phased_panel():
+        row = dict(row)
         row['contrast_arm'] = row.pop('arm_key')
-        cells.append(row)
+        rows.append(row)
     result = mundlak_paired_g_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         arm_field='contrast_arm',

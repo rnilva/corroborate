@@ -59,7 +59,7 @@ from corroborate.stats.effect_size import (
     I2_THRESHOLD,
     random_effects_summary,
 )
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -107,7 +107,7 @@ def _per_env_g_se_pairs() -> list[tuple[float, float]]:
         env_name = f'het_mu_{mu:+g}'
         env_cells = [c for c in all_cells if c['env_name'] == env_name]
         result = paired_g.fn(
-            cells_to_dataframe(env_cells),
+            to_dataframe(env_cells),
             treatment_arm='treatment',
             baseline_arm='baseline',
             pair_by=('seed',),
@@ -127,7 +127,7 @@ def test_dl_tau_squared_recovers_structural_heterogeneity() -> None:
     - τ² ≫ 0.60 (over-attribution of within-env variance to
       between-env)"""
     pool = random_effects_summary(_per_env_g_se_pairs())
-    assert pool.n_cells == len(_MU_ENVS)
+    assert pool.n_rows == len(_MU_ENVS)
     assert 0.10 < pool.tau2 < 0.60, (
         f'τ² = {pool.tau2:.4f}, expected 0.10 < τ² < 0.60 '
         f'(closed-form ≈ 0.28). A τ² of 0 would mean DL collapsed '
@@ -212,7 +212,7 @@ def test_q_statistic_above_df_under_heterogeneity() -> None:
     while data has structural heterogeneity would silently zero
     out τ²."""
     pool = random_effects_summary(_per_env_g_se_pairs())
-    df = pool.n_cells - 1
+    df = pool.n_rows - 1
     assert pool.Q > 5 * df, (
         f'Q = {pool.Q:.4f}, df = {df}; Q/df = {pool.Q/df:.2f}. '
         f'Expected Q/df > 5 (closed-form Q ≈ 48.6, ratio ≈ 12). '
@@ -282,7 +282,7 @@ def test_zero_heterogeneity_negative_control_gives_tau_squared_zero() -> None:
         env_name = f'no_het_env_{env_idx}'
         env_cells = [c for c in cells if c['env_name'] == env_name]
         result = paired_g.fn(
-            cells_to_dataframe(env_cells),
+            to_dataframe(env_cells),
             treatment_arm='treatment',
             baseline_arm='baseline',
             pair_by=('seed',),

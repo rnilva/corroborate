@@ -287,30 +287,30 @@ def test_source_hash_stable_across_cosmetic_changes() -> None:
 
 
 def _make_audit_corpus(corpus_dir: Path) -> None:
-    """Build a tiny corpus (synthetic cells in runs.parquet) that
+    """Build a tiny corpus (synthetic rows in runs.parquet) that
     `bridge_floor_a` can run against. Per spec §8 test 5: we want
     the audit's exit code 0 path, with the bridge producing the
     predicted verdict (HELD)."""
     import polars as pl
     treatment_key = _INTERVENTION.arm_keys()[1]
     baseline_key = _INTERVENTION.arm_keys()[0]
-    cells: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for s in range(30):
-        cells.append({
-            'id': f'cell-t-{s}',
+        rows.append({
+            'id': f'row-t-{s}',
             'arm_key': treatment_key,
             'seed': s,
             'env_name': 'LGSCM',
             'outcome': 1.0 + 0.01 * s,
         })
-        cells.append({
-            'id': f'cell-b-{s}',
+        rows.append({
+            'id': f'row-b-{s}',
             'arm_key': baseline_key,
             'seed': s,
             'env_name': 'LGSCM',
             'outcome': 0.0 + 0.01 * s,
         })
-    pl.DataFrame(cells).write_parquet(corpus_dir / 'runs.parquet')
+    pl.DataFrame(rows).write_parquet(corpus_dir / 'runs.parquet')
 
 
 def test_audit_end_to_end_fixture_corpus(tmp_path: Path) -> None:
@@ -320,7 +320,7 @@ def test_audit_end_to_end_fixture_corpus(tmp_path: Path) -> None:
 
     Walks the runner-commit's write helper and the CLI-commit's
     audit verifier in one pass. The synthetic corpus has 30
-    seeds × 2 arms = 60 cells; the bridge body returns HELD
+    seeds × 2 arms = 60 rows; the bridge body returns HELD
     unconditionally on this fixture (its scope is implicitly the
     full corpus). The author committed `predicted_verdict=HELD`,
     so the audit must exit 0."""

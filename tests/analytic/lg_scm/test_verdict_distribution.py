@@ -9,7 +9,7 @@ held/violation fractions. Those are I/O — the test would just
 read back what the test stamped, exercising no framework logic.
 The audit pass dropped them.
 
-The implementation produces real LG-SCM cells; only the categorical
+The implementation produces real LG-SCM rows; only the categorical
 verdict column is synthetic (the analysis takes verdict strings
 as opaque categories — the LG-SCM doesn't structurally produce
 verdict mixes, so synthetic stamping IS the test setup, not a
@@ -24,7 +24,7 @@ from corroborate.analyses.diagnostic.verdict_distribution import (
 )
 from corroborate.bridge.verdict import Verdict
 from corroborate.corpus.schema import MeasurementLeaf, RunRow
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_arm
@@ -42,7 +42,7 @@ def _scm() -> LinearGaussianSCM:
 
 
 def _stamp(rows: list[RunRow], verdicts: list[str]) -> list[RunRow]:
-    """Augment each RunRow's measurements with a per-cell verdict
+    """Augment each RunRow's measurements with a per-row verdict
     string. Length must match."""
     if len(rows) != len(verdicts):
         raise ValueError(
@@ -98,30 +98,30 @@ def test_dominant_returns_power_insufficient_string_when_dominant() -> None:
         arm_key='single', env_name='env_pi_dominant',
     )
     rows = _stamp(rows, [pi] * 24 + [held] * 6)
-    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
+    row_dicts: list[Mapping[str, object]] = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        to_dataframe(row_dicts), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     assert result.per_env['env_pi_dominant'].dominant == 'power_insufficient'
 
 
 def test_dominant_returns_label_when_top_count_is_one() -> None:
     """When the highest bucket count is exactly 1 (e.g., a
-    single-cell env), `_dominant` must still return the label
+    single-row env), `_dominant` must still return the label
     of that bucket, not ''. Pin
     `if sorted_pairs[0][1] == 0: return ''` against
     `== 1` mutant which would also short-circuit at top=1."""
     held = Verdict.HELD.value
     rows = run_arm(
         _scm(), seeds=range(1),
-        arm_key='single', env_name='env_single_cell',
+        arm_key='single', env_name='env_single_row',
     )
     rows = _stamp(rows, [held])
-    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
+    row_dicts: list[Mapping[str, object]] = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        to_dataframe(row_dicts), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
-    counts = result.for_env('env_single_cell')
+    counts = result.for_env('env_single_row')
     assert counts is not None
     assert counts.dominant == 'held'
 
@@ -135,9 +135,9 @@ def test_dominant_returns_other_string_when_other_bucket_wins() -> None:
         arm_key='single', env_name='env_other_dominant',
     )
     rows = _stamp(rows, ['unknown_verdict'] * 24 + [Verdict.HELD.value] * 6)
-    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
+    row_dicts: list[Mapping[str, object]] = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        to_dataframe(row_dicts), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     assert result.per_env['env_other_dominant'].dominant == 'other'
 
@@ -152,9 +152,9 @@ def test_dominant_resolves_strict_majority_tie_and_unanimous() -> None:
     corpus. The tie case is the most subtle — a regression that
     used `>=` instead of `>` in the dominance comparison would
     return whichever bucket appeared first, masking the tie."""
-    cells = _build_dominance_corpus()
+    rows = _build_dominance_corpus()
     result = verdict_distribution_per_env.fn(
-        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        to_dataframe(rows), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     by_env = result.per_env
     assert by_env['env_strict_majority'].dominant == Verdict.HELD.value
@@ -187,9 +187,9 @@ def test_unknown_verdict_strings_route_to_other_bucket() -> None:
         + ['Held'] * 5
     )
     rows = _stamp(rows, plan)
-    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows]
+    row_dicts: list[Mapping[str, object]] = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        to_dataframe(row_dicts), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     counts = result.for_env('env_mixed')
     assert counts is not None
@@ -209,9 +209,9 @@ def test_unknown_verdict_strings_route_to_other_bucket() -> None:
 # ============ Arm filter discrimination ============
 
 def test_arm_filter_excludes_other_arms() -> None:
-    """Cells from a different arm should NOT contribute. Build
-    cells under arm_key='single' AND arm_key='other'; filtering on
-    'single' must drop the 'other' cells silently. A regression
+    """Rows from a different arm should NOT contribute. Build
+    rows under arm_key='single' AND arm_key='other'; filtering on
+    'single' must drop the 'other' rows silently. A regression
     that ignored arm_filter (or matched substrings) would leak."""
     rows: list[RunRow] = []
     rows.extend(_stamp(
@@ -222,16 +222,17 @@ def test_arm_filter_excludes_other_arms() -> None:
         run_arm(_scm(), seeds=range(30), arm_key='other', env_name='env_x'),
         [Verdict.INVARIANT_VIOLATION.value] * 30,
     ))
-    cells = [r.as_dict() for r in rows]
+    row_dicts = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        to_dataframe(row_dicts),
+        arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     counts = result.for_env('env_x')
     assert counts is not None
     assert counts.held == 30
     assert counts.invariant_violation == 0, (
         f'invariant_violation = {counts.invariant_violation}; the '
-        f"30 cells under arm_key='other' should be filtered out"
+        f"30 rows under arm_key='other' should be filtered out"
     )
     assert counts.total == 30
 
@@ -239,7 +240,7 @@ def test_arm_filter_excludes_other_arms() -> None:
 # ============ Empty env returns empty dominant ============
 
 def test_empty_env_returns_no_per_env_entry() -> None:
-    """When no cells match the arm_filter for any env, the result's
+    """When no rows match the arm_filter for any env, the result's
     per_env mapping is empty. Asking for a non-present env returns
     None — not an error, not a phantom entry. Bridges that consume
     `for_env` rely on this `None` distinction to map to
@@ -248,12 +249,12 @@ def test_empty_env_returns_no_per_env_entry() -> None:
         run_arm(_scm(), seeds=range(30), arm_key='other', env_name='env_y'),
         [Verdict.HELD.value] * 30,
     )
-    cells = [r.as_dict() for r in rows]
+    rows = [r.as_dict() for r in rows]
     result = verdict_distribution_per_env.fn(
-        cells_to_dataframe(cells), arm_filter='single', verdict_column=_VERDICT_COLUMN,
+        to_dataframe(rows), arm_filter='single', verdict_column=_VERDICT_COLUMN,
     )
     assert result.per_env == {}, (
         f'per_env = {dict(result.per_env)!r}; arm_filter=single '
-        f'matches no cell, panel must be empty'
+        f'matches no row, panel must be empty'
     )
     assert result.for_env('env_y') is None

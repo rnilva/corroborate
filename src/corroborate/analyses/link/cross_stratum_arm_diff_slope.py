@@ -6,7 +6,7 @@ contributes one (Δ_predictor, Δ_target) point where:
   Δ_x = mean(treatment x | stratum) − mean(baseline x | stratum)
 
 Both arm means are computed independently across each arm's
-cells in the stratum — no pair-key cross-referencing. Spearman
+rows in the stratum — no pair-key cross-referencing. Spearman
 ρ is computed across strata.
 
 Implementation authors who don't have a causal pairing claim should
@@ -14,9 +14,9 @@ reach for this primitive (the paired-Δ sibling
 `cross_config_paired_slope` was deleted as E1 seed-paired).
 
 Distinct from:
-- `partial_spearman` — within-stratum (per-cell or per-burst)
+- `partial_spearman` — within-stratum (per-row or per-burst)
   partial Spearman; the canonical mediation primitive for
-  within-cell mediation questions.
+  within-row mediation questions.
 - `stratified_arm_diff_pooled` — within-stratum Cohen's d,
   DL-pooled across strata. Different question (effect-size
   meta-analysis vs cross-stratum dose-response slope).
@@ -42,7 +42,7 @@ class CrossStratumArmDiffSlopeResult:
     """Cross-stratum Spearman ρ between per-stratum arm-mean Δs.
 
     `n_strata` is the number of strata that contributed (both
-    arms had ≥ `min_seeds_per_arm` finite-valued cells on both
+    arms had ≥ `min_seeds_per_arm` finite-valued rows on both
     predictor and target)."""
     rho: float
     p_value: float
@@ -53,7 +53,7 @@ class CrossStratumArmDiffSlopeResult:
 
 @analysis
 def cross_stratum_arm_diff_slope(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -68,11 +68,11 @@ def cross_stratum_arm_diff_slope(
     where Δ_x = mean_treatment(x) − mean_baseline(x).
 
     Per-stratum: requires ≥ `min_seeds_per_arm` finite-valued
-    cells in BOTH arms on BOTH predictor and target. Returns NaN
-    ρ/p when n_strata < `min_strata`. NaN values drop their cell;
+    rows in BOTH arms on BOTH predictor and target. Returns NaN
+    ρ/p when n_strata < `min_strata`. NaN values drop their row;
     pure independent-samples per arm (no pair-key cross-reference).
     """
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     per_stratum_arm: dict[
         tuple[object, ...], dict[str, list[Mapping[str, object]]],
     ] = defaultdict(lambda: defaultdict(list))
@@ -100,12 +100,12 @@ def cross_stratum_arm_diff_slope(
     diff_predictor: list[float] = []
     diff_target: list[float] = []
     for arms_map in per_stratum_arm.values():
-        t_cells = arms_map.get(treatment_arm, [])
-        b_cells = arms_map.get(baseline_arm, [])
-        t_pred = _finite_values(t_cells, predictor)
-        b_pred = _finite_values(b_cells, predictor)
-        t_tgt = _finite_values(t_cells, target)
-        b_tgt = _finite_values(b_cells, target)
+        t_rows = arms_map.get(treatment_arm, [])
+        b_rows = arms_map.get(baseline_arm, [])
+        t_pred = _finite_values(t_rows, predictor)
+        b_pred = _finite_values(b_rows, predictor)
+        t_tgt = _finite_values(t_rows, target)
+        b_tgt = _finite_values(b_rows, target)
         if (
             len(t_pred) < min_seeds_per_arm
             or len(b_pred) < min_seeds_per_arm

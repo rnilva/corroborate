@@ -6,7 +6,7 @@ already covered by synthetic-input tests in `tests/test_statistics.py`.
 This file keeps ONE substrate-grounded test that exercises what
 the synthetic-input tests can't: the full pipeline
 
-    multi-env LG-SCM cells
+    multi-env LG-SCM rows
       → per_env_paired_g_panel  (substrate-driven panel build)
       → random_effects_summary  (DerSimonian-Laird pool)
       → random_effects_verdict  (Popperian verdict)
@@ -14,7 +14,7 @@ the synthetic-input tests can't: the full pipeline
 A regression in the panel-builder (e.g., dropping envs with
 NaN g, mis-keying strata, mishandling `n_pairs < 2`) could
 silently pass the synthetic-input verdict test and only fail
-when real cells flow through. This is the load-bearing
+when real rows flow through. This is the load-bearing
 substrate-only contribution.
 
 The test also asserts the pooled g recovers the closed-form
@@ -66,7 +66,7 @@ def _scm(*, mu_x: float, beta_xz: float) -> LinearGaussianSCM:
 
 
 def test_corroboration_pipeline_recovers_closed_form_pooled_g() -> None:
-    """Real LG-SCM cells across 5 envs feed into
+    """Real LG-SCM rows across 5 envs feed into
     `per_env_paired_g_panel`, then `random_effects_summary`, then
     `random_effects_verdict`. The full chain should:
 
@@ -77,8 +77,8 @@ def test_corroboration_pipeline_recovers_closed_form_pooled_g() -> None:
     4. Resolve to HELD or HELD_WITH_SCOPE_FLAG with no refutation.
 
     A panel-builder regression that dropped envs, mis-keyed strata,
-    or returned NaN g/se for valid cells would shift `pooled_g`
-    measurably away from the closed form OR change `n_cells` —
+    or returned NaN g/se for valid rows would shift `pooled_g`
+    measurably away from the closed form OR change `n_rows` —
     failing the test in a implementation-specific way the synthetic-
     input verdict tests can't catch."""
     envs: dict[str, tuple[LinearGaussianSCM, LinearGaussianSCM]] = {
@@ -91,9 +91,9 @@ def test_corroboration_pipeline_recovers_closed_form_pooled_g() -> None:
     rows: list[RunRow] = run_multi_env_paired_arms(
         envs=envs, seeds=range(_N_PAIRS),
     )
-    cells: Sequence[Mapping[str, object]] = [r.as_dict() for r in rows]
+    row_dicts: Sequence[Mapping[str, object]] = [r.as_dict() for r in rows]
     panel = per_env_paired_g_panel(
-        cells, treatment_arm='treatment', baseline_arm='baseline',
+        row_dicts, treatment_arm='treatment', baseline_arm='baseline',
         source='y_mean',
     )
 
@@ -106,11 +106,11 @@ def test_corroboration_pipeline_recovers_closed_form_pooled_g() -> None:
                   if not math.isnan(s.g) and not math.isnan(s.se)]
     assert len(valid_g_se) == len(_TIGHT_MU_X), (
         f'panel produced NaN g/se on {len(_TIGHT_MU_X) - len(valid_g_se)} '
-        f'envs — should not happen on closed-form-tractable cells'
+        f'envs — should not happen on closed-form-tractable row_dicts'
     )
 
     pooled = random_effects_summary(valid_g_se)
-    assert pooled.n_cells == len(_TIGHT_MU_X)
+    assert pooled.n_rows == len(_TIGHT_MU_X)
 
     # Closed-form pooled g: under shared-noise per-env g is
     # mu_x * sqrt(n_steps) / sigma_x * c_4. Pooled is the

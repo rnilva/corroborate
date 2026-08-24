@@ -1,6 +1,6 @@
 """Tests for `TraceRow` schema + persistence round-trip.
 
-The trace store is the v9-`traces.parquet` analog: per-cell raw
+The trace store is the v9-`traces.parquet` analog: per-row raw
 observation persisted as a flat columnar parquet. Every leaf-path
 becomes its own typed parquet column; mixed scalar (HPs, summary
 scalars) and list (per-step trajectories) columns coexist.
@@ -248,7 +248,7 @@ def test_apply_trace_reductions_collapse_3d_to_1d() -> None:
     ]
     # Per-step max-Q over (batch × actions). map_elements + Python
     # comprehension is the most readable form for nested-list
-    # aggregation; runs once per cell at write time, so the UDF
+    # aggregation; runs once per row at write time, so the UDF
     # overhead is negligible.
     expr = pl.col('online_q_values').map_elements(
         lambda nested: [max(max(act) for act in batch)
@@ -274,7 +274,7 @@ def test_multi_dim_arrays_round_trip_via_parquet(tmp_path: Path) -> None:
     import numpy as np
     rows_in = [
         TraceRow(
-            id='cell-1', cycle_id='c1',
+            id='row-1', cycle_id='c1',
             timestamp='2026-01-01T00:00:00+00:00',
             leaves={
                 'gamma': 0.99, 'reward': [1.0, 0.0, 0.5],
@@ -283,7 +283,7 @@ def test_multi_dim_arrays_round_trip_via_parquet(tmp_path: Path) -> None:
             },
         ),
         TraceRow(
-            id='cell-2', cycle_id='c1',
+            id='row-2', cycle_id='c1',
             timestamp='2026-01-01T00:00:01+00:00',
             leaves={
                 'gamma': 0.99, 'reward': [0.5, 1.0],
@@ -300,14 +300,14 @@ def test_multi_dim_arrays_round_trip_via_parquet(tmp_path: Path) -> None:
     by_id = {r.id: r for r in rows_out}
 
     # Scalar / 1-D leaves preserved.
-    assert by_id['cell-1'].leaves['gamma'] == 0.99
-    assert by_id['cell-1'].leaves['reward'] == [1.0, 0.0, 0.5]
+    assert by_id['row-1'].leaves['gamma'] == 0.99
+    assert by_id['row-1'].leaves['reward'] == [1.0, 0.0, 0.5]
 
     # 2-D arrays preserved with shape + values (round-trip as
     # nested Python lists). Inner-list narrowing via a separate
     # isinstance — TraceLeaf's recursive shape means `p1[0]` is
     # itself a TraceLeaf, not yet narrowed.
-    p1 = by_id['cell-1'].leaves['predicted_q']
+    p1 = by_id['row-1'].leaves['predicted_q']
     assert isinstance(p1, list)
     assert len(p1) == 3
     p1_row0 = p1[0]
@@ -316,7 +316,7 @@ def test_multi_dim_arrays_round_trip_via_parquet(tmp_path: Path) -> None:
     assert np.asarray(p1).tolist() == (
         np.arange(12, dtype=np.float32).reshape(3, 4).tolist()
     )
-    p2 = by_id['cell-1'].leaves['pearson_stats']
+    p2 = by_id['row-1'].leaves['pearson_stats']
     assert isinstance(p2, list)
     assert len(p2) == 10
     p2_row0 = p2[0]

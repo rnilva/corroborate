@@ -6,12 +6,12 @@ trip on when authoring `Bridge.scope=` predicates:
 1. `pl.col(x) > threshold` returns True for `NaN`, admitting the
    row. IEEE-754 says all NaN comparisons are False; polars's
    filter context promotes `null > threshold` to True. Forgetting
-   the `is_finite()` guard silently lets non-finite cells leak
+   the `is_finite()` guard silently lets non-finite rows leak
    through bridge scopes — a verdict-shifting bug.
 
 2. `pl.col(x).mean()` propagates NaN — a single NaN in the column
    makes the aggregate NaN. Combined with `.over(partition)` for
-   stratified means, one missing cell poisons the whole partition.
+   stratified means, one missing row poisons the whole partition.
    `.fill_nan(None)` flips NaN to null, which polars aggregates
    skip natively.
 
@@ -52,7 +52,7 @@ def finite(source: _Source) -> pl.Expr:
 def finite_gt(source: _Source, threshold: float) -> pl.Expr:
     """NaN-safe `source > threshold`. Without the `is_finite()`
     guard, polars returns True for `NaN > threshold` (admits
-    the row), letting non-finite cells leak through bridge
+    the row), letting non-finite rows leak through bridge
     scopes. Returns False on NaN/inf; True on finite values
     strictly greater than `threshold`."""
     col = _coerce(source)
@@ -124,7 +124,7 @@ def partition_aggregate(
     restriction — its mean spans all values of `lr` for matching
     `(env, capacity, ...)` groups. Symptom: the helper's
     partition-mean comes back surprisingly high (or low), and
-    `> threshold` filters drop cells you expected to keep.
+    `> threshold` filters drop rows you expected to keep.
 
     **Two workarounds:**
 

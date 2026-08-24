@@ -110,7 +110,7 @@ def test_mean_window_handles_tiny_arrays() -> None:
 
 
 def test_mean_window_handles_zero_d() -> None:
-    """0-d / scalar operand (e.g. a null trace cell decoded as a
+    """0-d / scalar operand (e.g. a null trace row decoded as a
     scalar ndarray) has no window axis; NaN-propagate rather than
     raise. Subsumes the implementation's prior `_mean_window` 0-d
     guard."""
@@ -271,14 +271,14 @@ def test_reduce_axis_modern_2d_protocol() -> None:
 def test_reduce_axis_zero_dim_legacy_raises_axiserror() -> None:
     """**Documented behavior**: 0-d input (legacy "scalar
     mc_return" protocol) raises `numpy.exceptions.AxisError`.
-    `compute_missing_columns`'s per-cell `except (KeyError,
+    `compute_missing_columns`'s per-row `except (KeyError,
     TypeError, ValueError, ZeroDivisionError)` catches AxisError
     via the ValueError branch (`AxisError extends ValueError`)
-    and stores None for that cell. The "Old-protocol shim"
+    and stores None for that row. The "Old-protocol shim"
     attempted earlier is reverted because input shapes across
     affected corpora are heterogeneous (0-d, 1-d, 2-d, 3-d) and
     a uniform promotion broke the downstream `mean_window` chain.
-    Cells with non-2-d `mc_return` consistently null-store —
+    Rows with non-2-d `mc_return` consistently null-store —
     honest, even if it costs n_pairs."""
     legacy_scalar = Measurable[
         Mapping[str, object], npt.NDArray[np.floating],

@@ -142,13 +142,13 @@ Concrete examples in the frozen study's
   `_METAMAZE_GAMMA_SCOPE` → cluster of 2.
 - Polarity-stratified `effective_horizon → outcome` bridges (GOAL
   scope vs SURVIVE scope): same `(source, target)`, syntactically
-  different inline expressions, different admitted cells →
+  different inline expressions, different admitted rows →
   distinct clusters (NOT corroborators, since polarity-disjoint
   sub-claims).
 
 ### 5. Empty evidence is determined by counts, not by a digest
 
-When a bridge admits zero rows, `n_cells_in_scope == 0` is the
+When a bridge admits zero rows, `n_rows_in_scope == 0` is the
 source of truth. Such bridges also share the grouping key for the empty
 ID set. The converse is not guaranteed: a non-empty external frame
 whose IDs are absent or non-string also contributes no strings to the
@@ -318,7 +318,7 @@ on the `submission` branch.)
   no `Any`, frozen dataclasses, PEP 695 generics. Graph traversals
   use `corroborate.graph.Graph[N, M]`'s typed walks.
 - `CORPUS_INTEGRITY.md` invariants protect node-level data
-  (cells, measurables); this principle covers edge-level evidence.
+  (rows, measurables); this principle covers edge-level evidence.
 - `SWEEP_PERSISTENCY.md` covers how edges' supporting data
   (runs/traces/measurements) flow through the corpus boundary.
 - `PRIMITIVES_AUDIT.md` four-question test for primitives: this

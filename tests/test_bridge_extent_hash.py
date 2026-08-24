@@ -1,7 +1,7 @@
 """Contract tests for `BridgeEvaluation.extent_hash`.
 
 The extent_hash is a compact graph-grouping key:
-`stable_extent_hash(admitted_cell_ids)` computed at evaluation
+`stable_extent_hash(admitted_row_ids)` computed at evaluation
 time. Matching keys mean only the same de-duplicated string-ID set
 under a shared namespace; row values and multiplicity are absent.
 
@@ -11,7 +11,7 @@ These tests lock the five invariants the design relies on:
 2. Empty admission → `stable_extent_hash(())`.
 3. Stable under row permutation (frozenset semantics).
 4. Bridges admitting the same IDs hash identically.
-5. Disjoint scopes admit disjoint cells → distinct hashes."""
+5. Disjoint scopes admit disjoint rows → distinct hashes."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -38,16 +38,16 @@ class _NoopResult:
 
 @analysis
 def _noop_analysis(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
 ) -> _NoopResult:
     """No-op analysis — returns admitted count. The extent_hash
     tests don't care about the result content; they read
     `BridgeEvaluation.extent_hash` directly."""
-    return _NoopResult(admitted=len(list(to_dicts(cells))))
+    return _NoopResult(admitted=len(list(to_dicts(df))))
 
 
-def _cells(*ids: str, x: tuple[float, ...] | None = None) -> list[dict[str, object]]:
-    """Build synthetic cells with `id` + optional `x` covariate.
+def _rows(*ids: str, x: tuple[float, ...] | None = None) -> list[dict[str, object]]:
+    """Build synthetic rows with `id` + optional `x` covariate.
     `x` defaults to `(1.0, 2.0, ...)` aligned to `ids`."""
     xs = x if x is not None else tuple(float(i + 1) for i in range(len(ids)))
     return [{'id': cid, 'x': xv} for cid, xv in zip(ids, xs)]
@@ -100,26 +100,26 @@ def test_extent_hash_equals_frozenset_admitted_ids() -> None:
     Frozenset semantics are the compatibility contract; this test
     does not claim row-content or evidence identity.
     """
-    cells = _cells('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
-    out = evaluate(_bridge_positive_x_a, cells)
+    rows = _rows('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
+    out = evaluate(_bridge_positive_x_a, rows)
     expected = stable_extent_hash({'c0', 'c1'})
     assert out.extent_hash == expected
 
 
 def test_extent_hash_empty_when_scope_admits_zero() -> None:
     """A scope admitting zero rows has the empty-ID-set key."""
-    cells = _cells('c0', 'c1', 'c2', x=(1.0, 2.0, 3.0))
-    out = evaluate(_bridge_empty_scope, cells)
+    rows = _rows('c0', 'c1', 'c2', x=(1.0, 2.0, 3.0))
+    out = evaluate(_bridge_empty_scope, rows)
     assert out.extent_hash == stable_extent_hash(())
-    assert out.n_cells_in_scope == 0
+    assert out.n_rows_in_scope == 0
 
 
 def test_extent_hash_stable_under_row_permutation() -> None:
     """Frozenset semantics: same admitted IDs in any order →
     same hash. Locks the contract against accidental switches
     to ordered-hash (e.g. `hash(tuple(sorted(ids)))`)."""
-    forward = _cells('a', 'b', 'c', 'd', x=(1.0, 2.0, 3.0, 4.0))
-    reversed_order = _cells('d', 'c', 'b', 'a', x=(4.0, 3.0, 2.0, 1.0))
+    forward = _rows('a', 'b', 'c', 'd', x=(1.0, 2.0, 3.0, 4.0))
+    reversed_order = _rows('d', 'c', 'b', 'a', x=(4.0, 3.0, 2.0, 1.0))
     out_forward = evaluate(_bridge_positive_x_a, forward)
     out_reversed = evaluate(_bridge_positive_x_a, reversed_order)
     assert out_forward.extent_hash == out_reversed.extent_hash
@@ -160,9 +160,9 @@ def test_extent_hash_shared_when_same_named_scope() -> None:
     The named expression communicates author intent, but expression
     object identity is not part of the key.
     """
-    cells = _cells('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
-    out_a = evaluate(_bridge_positive_x_a, cells)
-    out_b = evaluate(_bridge_positive_x_b, cells)
+    rows = _rows('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
+    out_a = evaluate(_bridge_positive_x_a, rows)
+    out_b = evaluate(_bridge_positive_x_b, rows)
     assert out_a.extent_hash == out_b.extent_hash
     # Same scope but different bridge names → cluster key
     # is (source, target, extent_hash), so source+target also
@@ -173,9 +173,9 @@ def test_extent_hash_shared_when_same_named_scope() -> None:
 
 def test_extent_hash_distinct_when_disjoint_scopes() -> None:
     """These disjoint admitted string-ID sets produce distinct keys."""
-    cells = _cells('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
-    out_pos = evaluate(_bridge_positive_x_a, cells)
-    out_neg = evaluate(_bridge_negative_x, cells)
+    rows = _rows('c0', 'c1', 'c2', 'c3', x=(1.0, 2.0, -1.0, -2.0))
+    out_pos = evaluate(_bridge_positive_x_a, rows)
+    out_neg = evaluate(_bridge_negative_x, rows)
     assert out_pos.extent_hash != out_neg.extent_hash
     assert out_pos.extent_hash == stable_extent_hash({'c0', 'c1'})
     assert out_neg.extent_hash == stable_extent_hash({'c2', 'c3'})

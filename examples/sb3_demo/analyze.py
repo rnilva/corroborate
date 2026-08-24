@@ -8,7 +8,7 @@ is needed:
     uv run examples/sb3_demo/analyze.py
 
 Three steps: read the Logger's own files into a Panel, explore
-its cells with plain polars, then evaluate the executable claim
+its rows with plain polars, then evaluate the executable claim
 test in ``sb3_claim.py`` against the Panel.
 
 The record is live: run more seeds, re-load, and the same claim
@@ -37,9 +37,9 @@ RUNS = Path(__file__).parent / 'runs'
 # one slot per dump, aligned by `time/total_timesteps`. Nothing is
 # renamed, reduced, or classified at load time.
 panel = load_sb3_logger_runs(RUNS)
-df = panel.cells
+df = panel.df
 print(f'loaded: {df.height} runs × {df.width} columns')
-print(f'registry: {", ".join(sorted(panel.leaves))}')
+print(f'registry: {", ".join(sorted(panel.leaves or ()))}')
 
 # ── 2. explore, in plain polars ─────────────────────────────────
 # The record arrays explode into an ordinary long frame; the eval
@@ -64,10 +64,10 @@ print(curve)
 
 # The claim's horizon column, materialised here only for the
 # exploration pivot below — `evaluate` resolves registered
-# measurables per cell on its own ("everything is measurables").
+# measurables per row on its own ("everything is measurables").
 panel = panel.with_measurables(('eval_reward_at_25k',))
 paired = (
-    panel.cells
+    panel.df
     .pivot('config/gamma', index='config/seed', values='eval_reward_at_25k')
     .with_columns((pl.col('0.99') - pl.col('0.8')).alias('delta'))
     .sort('config/seed')

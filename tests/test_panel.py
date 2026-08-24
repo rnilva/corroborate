@@ -1,12 +1,12 @@
 """Phase 1 regression tests for `corroborate.data.Panel`.
 
 Covers:
-- `from_dataframe`: synthetic-cells exploration mode.
+- `from_dataframe`: synthetic-rows exploration mode.
 - `from_corpus`: load-one-corpus-without-ingest path.
 - `from_corpora`: union-of-corpora exploration.
 - `narrow`: scope-chain extension + diagnostic recompute.
 - `split_by`: per-stratum sub-panel partition.
-- `derive`: per-stratum aggregator (mean / std / median × cell_filter).
+- `derive`: per-stratum aggregator (mean / std / median × row_filter).
 - `with_measurables`: on-demand compute via `compute_missing_columns`.
 - `diagnostics`: all four per-stratum facts.
 
@@ -30,13 +30,13 @@ from corroborate.measurables import measurable
 # can detect `_panel_test_jens` + `_panel_test_outcome` as
 # registered (their finite-fraction is what the diagnostic
 # reports). The @measurable decorator registers on definition;
-# the bodies are no-ops because the cells frame already carries
+# the bodies are no-ops because the rows frame already carries
 # the column values — diagnostics only consult registry
 # membership, not the function body.
 @measurable(reads=())
 def _panel_test_jens(record: Mapping[str, object]) -> float:
     """Test-fixture: registered to mark `_panel_test_jens` as a
-    measurable column for Panel diagnostics. The cells frame
+    measurable column for Panel diagnostics. The rows frame
     pre-populates the column, so the function body is unused
     by these tests."""
     del record
@@ -52,16 +52,16 @@ def _panel_test_outcome(record: Mapping[str, object]) -> float:
     return float('nan')
 
 
-def _make_cells_dataframe() -> pl.DataFrame:
-    """3 envs × 2 arms × 3 seeds = 18 cells.
+def _make_rows_dataframe() -> pl.DataFrame:
+    """3 envs × 2 arms × 3 seeds = 18 rows.
 
     Includes one HP leaf (`optimizer.inner.lr`) that varies WITHIN
     one env's vanilla arm to exercise the nonunique-configs
     diagnostic. Includes one measurable column (`_panel_test_jens`) with
-    one NaN cell per env-arm to exercise the finite-fraction
+    one NaN row per env-arm to exercise the finite-fraction
     diagnostic."""
     return pl.DataFrame({
-        'id': [f'cell-{i:02d}' for i in range(18)],
+        'id': [f'row-{i:02d}' for i in range(18)],
         'env_name': (
             ['FourRooms-misc'] * 6
             + ['Asterix-MinAtar'] * 6
@@ -71,7 +71,7 @@ def _make_cells_dataframe() -> pl.DataFrame:
                     'ddqn', 'ddqn', 'ddqn'] * 3,
         'seed': [0, 1, 2, 0, 1, 2] * 3,
         'corpus': (
-            # FR: 2 corpora across the 6 cells — exercises
+            # FR: 2 corpora across the 6 rows — exercises
             # corpora_per_stratum (both baseline AND ddqn arms
             # have 2 distinct corpora).
             ['fr_corpA', 'fr_corpA', 'fr_corpB',
@@ -79,7 +79,7 @@ def _make_cells_dataframe() -> pl.DataFrame:
             + ['asterix_corp'] * 6
             + ['snake_corp'] * 6
         ),
-        # Single HP-leaf with one variant in FR baseline (cell 2
+        # Single HP-leaf with one variant in FR baseline (row 2
         # uses lr=2e-4 instead of canonical 1e-4); makes
         # nonunique_configs_per_stratum[('FourRooms-misc',
         # 'baseline')] = 2 rather than 1.
@@ -121,7 +121,7 @@ def _corpus_panel(
     declared), so the corpus grouping these per-stratum tests
     probe is stated here, once."""
     return Panel.from_dataframe(
-        _make_cells_dataframe(),
+        _make_rows_dataframe(),
         stratify_by=_CORPUS_STRATIFY,
         required_measurables=required_measurables,
     )
@@ -131,9 +131,9 @@ def test_from_dataframe_constructs_exploration_panel() -> None:
     """`Panel.from_dataframe(df)` is the test-fixture / hand-built
     constructor. No scope_chain, no sources — pure exploration
     starting point."""
-    df = _make_cells_dataframe()
+    df = _make_rows_dataframe()
     panel = Panel.from_dataframe(df)
-    assert panel.cells.height == 18
+    assert panel.df.height == 18
     assert panel.scope_chain == ()
     assert panel.sources == ()
     assert panel.required_measurables == frozenset()
@@ -155,30 +155,30 @@ def test_external_shaped_panel_probes_report_empty_not_crash() -> None:
         'gamma': [0.8, 0.99],
         'return_mean': [100.0, 110.0],
     }))
-    assert panel.diagnostics.n_cells_per_stratum == {}
+    assert panel.diagnostics.n_rows_per_stratum == {}
     assert panel.split_by() == {}
     # An explicit key still partitions — grouping is a statement,
     # not a capability the neutral default removes.
     assert len(panel.split_by('gamma')) == 2
 
 
-def test_diagnostics_n_cells_per_stratum() -> None:
-    """`n_cells_per_stratum` reports the per-stratum cell count
+def test_diagnostics_n_rows_per_stratum() -> None:
+    """`n_rows_per_stratum` reports the per-stratum row count
     used to detect inflation. With 3 envs × 2 arms × 3 seeds each,
     every stratum should be 3."""
     panel = _corpus_panel()
     diag = panel.diagnostics
     for env in ['FourRooms-misc', 'Asterix-MinAtar', 'Snake-jumanji']:
         for arm in ['baseline', 'ddqn']:
-            assert diag.n_cells_per_stratum[(env, arm)] == 3, (
-                f'expected 3 cells at ({env}, {arm}); '
-                f'got {diag.n_cells_per_stratum[(env, arm)]}'
+            assert diag.n_rows_per_stratum[(env, arm)] == 3, (
+                f'expected 3 rows at ({env}, {arm}); '
+                f'got {diag.n_rows_per_stratum[(env, arm)]}'
             )
 
 
 def test_diagnostics_corpora_per_stratum_surfaces_hp_mixing() -> None:
     """`corpora_per_stratum` reports the set of source-corpus
-    stamps per stratum. The FR cells came from 2 corpora — this
+    stamps per stratum. The FR rows came from 2 corpora — this
     surfaces the today's-FR-style inflation at hypothesis run
     time (BUT does not enforce; the bridge author reads + decides)."""
     panel = _corpus_panel()
@@ -206,7 +206,7 @@ def test_diagnostics_programs_per_stratum_surfaces_program_blind_pooling(
     on `arm_key='baseline'` — a stratum spanning >1 program is
     pooling structurally different root programs. Cross-program
     contrast is legitimate (program becomes the axis); this makes
-    ACCIDENTAL pooling visible. Cells predating the `program`
+    ACCIDENTAL pooling visible. Rows predating the `program`
     column read as null → absent (empty set), NOT a distinct
     program."""
     df = pl.DataFrame({
@@ -234,7 +234,7 @@ def test_diagnostics_programs_per_stratum_surfaces_program_blind_pooling(
 
 
 def test_diagnostics_programs_per_stratum_absent_column() -> None:
-    """A panel whose cells carry no `program` column at all reports
+    """A panel whose rows carry no `program` column at all reports
     an empty set per stratum (not a KeyError) — old corpora pre-date
     the typed column."""
     diag = _corpus_panel().diagnostics
@@ -250,8 +250,8 @@ def test_diagnostics_nonunique_configs_surfaces_hp_heterogeneity() -> None:
     registered-measurable cols are excluded; everything else is
     a leaf).
 
-    The FR baseline stratum has lr=1e-4 for 2 cells, lr=2e-4 for
-    1 cell → 2 distinct configs. Every other stratum is
+    The FR baseline stratum has lr=1e-4 for 2 rows, lr=2e-4 for
+    1 row → 2 distinct configs. Every other stratum is
     homogeneous → 1."""
     panel = _corpus_panel()
     diag = panel.diagnostics
@@ -270,7 +270,7 @@ def test_diagnostics_finite_fraction_exploration_mode() -> None:
     """Without `required_measurables`, `finite_fraction_per_stratum
     _measurable` reports for every column that IS a registered
     measurable on this panel. `_panel_test_jens` is registered + has 1
-    NaN of 3 cells per stratum → 2/3 ≈ 0.667.
+    NaN of 3 rows per stratum → 2/3 ≈ 0.667.
     `_panel_test_outcome` is fully finite → 1.0."""
     # Both measurable names ARE registered in the framework's
     # @measurable registry (used by other tests / implementation).
@@ -307,7 +307,7 @@ def test_diagnostics_finite_fraction_required_measurables_narrows_report() -> No
 def test_diagnostics_config_fingerprint_trusts_carried_registry() -> None:
     """When the Panel carries `leaves`, the nonunique-configs
     diagnostic fingerprints exactly the registered columns — a
-    measured outcome that varies per cell is not configuration and
+    measured outcome that varies per row is not configuration and
     must not inflate the count. Without a registry the exclusion
     heuristic cannot know `return_mean` is measured, so it counts
     it: 1 config with the registry vs 3 without."""
@@ -329,24 +329,24 @@ def test_diagnostics_config_fingerprint_trusts_carried_registry() -> None:
     ] == 3
 
 
-def test_narrow_extends_scope_chain_and_filters_cells() -> None:
+def test_narrow_extends_scope_chain_and_filters_rows() -> None:
     """`panel.narrow(expr)` returns a new Panel with `expr`
-    appended to `scope_chain`; cells are filtered; diagnostics
-    are recomputed from the narrowed cells (no inheritance)."""
+    appended to `scope_chain`; rows are filtered; diagnostics
+    are recomputed from the narrowed rows (no inheritance)."""
     panel = _corpus_panel()
     narrowed = panel.narrow(pl.col('env_name') == 'FourRooms-misc')
-    assert narrowed.cells.height == 6
+    assert narrowed.df.height == 6
     assert len(narrowed.scope_chain) == 1
     # Diagnostics are recomputed: only FR strata appear.
     fr_strata = {
-        k for k in narrowed.diagnostics.n_cells_per_stratum
+        k for k in narrowed.diagnostics.n_rows_per_stratum
         if k[0] == 'FourRooms-misc'
     }
     assert len(fr_strata) == 2  # 2 arms
 
     # Narrowing again chains the expression.
     narrowed2 = narrowed.narrow(pl.col('arm_key') == 'baseline')
-    assert narrowed2.cells.height == 3
+    assert narrowed2.df.height == 3
     assert len(narrowed2.scope_chain) == 2
     # scope_provenance preserves the full chain on diagnostics.
     assert narrowed2.diagnostics.scope_provenance == narrowed2.scope_chain
@@ -354,17 +354,17 @@ def test_narrow_extends_scope_chain_and_filters_cells() -> None:
 
 def test_split_by_partitions_into_sub_panels() -> None:
     """`panel.split_by('env_name')` returns one sub-Panel per
-    distinct env. Each sub-Panel's cells are the env's subset;
+    distinct env. Each sub-Panel's rows are the env's subset;
     sources + scope_chain are inherited."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = Panel.from_dataframe(_make_rows_dataframe())
     parts = panel.split_by('env_name')
     assert set(parts.keys()) == {
         ('FourRooms-misc',), ('Asterix-MinAtar',), ('Snake-jumanji',),
     }
     for k, sub in parts.items():
-        assert sub.cells.height == 6
+        assert sub.df.height == 6
         assert sub.scope_chain == panel.scope_chain
-        env_seen = set(sub.cells['env_name'].to_list())
+        env_seen = set(sub.df['env_name'].to_list())
         assert env_seen == {k[0]}
 
 
@@ -374,7 +374,7 @@ def test_split_by_carries_the_registry() -> None:
     gates to unverified. Guards the explicit-construction pitfall
     (a new carried field forgotten at one re-construction site)."""
     panel = Panel.from_dataframe(
-        _make_cells_dataframe(),
+        _make_rows_dataframe(),
         leaves=frozenset({'optimizer.inner.lr'}),
     )
     for sub in panel.split_by('env_name').values():
@@ -383,8 +383,8 @@ def test_split_by_carries_the_registry() -> None:
 
 def test_derive_mean_per_stratum() -> None:
     """`Panel.derive(DerivedSpec('_panel_test_jens', 'mean', None))`
-    computes mean of _panel_test_jens per stratum, dropping NaN cells
-    pre-aggregation. With 1 NaN + 2 finite cells per stratum
+    computes mean of _panel_test_jens per stratum, dropping NaN rows
+    pre-aggregation. With 1 NaN + 2 finite rows per stratum
     (mean of the 2 finite values), the FR baseline values
     [NaN, 0.5, 0.6] yield mean 0.55."""
     panel = _corpus_panel()
@@ -394,7 +394,7 @@ def test_derive_mean_per_stratum() -> None:
 
 
 def test_derive_std_per_stratum() -> None:
-    """Sample SD (ddof=1) per stratum. FR baseline finite cells
+    """Sample SD (ddof=1) per stratum. FR baseline finite rows
     [0.5, 0.6] → SD = sqrt(((0.5-0.55)^2 + (0.6-0.55)^2) / 1)
     = sqrt(0.005) ≈ 0.0707."""
     panel = _corpus_panel()
@@ -404,16 +404,16 @@ def test_derive_std_per_stratum() -> None:
     )
 
 
-def test_derive_with_cell_filter_narrows_aggregation_input() -> None:
-    """`spec.cell_filter` further narrows the cells contributing
+def test_derive_with_row_filter_narrows_aggregation_input() -> None:
+    """`spec.row_filter` further narrows the rows contributing
     to the aggregate. Filter to seed 0 — each stratum has 1
-    cell surviving. For `'mean'`/`'median'` the default
-    `effective_min_n=1` admits single-cell strata; for `'std'`
+    row surviving. For `'mean'`/`'median'` the default
+    `effective_min_n=1` admits single-row strata; for `'std'`
     (`effective_min_n=2`) ALL strata are skipped."""
     panel = _corpus_panel()
     means = panel.derive(DerivedSpec(
         '_panel_test_outcome', 'mean',
-        cell_filter=pl.col('seed') == 0,
+        row_filter=pl.col('seed') == 0,
     ))
     # Mean default min_n=1 — every stratum returns its single
     # seed-0 outcome value.
@@ -425,7 +425,7 @@ def test_derive_with_cell_filter_narrows_aggregation_input() -> None:
     # everything.
     stds = panel.derive(DerivedSpec(
         '_panel_test_outcome', 'std',
-        cell_filter=pl.col('seed') == 0,
+        row_filter=pl.col('seed') == 0,
     ))
     assert stds == {}
 
@@ -433,7 +433,7 @@ def test_derive_with_cell_filter_narrows_aggregation_input() -> None:
     # default — every stratum gets dropped.
     means_floored = panel.derive(DerivedSpec(
         '_panel_test_outcome', 'mean',
-        cell_filter=pl.col('seed') == 0,
+        row_filter=pl.col('seed') == 0,
         min_n=5,
     ))
     assert means_floored == {}
@@ -442,19 +442,19 @@ def test_derive_with_cell_filter_narrows_aggregation_input() -> None:
 def test_with_measurables_no_op_when_already_present() -> None:
     """`panel.with_measurables(['_panel_test_jens'])` is a no-op when
     the column is already populated. Returns a new Panel
-    (immutability) with cells unchanged in shape; values
+    (immutability) with rows unchanged in shape; values
     preserved bit-for-bit."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = Panel.from_dataframe(_make_rows_dataframe())
     out = panel.with_measurables(['_panel_test_jens'])
-    assert out.cells.height == panel.cells.height
-    # Original NaN cells preserved (per the
+    assert out.df.height == panel.df.height
+    # Original NaN rows preserved (per the
     # compute_missing_columns partial-null branch logic).
     # polars sum() returns int | float | Decimal; cast to int.
-    n_null = int(out.cells['_panel_test_jens'].is_null().sum())
-    n_nan = int(out.cells['_panel_test_jens'].is_nan().sum())
+    n_null = int(out.df['_panel_test_jens'].is_null().sum())
+    n_nan = int(out.df['_panel_test_jens'].is_nan().sum())
     assert n_null + n_nan == 6
     # ID order preserved (no shuffle).
-    assert out.cells['id'].to_list() == panel.cells['id'].to_list()
+    assert out.df['id'].to_list() == panel.df['id'].to_list()
 
 
 @measurable(reads=('x',))
@@ -469,23 +469,23 @@ def _panel_synth_double(record: Mapping[str, object]) -> float:
 
 def test_with_measurables_computes_absent_registered_measurable() -> None:
     """When the requested name IS in the @measurable registry but
-    absent from `cells`, `with_measurables` computes it."""
-    cells = pl.DataFrame({
+    absent from `rows`, `with_measurables` computes it."""
+    rows = pl.DataFrame({
         'id': ['c0', 'c1', 'c2'],
         'env_name': ['x'] * 3,
         'arm_key': ['baseline'] * 3,
         'x': [1.0, 2.0, 3.0],
     })
-    panel = Panel.from_dataframe(cells)
+    panel = Panel.from_dataframe(rows)
     out = panel.with_measurables(['_panel_synth_double'])
-    assert '_panel_synth_double' in out.cells.columns
-    assert out.cells['_panel_synth_double'].to_list() == [2.0, 4.0, 6.0]
+    assert '_panel_synth_double' in out.df.columns
+    assert out.df['_panel_synth_double'].to_list() == [2.0, 4.0, 6.0]
 
 
 def test_from_corpus_loads_runs_and_measurements(tmp_path: Path) -> None:
     """`Panel.from_corpus(dir)` reads runs.parquet, left-joins
     measurements.parquet by id, populates `sources` with one
-    `CorpusSource`. No measurements file → cells from runs only;
+    `CorpusSource`. No measurements file → rows from runs only;
     no traces by default."""
     corpus = tmp_path / 'syn_corpus'
     corpus.mkdir()
@@ -504,12 +504,12 @@ def test_from_corpus_loads_runs_and_measurements(tmp_path: Path) -> None:
     measurements.write_parquet(corpus / 'measurements.parquet')
 
     panel = Panel.from_corpus(corpus)
-    assert panel.cells.height == 4
-    assert '_panel_test_jens' in panel.cells.columns
-    assert panel.cells['_panel_test_jens'].to_list() == [0.1, 0.2, 0.3, 0.4]
+    assert panel.df.height == 4
+    assert '_panel_test_jens' in panel.df.columns
+    assert panel.df['_panel_test_jens'].to_list() == [0.1, 0.2, 0.3, 0.4]
     # `corpus` column auto-stamped when absent.
-    assert 'corpus' in panel.cells.columns
-    assert set(panel.cells['corpus'].to_list()) == {'syn_corpus'}
+    assert 'corpus' in panel.df.columns
+    assert set(panel.df['corpus'].to_list()) == {'syn_corpus'}
     # CorpusSource entry created.
     assert len(panel.sources) == 1
     assert panel.sources[0].corpus == 'syn_corpus'
@@ -527,16 +527,16 @@ def test_from_corpus_missing_runs_returns_empty(tmp_path: Path) -> None:
     not_corpus = tmp_path / 'not_a_corpus'
     not_corpus.mkdir()
     panel = Panel.from_corpus(not_corpus)
-    assert panel.cells.height == 0
+    assert panel.df.height == 0
     assert panel.sources == ()
 
 
-def test_from_corpora_unions_cells_with_diagonal_relaxed(
+def test_from_corpora_unions_rows_with_diagonal_relaxed(
     tmp_path: Path,
 ) -> None:
-    """`from_corpora` concatenates multiple corpora's cells.
+    """`from_corpora` concatenates multiple corpora's rows.
     Schema drift (one has an extra column) is handled via
-    diagonal_relaxed; missing cells get null. Each corpus
+    diagonal_relaxed; missing rows get null. Each corpus
     contributes one `CorpusSource`."""
     a = tmp_path / 'corpA'
     a.mkdir()
@@ -557,15 +557,15 @@ def test_from_corpora_unions_cells_with_diagonal_relaxed(
     }).write_parquet(b / 'runs.parquet')
 
     panel = Panel.from_corpora([a, b])
-    assert panel.cells.height == 4
+    assert panel.df.height == 4
     assert len(panel.sources) == 2
     sources = {s.corpus for s in panel.sources}
     assert sources == {'corpA', 'corpB'}
     # corpA's y_extra is null (diagonal-relaxed); corpB's is finite.
-    cells_a = panel.cells.filter(pl.col('corpus') == 'corpA')
-    cells_b = panel.cells.filter(pl.col('corpus') == 'corpB')
-    assert cells_a['y_extra'].null_count() == 2
-    assert cells_b['y_extra'].to_list() == [10.0, 20.0]
+    rows_a = panel.df.filter(pl.col('corpus') == 'corpA')
+    rows_b = panel.df.filter(pl.col('corpus') == 'corpB')
+    assert rows_a['y_extra'].null_count() == 2
+    assert rows_b['y_extra'].to_list() == [10.0, 20.0]
     # Registry unions across the contributing corpora.
     assert panel.leaves == frozenset({'x', 'y_extra'})
 
@@ -654,7 +654,7 @@ def test_concat_panels_empty_batch_does_not_poison_registry(
 ) -> None:
     """A zero-row batch (e.g. `from_corpus` of a not-yet-swept
     directory, whose registry is necessarily unknown) contributes
-    no cells and must not erase the pool's registry — the same
+    no rows and must not erase the pool's registry — the same
     contributing-only rule `from_corpora` applies."""
     from corroborate.data import concat_panels
 
@@ -665,16 +665,16 @@ def test_concat_panels_empty_batch_does_not_poison_registry(
     empty_dir = tmp_path / 'not_yet_swept'
     empty_dir.mkdir()
     empty = Panel.from_corpus(empty_dir)
-    assert empty.cells.height == 0 and empty.leaves is None
+    assert empty.df.height == 0 and empty.leaves is None
     pooled = concat_panels([populated, empty])
     assert pooled.leaves == frozenset({'gamma'})
-    assert pooled.cells.height == 1
+    assert pooled.df.height == 1
 
 
 def test_with_traces_joins_on_demand(tmp_path: Path) -> None:
     """`panel.with_traces(['col'])` loads only the named trace
     columns from this Panel's source corpora and joins them onto
-    `cells`. Already-present cols are skipped."""
+    `rows`. Already-present cols are skipped."""
     corpus = tmp_path / 'syn_with_traces'
     corpus.mkdir()
     pl.DataFrame({
@@ -690,23 +690,23 @@ def test_with_traces_joins_on_demand(tmp_path: Path) -> None:
     }).write_parquet(corpus / 'traces.parquet')
 
     panel = Panel.from_corpus(corpus)
-    assert 'per_step_col_a' not in panel.cells.columns
+    assert 'per_step_col_a' not in panel.df.columns
 
     enriched = panel.with_traces(['per_step_col_a'])
-    assert 'per_step_col_a' in enriched.cells.columns
-    assert 'per_step_col_b' not in enriched.cells.columns  # not requested
+    assert 'per_step_col_a' in enriched.df.columns
+    assert 'per_step_col_b' not in enriched.df.columns  # not requested
     # Idempotent — second call is a no-op (col already present).
     enriched2 = enriched.with_traces(['per_step_col_a'])
-    assert enriched2.cells.shape == enriched.cells.shape
+    assert enriched2.df.shape == enriched.df.shape
 
 
 def test_with_traces_no_sources_is_no_op() -> None:
     """A Panel built via `from_dataframe` has no `sources` — no
     file to load traces from. `with_traces` returns the panel
     unchanged."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = Panel.from_dataframe(_make_rows_dataframe())
     out = panel.with_traces(['nonexistent_col'])
-    assert out is panel or out.cells.equals(panel.cells)
+    assert out is panel or out.df.equals(panel.df)
 
 
 def test_from_cache_loads_hypothesis_cache_parquet(tmp_path: Path) -> None:
@@ -718,23 +718,23 @@ def test_from_cache_loads_hypothesis_cache_parquet(tmp_path: Path) -> None:
     # at a real cache that exists in the repo's experiments tree.
     # Falls back to "absent cache → empty Panel" if no cache.
     panel_absent = Panel.from_cache('nonexistent.module.path')
-    assert panel_absent.cells.height == 0
+    assert panel_absent.df.height == 0
     assert panel_absent.sources == ()
 
 
 def test_split_by_multi_key_partition() -> None:
     """`split_by` with multiple keys produces (key1, key2)-tuple-
-    keyed sub-Panels. Each sub-Panel's cells must be the
+    keyed sub-Panels. Each sub-Panel's rows must be the
     intersection of the key constraints. Tests multi-key
     behavior that the single-key test doesn't cover."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = Panel.from_dataframe(_make_rows_dataframe())
     parts = panel.split_by('env_name', 'arm_key')
     # 3 envs × 2 arms = 6 sub-panels.
     assert len(parts) == 6
     for (env, arm), sub in parts.items():
-        assert sub.cells.height == 3  # 3 seeds per (env, arm)
-        envs_seen = set(sub.cells['env_name'].to_list())
-        arms_seen = set(sub.cells['arm_key'].to_list())
+        assert sub.df.height == 3  # 3 seeds per (env, arm)
+        envs_seen = set(sub.df['env_name'].to_list())
+        arms_seen = set(sub.df['arm_key'].to_list())
         assert envs_seen == {env}
         assert arms_seen == {arm}
 
@@ -761,7 +761,7 @@ def test_narrow_returns_panel_with_fresh_diag_cache() -> None:
     narrowed = panel.narrow(pl.col('env_name') == 'FourRooms-misc')
     narrowed_diag = narrowed.diagnostics
     assert parent_diag is not narrowed_diag
-    # Each panel has its own memo cell; reading it twice on the
+    # Each panel has its own memo row; reading it twice on the
     # SAME panel returns the same object.
     assert narrowed.diagnostics is narrowed_diag
 
@@ -791,7 +791,7 @@ def test_from_corpus_nested_sub_corpus_uses_parent_leaf_stamp(
     panel = Panel.from_corpus(sub_a)
     # Stamp should be parent_a/ddqn_vs_vanilla, not bare leaf.
     assert panel.sources[0].corpus == 'parent_a/ddqn_vs_vanilla'
-    assert set(panel.cells['corpus'].to_list()) == {
+    assert set(panel.df['corpus'].to_list()) == {
         'parent_a/ddqn_vs_vanilla',
     }
 
@@ -858,15 +858,15 @@ def test_from_corpus_collision_when_meas_registered_but_no_substrate(
     }).write_parquet(corpus / 'measurements.parquet')
 
     panel = Panel.from_corpus(corpus)
-    assert panel.cells['q_some_unregistered'].to_list() == [1.0, 2.0]
+    assert panel.df['q_some_unregistered'].to_list() == [1.0, 2.0]
 
 
 def test_panel_is_frozen_immutable() -> None:
     """frozen=True + slots=True: assignment to fields raises
     `dataclasses.FrozenInstanceError`."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = Panel.from_dataframe(_make_rows_dataframe())
     with pytest.raises(Exception):  # FrozenInstanceError or AttributeError
-        panel.cells = pl.DataFrame()  # type: ignore[misc]
+        panel.df = pl.DataFrame()  # type: ignore[misc]
 
 
 def test_to_cache_writes_parquet_and_sources_sidecar(
@@ -878,9 +878,9 @@ def test_to_cache_writes_parquet_and_sources_sidecar(
     extended by a fresh ISO-8601 UTC timestamp."""
     from corroborate.data.panel import CorpusSource
 
-    cells = _make_cells_dataframe()
+    rows = _make_rows_dataframe()
     panel = Panel(
-        cells=cells,
+        df=rows,
         sources=(
             CorpusSource(
                 corpus='corp_a',
@@ -899,7 +899,7 @@ def test_to_cache_writes_parquet_and_sources_sidecar(
     assert written == target
     assert target.exists()
     reread = pl.read_parquet(target)
-    assert reread.height == cells.height
+    assert reread.height == rows.height
     sidecar = target.with_suffix('.sources.json')
     assert sidecar.exists()
     import json
@@ -931,9 +931,9 @@ def test_from_cache_round_trip_recovers_sources(
     from corroborate.data.panel import CorpusSource
     from corroborate.data.panel import _read_sources_for_panel as read
 
-    cells = _make_cells_dataframe()
+    rows = _make_rows_dataframe()
     panel = Panel(
-        cells=cells,
+        df=rows,
         sources=(
             CorpusSource(
                 corpus='corp_x',
@@ -960,7 +960,7 @@ def test_to_cache_rejects_both_hypothesis_module_and_cache_path(
     tmp_path: Path,
 ) -> None:
     """Mutually exclusive — pass one or the other, not both."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = Panel.from_dataframe(_make_rows_dataframe())
     with pytest.raises(ValueError, match='not both'):
         panel.to_cache(
             hypothesis_module='m', cache_path=tmp_path / 'x.parquet',
@@ -969,7 +969,7 @@ def test_to_cache_rejects_both_hypothesis_module_and_cache_path(
 
 def test_to_cache_rejects_neither_argument() -> None:
     """Mutually exclusive (other direction) — must pass one."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = Panel.from_dataframe(_make_rows_dataframe())
     with pytest.raises(ValueError, match='hypothesis_module or cache_path'):
         panel.to_cache()
 
@@ -983,7 +983,7 @@ def test_to_cache_write_manifest_replaces_stale_signatures(
     consistent with the current code state, not whatever the
     last runner pass stamped.
 
-    The test cells have only synthetic columns (env_name,
+    The test rows have only synthetic columns (env_name,
     arm_key, seed, …) — none are registered measurables in this
     test process. The manifest is written but empty (`{}`),
     which is the correct "no overlap" answer."""
@@ -993,14 +993,14 @@ def test_to_cache_write_manifest_replaces_stale_signatures(
     stale = target.with_suffix('.hashes.json')
     stale.write_text('{"jensen_gap": "OLD_SIG_FROM_PRIOR_RUN"}')
     panel = Panel(
-        cells=_make_cells_dataframe(),
+        df=_make_rows_dataframe(),
         sources=(CorpusSource(corpus='c', data_root=Path('/tmp/p')),),
     )
     panel.to_cache(cache_path=target)
     assert stale.exists(), 'manifest should be written'
     import json
     parsed = json.loads(stale.read_text())
-    # Stale entry replaced: jensen_gap is not in the test cells'
+    # Stale entry replaced: jensen_gap is not in the test rows'
     # registered-measurable column set, so the fresh manifest
     # doesn't include it.
     assert 'jensen_gap' not in parsed
@@ -1019,7 +1019,7 @@ def test_to_cache_write_manifest_false_unlinks_stale(
     target = tmp_path / 'manifest_skipped.parquet'
     stale = target.with_suffix('.hashes.json')
     stale.write_text('{"jensen_gap": "OLD"}')
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = Panel.from_dataframe(_make_rows_dataframe())
     panel.to_cache(cache_path=target, write_manifest=False)
     assert not stale.exists(), 'stale manifest should be unlinked'
 
@@ -1027,7 +1027,7 @@ def test_to_cache_write_manifest_false_unlinks_stale(
 def test_to_cache_no_manifest_no_op(tmp_path: Path) -> None:
     """When no manifest exists and write_manifest=False, the
     unlink path is a no-op (`missing_ok=True`)."""
-    panel = Panel.from_dataframe(_make_cells_dataframe())
+    panel = Panel.from_dataframe(_make_rows_dataframe())
     target = tmp_path / 'no_prior_manifest.parquet'
     written = panel.to_cache(cache_path=target, write_manifest=False)
     assert written == target
@@ -1044,7 +1044,7 @@ def test_to_cache_write_sidecar_false_skips_sidecar(
     from corroborate.data.panel import CorpusSource
 
     panel = Panel(
-        cells=_make_cells_dataframe(),
+        df=_make_rows_dataframe(),
         sources=(
             CorpusSource(corpus='c', data_root=Path('/tmp/c_parent')),
         ),
@@ -1078,7 +1078,7 @@ def test_with_traces_skips_source_with_none_data_root(
     }).write_parquet(corpus_with / 'traces.parquet')
 
     panel = Panel(
-        cells=pl.DataFrame({
+        df=pl.DataFrame({
             'id': ['c0', 'c_unknown'],
             'env_name': ['env1', 'env2'],
             'arm_key': ['baseline', 'baseline'],
@@ -1096,7 +1096,7 @@ def test_with_traces_skips_source_with_none_data_root(
     joined = panel.with_traces(['extra_trace_col'])
     # The with_root corpus's trace column joined; the no_root
     # source is skipped (not raised).
-    assert 'extra_trace_col' in joined.cells.columns
+    assert 'extra_trace_col' in joined.df.columns
 
 
 
@@ -1107,8 +1107,8 @@ def test_measurable_availability_matrix_classifies_uniform_partial_unavailable(
 ) -> None:
     """P6 fix. Three classification buckets:
 
-    - `uniform_available`: finite at >0% of cells in EVERY env.
-    - `partial`: finite at >0% of cells in SOME envs, but not all.
+    - `uniform_available`: finite at >0% of rows in EVERY env.
+    - `partial`: finite at >0% of rows in SOME envs, but not all.
     - `unavailable`: <=1% finite across ALL envs.
     """
     import polars as pl
@@ -1134,7 +1134,7 @@ def test_measurable_availability_matrix_classifies_uniform_partial_unavailable(
         del record
         return 1.0
 
-    cells = pl.DataFrame({
+    rows = pl.DataFrame({
         'env_name': ['envA', 'envA', 'envB', 'envB'],
         # uniform: finite in both envs
         '__p6_uniform': [1.0, 2.0, 3.0, 4.0],
@@ -1143,14 +1143,14 @@ def test_measurable_availability_matrix_classifies_uniform_partial_unavailable(
         # unavailable: NaN everywhere
         '__p6_unavailable': [float('nan')] * 4,
     })
-    panel = Panel(cells=cells)
+    panel = Panel(df=rows)
     matrix = panel.measurable_availability_matrix()
     assert '__p6_uniform' in matrix.uniform_available
     assert '__p6_partial' in matrix.partial
     assert '__p6_unavailable' in matrix.unavailable
-    # Cell counts per env
-    assert matrix.cell_counts['envA'] == 2
-    assert matrix.cell_counts['envB'] == 2
+    # Row counts per env
+    assert matrix.row_counts['envA'] == 2
+    assert matrix.row_counts['envB'] == 2
     # Availability fractions
     assert matrix.availability['envA']['__p6_uniform'] == 1.0
     assert matrix.availability['envA']['__p6_partial'] == 1.0
@@ -1163,10 +1163,10 @@ def test_measurable_availability_matrix_empty_panel() -> None:
 
     from corroborate.data import Panel
 
-    panel = Panel(cells=pl.DataFrame())
+    panel = Panel(df=pl.DataFrame())
     matrix = panel.measurable_availability_matrix()
     assert matrix.availability == {}
-    assert matrix.cell_counts == {}
+    assert matrix.row_counts == {}
     assert matrix.uniform_available == frozenset()
     assert matrix.partial == frozenset()
     assert matrix.unavailable == frozenset()
@@ -1186,13 +1186,13 @@ def test_measurable_availability_matrix_missing_env_column_falls_back() -> None:
         del record
         return 1.0
 
-    cells = pl.DataFrame({
+    rows = pl.DataFrame({
         '__p6_no_env_col': [1.0, 2.0, 3.0],
     })
-    panel = Panel(cells=cells)
+    panel = Panel(df=rows)
     matrix = panel.measurable_availability_matrix()
     # Single-env fallback group
-    assert len(matrix.cell_counts) == 1
+    assert len(matrix.row_counts) == 1
     assert '__p6_no_env_col' in matrix.uniform_available
 
 
@@ -1215,4 +1215,4 @@ def test_concat_panels_pools_numeric_width_differences() -> None:
     a = Panel.from_dataframe(pl.DataFrame({'id': ['a'], 'x': [[1]]}))
     b = Panel.from_dataframe(pl.DataFrame({'id': ['b'], 'x': [[1.5]]}))
     pooled = concat_panels([a, b])
-    assert pooled.cells.height == 2
+    assert pooled.df.height == 2

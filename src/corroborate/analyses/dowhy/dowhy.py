@@ -1,12 +1,12 @@
 """DoWhy backdoor + refutations as framework analyses.
 
-Three analyses, all consuming a corpus of cells (each a flat
+Three analyses, all consuming a corpus of rows (each a flat
 path-keyed mapping with scalar fields for the treatment,
 outcome, and adjustment-set covariates) plus a DAG:
 
-- `backdoor_ate(cells, *, treatment, outcome, dag, method_name)`
+- `backdoor_ate(df, *, treatment, outcome, dag, method_name)`
   → `BackdoorResult` carrying `(ate, identified, estimand_str)`.
-- `placebo_refutation(cells, *, treatment, outcome, dag,
+- `placebo_refutation(df, *, treatment, outcome, dag,
   method_name)` → `RefutationResult` carrying `(real_ate,
   refuted_ate, drift)`.
 - `random_common_cause_refutation(...)` → same shape.
@@ -95,7 +95,7 @@ class RefutationResult:
 
 @analysis
 def backdoor_ate(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment: str,
     outcome: str,
@@ -106,7 +106,7 @@ def backdoor_ate(
     under `dag`. Returns identified=False when the DAG admits
     no admissible adjustment."""
     return backdoor_ate_rows(
-        to_dicts(cells), treatment=treatment, outcome=outcome,
+        to_dicts(df), treatment=treatment, outcome=outcome,
         dag=dag, method_name=method_name,
     )
 
@@ -153,7 +153,7 @@ def backdoor_ate_rows(
 
 
 def run_refuter(
-    cells: Iterable[Mapping[str, object]],
+    rows: Iterable[Mapping[str, object]],
     treatment: str,
     outcome: str,
     dag: DAGLike,
@@ -170,9 +170,9 @@ def run_refuter(
     independently of the numpy global state — without it,
     cross-hypothesis test runs that consume the global RNG drift
     refuter outputs and flip downstream verdicts."""
-    cells_list = list(cells)
+    rows_list = list(rows)
     df, identified, estimate = backdoor_estimate(
-        cells_list, treatment, outcome, dag, method_name,
+        rows_list, treatment, outcome, dag, method_name,
     )
     if estimate is None:
         return RefutationResult(
@@ -214,7 +214,7 @@ def run_refuter(
 
 @analysis
 def placebo_refutation(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment: str,
     outcome: str,
@@ -240,7 +240,7 @@ def placebo_refutation(
     variation for cross-session reproducibility; pass an
     explicit different seed to probe sensitivity to the
     synthetic-confounder draw."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     return run_refuter(
         rows, treatment, outcome, dag, method_name,
         refuter_method='placebo_treatment_refuter',
@@ -250,7 +250,7 @@ def placebo_refutation(
 
 @analysis
 def random_common_cause_refutation(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment: str,
     outcome: str,
@@ -271,7 +271,7 @@ def random_common_cause_refutation(
     were partially-stable-by-accident under that scheme.
     Deterministic seed 0 locks the synthetic-confounder draw;
     pass a different int to probe sensitivity."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     return run_refuter(
         rows, treatment, outcome, dag, method_name,
         refuter_method='random_common_cause',

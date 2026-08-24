@@ -5,10 +5,10 @@ The catalogue is a discovery primitive: it answers "what data
 exists, and where, and in what state?" without taking any
 actions. Each row carries typed `local` and `cloud` slices
 (`LocalCorpusInfo | None`, `CloudCorpusInfo | None`), plus a
-`status` discriminator naming the cell in the cloud × local
+`status` discriminator naming the row in the cloud × local
 matrix. `in_progress` overlays orthogonally as a bool.
 
-Provenance awareness: `runs.parquet` is the per-cell provenance
+Provenance awareness: `runs.parquet` is the per-row provenance
 store (RunRow / TraceRow join by UUID). The catalogue surfaces
 both sides at runs-parquet granularity: cloud
 `runs_n_row_ids` (from the manifest's `runs.parquet` entry
@@ -142,9 +142,9 @@ def _classify(
 ) -> _Status:
     """Pure classification of one corpus state from four bool inputs.
 
-    Six of the 16 cells (those with `local_dir=F` AND
+    Six of the 16 rows (those with `local_dir=F` AND
     `manifest=T` OR `parquets=T`) are UNREACHABLE by filesystem
-    ontology and raise. One cell (`F, F, F, F`) is filtered by
+    ontology and raise. One row (`F, F, F, F`) is filtered by
     the walk qualifier and also raises.
     """
     if not has_local_dir:
@@ -156,7 +156,7 @@ def _classify(
             )
         if not has_cloud_manifest:
             raise AssertionError(
-                'upstream qualifier filters this cell',
+                'upstream qualifier filters this row',
             )
         return 'CLOUD_ORPHAN'
 
@@ -482,21 +482,21 @@ def to_polars(rows: Sequence[CorpusInventoryRow]) -> pl.DataFrame:
     return pl.DataFrame(flat, schema=POLARS_SCHEMA)
 
 
-# ============ Arm/leaves view (per-cell content) ============
+# ============ Arm/leaves view (per-row content) ============
 
 @dataclass(frozen=True, slots=True)
 class ArmLeafProfile:
     """Per-(corpus, arm) configurational fingerprint, sourced from
     `runs.parquet` columns. Both `leaves` and `exogenous` map a
     path → sorted tuple of distinct stringified values observed
-    across that arm's cells (length 1 for constant; longer for
+    across that arm's rows (length 1 for constant; longer for
     sweep). The split mirrors the framework's vocabulary:
     `leaves` are composition-time scalars (RL calls them HPs);
     `exogenous` are substrate-declared `Annotated[T, Exogenous]`
     kwargs (env_name, seed, …)."""
     corpus: str                                # parent/name addr
     arm: str
-    n_cells: int
+    n_rows: int
     leaves: Mapping[str, tuple[str, ...]]
     exogenous: Mapping[str, tuple[str, ...]]
 
@@ -584,7 +584,7 @@ def partition_columns(
 
 
 def _scalar_to_str(v: object) -> str | None:
-    """Stringify a parquet cell value for leaf signature use.
+    """Stringify a parquet row value for leaf signature use.
     Tuples / lists rendered as `(x,y,z)` for parity with the
     `q_network.hidden = (64, 64)` pattern. Returns None for null
     inputs so callers can filter empties."""
@@ -628,7 +628,7 @@ def arm_leaves(
     (corpus, arm_key) pair. Each profile carries:
 
     - `leaves`: composition-time scalars (one entry per leaf path,
-      sorted tuple of distinct values across cells)
+      sorted tuple of distinct values across rows)
     - `exogenous`: substrate-declared `Annotated[T, Exogenous]`
       kwargs (env_name, seed, etc.) — same shape
 
@@ -692,7 +692,7 @@ def arm_leaves(
             leaf_map = _collect_value_map(sub, leaves)
             exo_map = _collect_value_map(sub, exogenous_cols)
             profiles.append(ArmLeafProfile(
-                corpus=addr, arm=arm, n_cells=sub.height,
+                corpus=addr, arm=arm, n_rows=sub.height,
                 leaves=leaf_map, exogenous=exo_map,
             ))
     profiles.sort(key=lambda p: (p.corpus, p.arm))
@@ -731,7 +731,7 @@ def arm_leaves_to_polars_long(
 ) -> pl.DataFrame:
     """One row per `(corpus, arm, path, value)` — sweep arms
     produce multiple rows for the same path. `kind` discriminates
-    leaf vs exogenous. `n_cells` is intentionally NOT denormalized
+    leaf vs exogenous. `n_rows` is intentionally NOT denormalized
     here (it's per-(corpus, arm), not per-(arm, path, value)); call
     `arm_leaves_to_polars_wide` or read it off the profile list
     directly when you need it.
@@ -778,7 +778,7 @@ def arm_leaves_to_polars_wide(
         row: dict[str, object] = {
             'corpus':  p.corpus,
             'arm':     p.arm,
-            'n_cells': p.n_cells,
+            'n_rows': p.n_rows,
         }
         for path in all_paths:
             vals = p.leaves.get(path) or p.exogenous.get(path) or ()
@@ -792,7 +792,7 @@ def arm_leaves_to_polars_wide(
     schema: dict[str, pl.DataType | type[pl.DataType]] = {
         'corpus':  pl.String,
         'arm':     pl.String,
-        'n_cells': pl.UInt32,
+        'n_rows': pl.UInt32,
     }
     for path in all_paths:
         schema[path] = pl.String

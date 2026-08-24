@@ -10,7 +10,7 @@ Three severity tiers per `ADMISSION_GATES_DESIGN.md`:
   etc.). Warning surfaces on `BridgeEvaluation.warnings`.
 - **INFO** — diagnostic note; not normally surfaced.
 
-A gate is a plain callable: `(bridge, filtered_cells, ctx) ->
+A gate is a plain callable: `(bridge, filtered_rows, ctx) ->
 GateResult | None`, with `ctx: GateContext` carrying the
 evaluation's claim composition and/or leaf registry (the
 framework constructs it; gates only read it). Returning None
@@ -58,12 +58,12 @@ def _claim_leaves(claim: Claim[..., object]) -> frozenset[str]:
 
     - `regime='leaf'`: arm-level config (`gamma`, `replay.capacity`,
       `optimizer.inner.lr`, …).
-    - `regime='exogenous'`: per-cell framework-injected values
-      (`env`, `env_params`, `n_actions`, …) plus per-cell author
+    - `regime='exogenous'`: per-row framework-injected values
+      (`env`, `env_params`, `n_actions`, …) plus per-row author
       grid dimensions (`env_name`, `seed`, `wrappers`).
 
     Both are exogenous from the gate's perspective — neither is
-    "produced by the cell running" — so the endogeneity classifier
+    "produced by the row running" — so the endogeneity classifier
     needs the union. (Note: in current substrates with `Env` under
     `TYPE_CHECKING`, the runtime regime detection collapses
     everything to 'leaf' due to unresolved forward refs, so this
@@ -87,7 +87,7 @@ def is_endogenous(name: str, claim: Claim[..., object]) -> bool:
     2. Registered `@measurable` → recurse via `transitive_reads`;
        endogenous iff any base case is itself outside `claim`'s
        leaves.
-    3. Otherwise → cell-controlled primitive by elimination
+    3. Otherwise → row-controlled primitive by elimination
        (trajectory output) → endogenous.
 
     A measurable closing only over leaves classifies as exogenous
@@ -111,7 +111,7 @@ if TYPE_CHECKING:
 
 CONTRAST_ARM_FIELD = 'contrast_arm'
 """Evaluation-transient column `evaluate()` stamps on the scoped
-cells selected by a value-based `DoEffect`. Its only values are the
+rows selected by a value-based `DoEffect`. Its only values are the
 symbolic analysis identities `baseline` and `treatment`; source
 values and their display formatting never become arm identity.
 Reserved: evaluation raises if the input already carries it.
@@ -174,14 +174,14 @@ class GateContext:
 # Protocol for admission gates. We use Protocol (not Callable) so
 # the positional `ctx` parameter is part of the typed contract.
 class AdmissionGate(Protocol):
-    """Typed callable: a gate runs against (bridge, cells) plus
+    """Typed callable: a gate runs against (bridge, rows) plus
     the evaluation's `GateContext`, returns a `GateResult` (with
     `passed=True/False` for a fired/silent verdict) or `None`
     when the gate doesn't apply to this bridge."""
     def __call__(
         self,
         bridge: 'Bridge',
-        cells: Sequence[Mapping[str, object]],
+        rows: Sequence[Mapping[str, object]],
         ctx: GateContext,
     ) -> GateResult | None: ...
 
@@ -204,7 +204,7 @@ def value_contrast_active(bridge: 'Bridge') -> bool:
 
 def distinct_arms(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
     """BLOCK: a `DoEffect`-sourced bridge whose arms produce
@@ -212,7 +212,7 @@ def distinct_arms(
     self-vs-self (binary) or has collapsed levels (N-arm).
     Replaces today's `paired_g` runtime ValueError with a clean
     `Verdict.INADMISSIBLE`."""
-    del cells, ctx  # not consulted
+    del rows, ctx  # not consulted
     if not isinstance(bridge.source, DoEffect):
         return None
     arm_keys = bridge.source.arm_keys()
@@ -233,11 +233,11 @@ def distinct_arms(
 
 def resolved_source(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
     """BLOCK: Bridge.source string references a column not
-    present in the filtered cells. Catches typo'd source names
+    present in the filtered rows. Catches typo'd source names
     (e.g. `'mc_returns'` for `'mc_return'`) at gate time with a
     clear message; orthogonal to `EXOGENOUS_SOURCE`. Structural
     DoEffect sources don't apply, but value effects do name
@@ -252,7 +252,7 @@ def resolved_source(
         names = source_names
     else:
         names = (source if isinstance(source, str) else source.name,)
-    if not cells:
+    if not rows:
         return None  # empty corpus — let downstream surface the issue
     # Iterable[Mapping] inputs may be heterogeneous while a live record
     # grows. Presence in any scoped row is enough; value selection later
@@ -261,10 +261,10 @@ def resolved_source(
     # the first row answers almost always — the full O(rows) key union
     # runs only when a name is absent there (heterogeneous live
     # records, and the failure path that reports available columns).
-    if all(n in cells[0] for n in names):
+    if all(n in rows[0] for n in names):
         return None
     available = frozenset(
-        key for cell in cells for key in cell.keys()
+        key for row in rows for key in row.keys()
     )
     missing = [n for n in names if n not in available]
     if not missing:
@@ -276,7 +276,7 @@ def resolved_source(
         passed=False,
         message=(
             f'Bridge {bridge.name!r} sources on column {name!r} '
-            f'which is not in the filtered cells. Likely a typo '
+            f'which is not in the filtered rows. Likely a typo '
             f'or a measurable not materialised in this corpus; '
             f'first 20 available columns across scoped rows: '
             f'{sorted(available)[:20]}.'
@@ -286,15 +286,15 @@ def resolved_source(
 
 def distinct_units(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
     """WARN (BLOCK below 4): the bridge's source varies at a COARSER
-    grain than the cell, so the row count overstates n.
+    grain than the row, so the row count overstates n.
 
     The failure this catches: a source that is a property of some
-    unit above the cell — a bed, a map, an environment — replicated
-    across the cells belonging to that unit. Each replicate then
+    unit above the row — a bed, a map, an environment — replicated
+    across the rows belonging to that unit. Each replicate then
     enters the analysis as an independent observation, and the
     p-value is computed against a sample size the design never had.
     Observed in the wild on first outside use: a bed-level covariate
@@ -306,12 +306,12 @@ def distinct_units(
     number of rows. This gate reports it. It does not aggregate for
     you — the right unit is the author's call, and the fix may be
     either to aggregate or to declare that the replicates really are
-    independent (e.g. the source is measured per cell, not inherited).
+    independent (e.g. the source is measured per row, not inherited).
 
     DoEffect sources don't apply: an arm indicator is meant to repeat
-    across cells, and `pair_by` already carries the design there —
+    across rows, and `pair_by` already carries the design there —
     which covers value-based effects too, since those are DoEffects.
-    Bool sources don't apply either: a per-cell binary indicator has
+    Bool sources don't apply either: a per-row binary indicator has
     2 distinct values by construction — value cardinality says
     nothing about the grain it was measured at.
 
@@ -321,13 +321,13 @@ def distinct_units(
     at k."""
     del ctx
     source = bridge.source
-    if isinstance(source, DoEffect) or not cells:
+    if isinstance(source, DoEffect) or not rows:
         return None
     name = source if isinstance(source, str) else source.name
-    if name not in cells[0]:
+    if name not in rows[0]:
         return None  # `resolved_source` reports this first
     vals: list[float] = []
-    for c in cells:
+    for c in rows:
         v = c.get(name)
         if isinstance(v, bool):
             continue  # binary indicator: cardinality ≠ grain
@@ -335,10 +335,10 @@ def distinct_units(
             vals.append(round(float(v), 12))
     if not vals:
         return None
-    n_cells, n_eff = len(vals), len(set(vals))
-    if n_eff >= n_cells:
-        return None  # every cell its own value: nothing to report
-    if n_eff * 2 > n_cells:
+    n_rows, n_eff = len(vals), len(set(vals))
+    if n_eff >= n_rows:
+        return None  # every row its own value: nothing to report
+    if n_eff * 2 > n_rows:
         return None  # mild ties (rank data); not replication
     block = n_eff < 4
     return GateResult(
@@ -347,18 +347,18 @@ def distinct_units(
         passed=False,
         message=(
             f'Bridge {bridge.name!r} sources on {name!r}, which takes only '
-            f'{n_eff} distinct values across {n_cells} cells. The effective '
-            f'sample size is {n_eff}, not {n_cells}: the source varies at a '
-            f'coarser grain than the cell, so the replicates are not '
+            f'{n_eff} distinct values across {n_rows} rows. The effective '
+            f'sample size is {n_eff}, not {n_rows}: the source varies at a '
+            f'coarser grain than the row, so the replicates are not '
             f'independent observations of it. Aggregate to that unit, or '
-            f'confirm the source is measured per cell.'
+            f'confirm the source is measured per row.'
         ),
     )
 
 
 def exogenous_source(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
     """Adjudicate the claimed source of an interventional bridge.
@@ -387,7 +387,7 @@ def exogenous_source(
 
     Per ADMISSION_GATES_DESIGN.md § Principle (exogenous vs
     endogenous)."""
-    del cells
+    del rows
     # Lazy import to avoid Tier->bridge cycle.
     from corroborate.graph.causal import Tier
     source = bridge.source
@@ -477,7 +477,7 @@ def exogenous_source(
                 f'Tier.INTERVENTIONAL bridge {bridge.name!r} sourced '
                 f'on {name!r}, which is a leaf of the outermost '
                 f'claim (author-controlled at design time, not '
-                f'produced by the cell). Causal claims require an '
+                f'produced by the row). Causal claims require an '
                 f'endogenous source — find the delegate (e.g., '
                 f'`effective_horizon` for γ, `q_divergence_score` '
                 f'for sync_period). See ADMISSION_GATES_DESIGN.md § '
@@ -502,7 +502,7 @@ def exogenous_source(
 
 def exogenous_scope(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
     """WARN: `Bridge.scope` references only exogenous columns
@@ -518,14 +518,14 @@ def exogenous_scope(
     measurables exist to scope on, which an external record may
     simply not carry (its natural scope axes ARE configuration
     columns like `env_id`)."""
-    del cells
+    del rows
     if bridge.scope is None:
         return None
     if ctx.claim is None:
         return None
     # DeferredScope: extract column references from the static_scope
     # half if any; the dynamic part references the stratify column
-    # (a regular cell column, not a measurable).
+    # (a regular row column, not a measurable).
     from corroborate.bridge.deferred_scope import DeferredScope
     if isinstance(bridge.scope, DeferredScope):
         static_expr = bridge.scope.static_scope
@@ -554,7 +554,7 @@ def exogenous_scope(
 
 def no_predicted_direction(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
     """INFO: bridge didn't declare `predicted_direction`. The
@@ -562,7 +562,7 @@ def no_predicted_direction(
     via `verdict_from_paired_stats`; sign-flip refutations are
     silently absorbed as NO_EFFECT. Author-friendly diagnostic;
     not a bug."""
-    del cells, ctx
+    del rows, ctx
     if bridge.predicted_direction is not None:
         return None
     return GateResult(
@@ -615,7 +615,7 @@ def _normalised(value: object) -> object:
 
 def contrast_present(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
     """BLOCK when one of an explicit value effect's arms is absent."""
@@ -628,8 +628,8 @@ def contrast_present(
     expected = frozenset(effect.arm_keys())
     present = frozenset(
         label
-        for cell in cells
-        if isinstance((label := cell.get(CONTRAST_ARM_FIELD)), str)
+        for row in rows
+        if isinstance((label := row.get(CONTRAST_ARM_FIELD)), str)
     )
     missing = expected.difference(present)
     if not missing:
@@ -680,13 +680,13 @@ def _same_value_set(left: Sequence[object], right: Sequence[object]) -> bool:
 
 def contrast_isolation(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
     """Is anything else moving with the declared contrast?
 
     Two checks compose, graded by the leaf registry, over exactly
-    the cells this claim admits, re-run on every evaluation as the
+    the rows this claim admits, re-run on every evaluation as the
     record grows:
 
     1. **Registered balance (BLOCK).** Each configuration leaf in
@@ -703,7 +703,7 @@ def contrast_isolation(
        registry that are constant within each arm but differ
        across arms — a producer label, or an unlogged knob; only
        the author can say which, so the record shows a warning
-       rather than a verdict. Skipped below two cells per arm,
+       rather than a verdict. Skipped below two rows per arm,
        where every varying column would false-positive.
 
     Neither check certifies assignment or the absence of hidden
@@ -728,7 +728,7 @@ def contrast_isolation(
         CONTRAST_ARM_FIELD, *declared, 'id', *bridge.pair_by,
         *outcome_family(
             bridge.target_name,
-            (key for cell in cells for key in cell.keys()),
+            (key for row in rows for key in row.keys()),
         ),
     }
     expected = frozenset(effect.arm_keys())
@@ -736,12 +736,12 @@ def contrast_isolation(
     by_unit: dict[
         tuple[object, ...], dict[str, list[Mapping[str, object]]],
     ] = {}
-    for cell in cells:
-        label = cell.get(CONTRAST_ARM_FIELD)
+    for row in rows:
+        label = row.get(CONTRAST_ARM_FIELD)
         if isinstance(label, str):
-            by_arm.setdefault(label, []).append(cell)
-            unit = tuple(cell.get(key) for key in bridge.pair_by)
-            by_unit.setdefault(unit, {}).setdefault(label, []).append(cell)
+            by_arm.setdefault(label, []).append(row)
+            unit = tuple(row.get(key) for key in bridge.pair_by)
+            by_unit.setdefault(unit, {}).setdefault(label, []).append(row)
     if not by_arm:
         return None  # nothing matched the declaration: gate is moot
 
@@ -754,8 +754,8 @@ def contrast_isolation(
     ):
         columns: set[str] = set()
         for rows in arms:
-            for cell in rows:
-                columns.update(cell.keys())
+            for row in rows:
+                columns.update(row.keys())
         riders: list[str] = []
         for column in sorted(columns - ignore - registered):
             try:
@@ -764,8 +764,8 @@ def contrast_isolation(
                     for rows in arms
                 ]
             except TypeError:
-                # Unhashable cell values (varying list-typed
-                # trajectory / trace columns, dict-typed cells)
+                # Unhashable row values (varying list-typed
+                # trajectory / trace columns, dict-typed rows)
                 # aren't configuration; skip. Constant record
                 # arrays collapsed to their scalar above.
                 continue
@@ -916,7 +916,7 @@ def contrast_isolation(
 
 def pair_completeness(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
     """WARN: pairing units of a value contrast missing one or more
@@ -932,11 +932,11 @@ def pair_completeness(
         return None
     expected = frozenset(effect.arm_keys())
     arms_by_unit: dict[tuple[object, ...], set[str]] = {}
-    for cell in cells:
-        label = cell.get(CONTRAST_ARM_FIELD)
+    for row in rows:
+        label = row.get(CONTRAST_ARM_FIELD)
         if not isinstance(label, str):
             continue
-        unit = tuple(cell.get(key) for key in bridge.pair_by)
+        unit = tuple(row.get(key) for key in bridge.pair_by)
         arms_by_unit.setdefault(unit, set()).add(label)
     if not arms_by_unit:
         return None  # no derived conditions: gate doesn't apply
@@ -960,11 +960,11 @@ def pair_completeness(
 
 def target_finiteness(
     bridge: 'Bridge',
-    cells: Sequence[Mapping[str, object]],
+    rows: Sequence[Mapping[str, object]],
     ctx: GateContext,
 ) -> GateResult | None:
-    """WARN: cells in scope whose target resolves to no finite
-    value. Analyses drop such cells silently (a paired analysis
+    """WARN: rows in scope whose target resolves to no finite
+    value. Analyses drop such rows silently (a paired analysis
     drops the whole pairing unit), so a run truncated before the
     claim's horizon — or a horizon that never aligned with the
     producer's dump grid at all — must land on the verdict
@@ -974,15 +974,15 @@ def target_finiteness(
     del ctx
     if not value_contrast_active(bridge):
         return None
-    if not cells:
+    if not rows:
         return None
     # Lazy: corroborate.analyses imports the bridge package at
     # import time; resolving here at call time avoids the cycle.
-    from corroborate.analyses._cell_value import resolve_value
+    from corroborate.analyses._row_value import resolve_value
     missing = 0
-    for cell in cells:
+    for row in rows:
         try:
-            value = resolve_value(cell, bridge.target_name)
+            value = resolve_value(row, bridge.target_name)
         except (KeyError, TypeError):
             missing += 1
             continue
@@ -994,7 +994,7 @@ def target_finiteness(
             level=GateLevel.WARN,
             passed=False,
             message=(
-                f'{missing} of {len(cells)} cell(s) in scope '
+                f'{missing} of {len(rows)} row(s) in scope '
                 f'carry no finite {bridge.target_name!r}; '
                 f'analyses drop them (a paired analysis drops '
                 f'the whole pairing unit)'

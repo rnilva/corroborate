@@ -181,9 +181,9 @@ def test_evict_drops_sources_entry(tmp_path: Path) -> None:
 
     # Two-corpus cache: A and B.
     _write_cache_parquet(cache_path, [
-        {'id': 'cell-a-0', 'corpus': 'corpus_A', 'pad': 'x' * 200},
-        {'id': 'cell-a-1', 'corpus': 'corpus_A', 'pad': 'x' * 200},
-        {'id': 'cell-b-0', 'corpus': 'corpus_B', 'pad': 'x' * 200},
+        {'id': 'row-a-0', 'corpus': 'corpus_A', 'pad': 'x' * 200},
+        {'id': 'row-a-1', 'corpus': 'corpus_A', 'pad': 'x' * 200},
+        {'id': 'row-b-0', 'corpus': 'corpus_B', 'pad': 'x' * 200},
     ])
     # Sidecar lists both.
     _write_sources(sources_path, CacheSources(sources=(
@@ -222,7 +222,7 @@ def test_evict_removes_sidecar_when_all_entries_dropped(tmp_path: Path) -> None:
     sources_path = _sources_path(cache_path)
 
     _write_cache_parquet(cache_path, [
-        {'id': 'cell-a-0', 'corpus': 'corpus_A', 'pad': 'x' * 200},
+        {'id': 'row-a-0', 'corpus': 'corpus_A', 'pad': 'x' * 200},
     ])
     _write_sources(sources_path, CacheSources(
         sources=(_make_entry('corpus_A'),),
@@ -240,7 +240,7 @@ def test_evict_no_op_when_no_sidecar(tmp_path: Path) -> None:
     """evict() must not fail when there's no sidecar to mirror."""
     cache_path = tmp_path / 'ddqn.parquet'
     _write_cache_parquet(cache_path, [
-        {'id': 'cell-a-0', 'corpus': 'corpus_A', 'pad': 'x' * 200},
+        {'id': 'row-a-0', 'corpus': 'corpus_A', 'pad': 'x' * 200},
     ])
 
     total, _counts = evict(
@@ -422,13 +422,13 @@ def _make_corpus_runs(
 
 
 def test_check_returns_matched_when_counts_agree(tmp_path: Path) -> None:
-    """Test #6 happy path: cache cells == on-disk rows → MATCHED."""
+    """Test #6 happy path: cache rows == on-disk rows → MATCHED."""
     cache_path = tmp_path / 'ddqn.parquet'
     data_root = tmp_path / 'data'
 
     _ = _make_corpus_runs(data_root, 'cartpole', n_rows=60)
     _write_cache_parquet(cache_path, [
-        {'id': f'cell-{i}', 'corpus': 'cartpole', 'pad': 'x' * 200}
+        {'id': f'row-{i}', 'corpus': 'cartpole', 'pad': 'x' * 200}
         for i in range(60)
     ])
     _write_sources(_sources_path(cache_path), CacheSources(sources=(
@@ -439,8 +439,8 @@ def test_check_returns_matched_when_counts_agree(tmp_path: Path) -> None:
     assert len(drifts) == 1
     d = drifts[0]
     assert d.status == 'MATCHED'
-    assert d.cache_cell_count == 60
-    assert d.current_cell_count == 60
+    assert d.cache_row_count == 60
+    assert d.current_row_count == 60
 
 
 def test_check_detects_drifted(tmp_path: Path) -> None:
@@ -450,7 +450,7 @@ def test_check_detects_drifted(tmp_path: Path) -> None:
 
     _ = _make_corpus_runs(data_root, 'cartpole', n_rows=50)  # less than cache
     _write_cache_parquet(cache_path, [
-        {'id': f'cell-{i}', 'corpus': 'cartpole', 'pad': 'x' * 200}
+        {'id': f'row-{i}', 'corpus': 'cartpole', 'pad': 'x' * 200}
         for i in range(60)
     ])
     _write_sources(_sources_path(cache_path), CacheSources(sources=(
@@ -461,13 +461,13 @@ def test_check_detects_drifted(tmp_path: Path) -> None:
     assert len(drifts) == 1
     d = drifts[0]
     assert d.status == 'DRIFTED'
-    assert d.cache_cell_count == 60
-    assert d.current_cell_count == 50
+    assert d.cache_row_count == 60
+    assert d.current_row_count == 50
 
 
 def test_check_missing_local(tmp_path: Path) -> None:
     """Test #7: corpus dir deleted from disk → MISSING_LOCAL,
-    current_cell_count is None (NOT 0 — distinguishes from real
+    current_row_count is None (NOT 0 — distinguishes from real
     zero per the R3 fix)."""
     cache_path = tmp_path / 'ddqn.parquet'
     data_root = tmp_path / 'data'
@@ -484,13 +484,13 @@ def test_check_missing_local(tmp_path: Path) -> None:
     assert len(drifts) == 1
     d = drifts[0]
     assert d.status == 'MISSING_LOCAL'
-    assert d.current_cell_count is None  # critical: None vs 0
+    assert d.current_row_count is None  # critical: None vs 0
 
 
 def test_check_zero_rows_is_real_zero(tmp_path: Path) -> None:
     """Test #8 (R3 fix): runs.parquet has 0 rows but the `id`
-    column exists → current_cell_count is 0, NOT None. If cache
-    also has 0 cells, status is MATCHED (real zero === real zero)."""
+    column exists → current_row_count is 0, NOT None. If cache
+    also has 0 rows, status is MATCHED (real zero === real zero)."""
     cache_path = tmp_path / 'ddqn.parquet'
     data_root = tmp_path / 'data'
 
@@ -503,7 +503,7 @@ def test_check_zero_rows_is_real_zero(tmp_path: Path) -> None:
 
     # The cache has rows for some other corpus; the sidecar has
     # an entry for 'empty' but the cache doesn't list 'empty' →
-    # STALE_SIDECAR_ENTRY with current_cell_count=0 (real zero).
+    # STALE_SIDECAR_ENTRY with current_row_count=0 (real zero).
     _write_cache_parquet(cache_path, [
         {'id': 'other-0', 'corpus': 'other', 'pad': 'x' * 200},
     ])
@@ -516,7 +516,7 @@ def test_check_zero_rows_is_real_zero(tmp_path: Path) -> None:
     # 'empty' in sidecar, not in cache → STALE_SIDECAR_ENTRY.
     assert 'empty' in by_corpus
     assert by_corpus['empty'].status == 'STALE_SIDECAR_ENTRY'
-    assert by_corpus['empty'].current_cell_count == 0  # real zero, NOT None
+    assert by_corpus['empty'].current_row_count == 0  # real zero, NOT None
     # 'other' in cache, not in sidecar → NO_SIDECAR_RECORD.
     assert 'other' in by_corpus
     assert by_corpus['other'].status == 'NO_SIDECAR_RECORD'
@@ -524,7 +524,7 @@ def test_check_zero_rows_is_real_zero(tmp_path: Path) -> None:
 
 def test_check_missing_id_column(tmp_path: Path) -> None:
     """Test #9 (R3 fix): runs.parquet exists but has no `id`
-    column → MISSING_LOCAL, current_cell_count=None."""
+    column → MISSING_LOCAL, current_row_count=None."""
     cache_path = tmp_path / 'ddqn.parquet'
     data_root = tmp_path / 'data'
 
@@ -541,7 +541,7 @@ def test_check_missing_id_column(tmp_path: Path) -> None:
     assert len(drifts) == 1
     d = drifts[0]
     assert d.status == 'MISSING_LOCAL'
-    assert d.current_cell_count is None
+    assert d.current_row_count is None
 
 
 def test_check_pre_sidecar_cache(tmp_path: Path) -> None:
@@ -577,7 +577,7 @@ def test_check_stale_sidecar_entry(tmp_path: Path) -> None:
     drifts = check_cache_sources(cache_path)
     by_corpus = {d.corpus: d for d in drifts}
     assert by_corpus['ghost'].status == 'STALE_SIDECAR_ENTRY'
-    assert by_corpus['ghost'].cache_cell_count == 0
-    # current_cell_count populated via §R3 so the operator can see
+    assert by_corpus['ghost'].cache_row_count == 0
+    # current_row_count populated via §R3 so the operator can see
     # whether the source is recoverable.
-    assert by_corpus['ghost'].current_cell_count == 5
+    assert by_corpus['ghost'].current_row_count == 5

@@ -2,7 +2,7 @@
 over the LG-SCM substrate.
 
 Builds a multi-burst, two-arm panel via `simulate_phased` (one
-cell per (arm, seed); each cell carries an array of length
+row per (arm, seed); each row carries an array of length
 `n_bursts` for `y_mean_per_burst` and `z_mean_per_burst`). The
 arm intervention is on `beta_xz` (treatment 0.6, baseline 0.4) so
 the per-burst marginal ρ(arm, Ȳ_b) is non-zero with closed-form
@@ -104,7 +104,7 @@ def _scm(beta_xz: float) -> LinearGaussianSCM:
 
 
 def _build_panel() -> pl.DataFrame:
-    """Two-arm phased panel. Each cell carries
+    """Two-arm phased panel. Each row carries
     `y_mean_per_burst` and `z_mean_per_burst` as `List(Float64)`
     columns (length n_bursts) — the input shape
     `dynamic_partial_spearman` consumes. Seeds are shared across
@@ -113,10 +113,10 @@ def _build_panel() -> pl.DataFrame:
     deterministic seeds make the test reproducible."""
     scm_t = tuple(_scm(_BETA_XZ_T) for _ in range(_N_BURSTS))
     scm_b = tuple(_scm(_BETA_XZ_B) for _ in range(_N_BURSTS))
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for s in range(_N_SEEDS_PER_ARM):
         obs_t = simulate_phased(scm_t, seed=s)
-        cells.append({
+        rows.append({
             'env_name': 'lg_scm',
             'gamma': 0.99,
             'arm_key': 'treatment',
@@ -125,7 +125,7 @@ def _build_panel() -> pl.DataFrame:
             'z_mean_per_burst': list(obs_t.z_mean_per_burst),
         })
         obs_b = simulate_phased(scm_b, seed=s)
-        cells.append({
+        rows.append({
             'env_name': 'lg_scm',
             'gamma': 0.99,
             'arm_key': 'baseline',
@@ -133,7 +133,7 @@ def _build_panel() -> pl.DataFrame:
             'y_mean_per_burst': list(obs_b.y_mean_per_burst),
             'z_mean_per_burst': list(obs_b.z_mean_per_burst),
         })
-    return pl.DataFrame(cells)
+    return pl.DataFrame(rows)
 
 
 def _population_point_biserial_r() -> float:
@@ -236,7 +236,7 @@ def test_lg_scm_dynamic_partial_is_null_when_mediator_d_separates() -> None:
 
 
 def test_lg_scm_per_burst_n_correct() -> None:
-    """Sanity: every burst sees `2 * _N_SEEDS_PER_ARM` cells in
+    """Sanity: every burst sees `2 * _N_SEEDS_PER_ARM` rows in
     the constructed panel."""
     df = _build_panel()
     results = dynamic_partial_spearman.fn(

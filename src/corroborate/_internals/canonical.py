@@ -17,8 +17,8 @@ the canonical string. Two consequences:
    canonicalise to `partial(Claim:adam;lr=0.0001)`. The schema
    evolves; the canonical form stays stable.
 
-2. Cells from sub-sweeps that did not override a parameter
-   match cells from sub-sweeps that explicitly set the parameter
+2. Rows from sub-sweeps that did not override a parameter
+   match rows from sub-sweeps that explicitly set the parameter
    to its default. Surfaced regime-mismatch reports won't fire
    on default-vs-explicit-default differences (see
    `_dedup_diagnostics._distinguishing_columns`'s None-as-wildcard
@@ -65,7 +65,7 @@ def _is_at_declared_default(
 
     Equality uses `==`, not `is`. Comparison failures (e.g.,
     numpy arrays raising on `==`) propagate as False — we err on
-    the side of NOT eliding, which preserves the cell as
+    the side of NOT eliding, which preserves the row as
     distinguishing.
     """
     if declared_default is not dataclasses.MISSING \

@@ -2,8 +2,8 @@
 
 A `Bridge` is a typed edge in the framework's claim graph: a
 `@claim_bridge`-decorated function whose body resolves to a
-`Verdict` for one (treatment, baseline) cell pair. The framework
-runs the bridge over a corpus via `evaluate(b, cells)`. Bridges
+`Verdict` for one (treatment, baseline) row pair. The framework
+runs the bridge over a corpus via `evaluate(b, rows)`. Bridges
 consume `@analysis`-registered fixtures via name-keyed parameter
 injection — the analysis-registry + fixture injection live
 alongside Bridge in this subpackage.

@@ -16,7 +16,7 @@ variance captures within-env config heterogeneity properly; the
 env-level covariate slope is estimated from between-env
 variation with SE that accounts for the within-env replicates.
 
-The composition: cells →
+The composition: rows →
 `stratified_arm_diff_pooled(stratify_by=...)` → per-stratum
 (`cohen_d`, `cohen_se`) panel → `StratumG` records →
 `meta_regress_panel(covariates_per_stratum=...)` →
@@ -47,7 +47,7 @@ from corroborate.stats.meta_regression import Pool
 
 @analysis
 def meta_regression_unpaired_d(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -87,12 +87,12 @@ def meta_regression_unpaired_d(
          `covariates_per_key={0.99: {'eff_h': 28}, 0.999: {'eff_h': 70}}`,
          `stratify_by=('gamma', 'total_steps', 'reward_scale')`.
 
-    2. **Continuous-from-cells**
-       (`continuous_covariate=<column>`): the named per-cell column
+    2. **Continuous-from-rows**
+       (`continuous_covariate=<column>`): the named per-row column
        is aggregated to per-stratum mean over the
-       `continuous_covariate_arm` cells (default `'baseline'`).
+       `continuous_covariate_arm` rows (default `'baseline'`).
        The covariate name in the result is `<column>`. NaN-skipping
-       mean; strata with no valid cells in the arm are dropped from
+       mean; strata with no valid rows in the arm are dropped from
        the panel. `covariates_per_key` and `covariate_key_field`
        are ignored in this mode.
 
@@ -111,7 +111,7 @@ def meta_regression_unpaired_d(
         raise ValueError(
             "meta_regression_unpaired_d: provide either "
             "`covariates_per_key` (key-based mode) or "
-            "`continuous_covariate` (per-cell aggregate mode).",
+            "`continuous_covariate` (per-row aggregate mode).",
         )
     if covariates_per_key is not None and continuous_covariate is not None:
         raise ValueError(
@@ -129,7 +129,7 @@ def meta_regression_unpaired_d(
     else:
         key_position = -1  # unused in continuous mode
     pooled = stratified_arm_diff_pooled.fn(
-        cells,
+        df,
         source=source,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
@@ -139,7 +139,7 @@ def meta_regression_unpaired_d(
         min_baseline_predictor=min_baseline_predictor,
         min_seeds_per_arm=min_seeds_per_arm,
     )
-    # In continuous mode, aggregate the per-cell column to per-stratum
+    # In continuous mode, aggregate the per-row column to per-stratum
     # baseline mean. NaN-skipping; strata with no valid arm rows are
     # dropped from the panel.
     cc_per_stratum: dict[tuple[object, ...], float] = {}
@@ -147,7 +147,7 @@ def meta_regression_unpaired_d(
         bucket: dict[tuple[object, ...], list[float]] = {}
         # Decode here, in the one branch that reads per-row values
         # — key-based mode never pays the full-frame decode.
-        for c in to_dicts(cells):
+        for c in to_dicts(df):
             if c.get(arm_field) != continuous_covariate_arm:
                 continue
             sid = tuple(c.get(k) for k in stratify_by)

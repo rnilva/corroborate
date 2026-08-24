@@ -29,7 +29,7 @@ def _write_real_parquet(p: Path, n_rows: int = 1000) -> None:
     import polars as pl
     p.parent.mkdir(parents=True, exist_ok=True)
     df = pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(n_rows)],
+        'id': [f'row-{i}' for i in range(n_rows)],
         'x': list(range(n_rows)),
     })
     df.write_parquet(p)
@@ -176,7 +176,7 @@ def test_archive_records_row_ids_for_runrow_parquet(
     """**Invariant I5** (SWEEP_PERSISTENCY.md): when a parquet
     archived via `archive()` carries an `id` column (RunRow or
     TraceRow shards), the manifest entry records the per-shard
-    list of IDs. Enables `id → shard → cell address` traceability
+    list of IDs. Enables `id → shard → row address` traceability
     when investigating anomalous rows in a merged corpus."""
     from corroborate.bridge.verdict import Verdict
     from corroborate.corpus.persistence import write_runrows
@@ -504,10 +504,10 @@ def test_purge_cloud_fallback_refuses_uncovered_row_ids(
     remote_prefix = f'file://{tmp_path / "remote"}'
     _ = _sweep_with_subcorpus_archived(sweep_dir, remote_prefix, 'canonical')
     # Replace top-level runs.parquet with row_ids that don't
-    # appear in the archived sub-corpus (cell-200 .. cell-399).
+    # appear in the archived sub-corpus (row-200 .. row-399).
     import polars as pl
     pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(200, 400)],
+        'id': [f'row-{i}' for i in range(200, 400)],
         'x': list(range(200)),
     }).write_parquet(sweep_dir / 'runs.parquet')
 
@@ -524,7 +524,7 @@ def test_archive_picks_up_nested_sidecar_tree(
     sweep_dir: Path, remote_root: str,
 ) -> None:
     """SIDECAR_DIRS walks recurse: nested layouts like
-    `q_checkpoints/<arm_name>/cell*.msgpack` (produced by multi-arm
+    `q_checkpoints/<arm_name>/row*.msgpack` (produced by multi-arm
     sweeps that namespace ckpts per intervention via the
     yaml_sweep.py post-merge lift) MUST be picked up by the default
     file selection, not just direct children of the sidecar dir.
@@ -638,7 +638,7 @@ def _write_multicol_parquet(p: Path, n_rows: int = 500) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     fat = lambda: [random.random() for _ in range(300)]
     df = pl.DataFrame({
-        'id': [f'cell-{i}' for i in range(n_rows)],
+        'id': [f'row-{i}' for i in range(n_rows)],
         'wanted_col': [random.random() for _ in range(n_rows)],
         'fat_col_a': [fat() for _ in range(n_rows)],
         'fat_col_b': [fat() for _ in range(n_rows)],

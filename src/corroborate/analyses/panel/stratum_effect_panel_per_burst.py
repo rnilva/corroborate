@@ -2,7 +2,7 @@
 panel via independent-samples seed pooling.
 
 The independent-samples counterpart to `paired_g_per_burst`: same
-per-burst-source iteration over per-cell ndarray data, but
+per-burst-source iteration over per-row ndarray data, but
 treatment and baseline seeds are pooled INDEPENDENTLY within each
 (env, burst) stratum (no seed pairing). Cohen's d uses the
 simple-mean-variance form, matching
@@ -20,13 +20,13 @@ migrate without redesigning their phase-consistency question
 shape.
 
 Shape:
-  cells → PerBurstPanelDResult
+  rows → PerBurstPanelDResult
   per (env, burst): independent-samples Cohen's d on the per-burst
   source's mean across the (treatment seeds, baseline seeds) pools.
 
 Same `source: Measurable[Mapping, NDArray]` parameter as
-`paired_g_per_burst`. Same per-cell ndarray shape contract
-(`(n_bursts,)` per cell). Same burst-spacing-agnostic
+`paired_g_per_burst`. Same per-row ndarray shape contract
+(`(n_bursts,)` per row). Same burst-spacing-agnostic
 contract.
 """
 from __future__ import annotations
@@ -41,7 +41,7 @@ import numpy.typing as npt
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.analyses._cell_value import evaluate_per_burst_source
+from corroborate.analyses._row_value import evaluate_per_burst_source
 from corroborate.bridge.analysis import analysis
 from corroborate.measurables import Measurable
 from corroborate.measurables.reductions import from_key, reduce_axis
@@ -123,7 +123,7 @@ def _cohen_d_indep_samples(
 
 @analysis
 def stratum_effect_panel_per_burst(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -136,8 +136,8 @@ def stratum_effect_panel_per_burst(
 ) -> PerBurstPanelDResult:
     """Per-(env, burst) independent-samples Cohen's d panel.
 
-    For each cell, evaluate `source` to get a per-burst vector
-    (length `n_bursts`). Group cells by `(env_name, arm)`; at each
+    For each row, evaluate `source` to get a per-burst vector
+    (length `n_bursts`). Group rows by `(env_name, arm)`; at each
     (env, burst) compute Cohen's d via the simple-mean-variance
     form on the treatment-seed pool vs the baseline-seed pool.
 
@@ -148,7 +148,7 @@ def stratum_effect_panel_per_burst(
     `paired_g_per_burst`.
 
     `env_name`, when supplied, restricts the analysis to one env
-    (skips cells with `record['env_name'] != env_name`). When
+    (skips rows with `record['env_name'] != env_name`). When
     None, all envs participate.
 
     `pair_by` is accepted from the bridge framework's calling
@@ -158,26 +158,26 @@ def stratum_effect_panel_per_burst(
     a value without erroring; pass `()` to make the absence
     explicit.
 
-    Bursts that don't reach length b on any cell don't contribute
-    (matches `paired_g_per_burst`'s multi-regime walk: cells with
+    Bursts that don't reach length b on any row don't contribute
+    (matches `paired_g_per_burst`'s multi-regime walk: rows with
     shorter trajectories naturally drop out of the higher-index
     burst strata)."""
-    rows = to_dicts(cells)
+    rows = to_dicts(df)
     del pair_by  # unused: independent-samples pooling doesn't pair seeds
 
     by_env_arm: dict[
         tuple[str, str], list[npt.NDArray[np.floating]],
     ] = {}
-    for cell in rows:
-        env = cell.get('env_name')
-        arm = cell.get(arm_field)
+    for row in rows:
+        env = row.get('env_name')
+        arm = row.get(arm_field)
         if not isinstance(env, str) or not isinstance(arm, str):
             continue
         if env_name is not None and env != env_name:
             continue
         if arm not in (treatment_arm, baseline_arm):
             continue
-        per_burst = evaluate_per_burst_source(source, cell)
+        per_burst = evaluate_per_burst_source(source, row)
         if per_burst.size == 0:
             continue
         by_env_arm.setdefault((env, arm), []).append(per_burst)

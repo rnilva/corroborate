@@ -3,7 +3,7 @@
 Currently one subcommand: `corroborate audit pre-registration
 <corpus_path>`. Resolves each committed bridge against the
 manifest at `<corpus_path>/pre_registration.json`, re-computes
-its source hash, runs the bridge against the corpus's cells, and
+its source hash, runs the bridge against the corpus's rows, and
 reports whether the empirical verdict matches the predicted
 verdict.
 
@@ -69,7 +69,7 @@ class AuditEntry:
     post-launch rewrite.
 
     `empirical_verdict`: the verdict the bridge produced when
-    re-run against the corpus's cells. `None` iff the bridge
+    re-run against the corpus's rows. `None` iff the bridge
     failed to resolve (unresolved bridges never run).
 
     `verdict_matches`: True iff `empirical_verdict ==
@@ -134,7 +134,7 @@ def _git_sha_in_history(sha: str, repo_root: Path) -> bool:
     return out.returncode == 0
 
 
-def _load_corpus_cells(corpus_path: Path) -> pl.DataFrame:
+def _load_corpus_rows(corpus_path: Path) -> pl.DataFrame:
     """Read `<corpus_path>/runs.parquet` into a DataFrame. Raises
     `FileNotFoundError` if missing — the audit pipeline runs the
     bridges against this data; without it there's nothing to
@@ -148,7 +148,7 @@ def _load_corpus_cells(corpus_path: Path) -> pl.DataFrame:
         return pl.read_parquet(direct)
     raise FileNotFoundError(
         f'{direct}: no runs.parquet at the corpus path. The audit '
-        f'needs the sweep\'s cells to re-run each committed bridge. '
+        f'needs the sweep\'s rows to re-run each committed bridge. '
         f'If this corpus is archived-only, run `corroborate restore '
         f'{corpus_path}` first.',
     )
@@ -183,11 +183,11 @@ def audit_pre_registration(
             manifest=manifest,
         )
 
-    # Lazy-load cells — if the corpus has no runs.parquet but the
+    # Lazy-load rows — if the corpus has no runs.parquet but the
     # manifest is present, we still want to report the resolution
     # status of each bridge before failing on data. Read the
-    # cells once up-front (raises if missing); audit then proceeds.
-    cells = _load_corpus_cells(corpus_path)
+    # rows once up-front (raises if missing); audit then proceeds.
+    rows = _load_corpus_rows(corpus_path)
 
     entries: list[AuditEntry] = []
     any_drift = False
@@ -211,10 +211,10 @@ def audit_pre_registration(
         current_hash = compute_bridge_source_hash(bridge)
         hash_matches = current_hash == commitment.source_hash
 
-        # Run the bridge against the corpus's cells. Errors here
+        # Run the bridge against the corpus's rows. Errors here
         # propagate — the audit's job is to report verdict drift,
         # not to silently swallow a bridge-evaluation crash.
-        empirical = evaluate(bridge, cells)
+        empirical = evaluate(bridge, rows)
         verdict_matches = empirical.verdict == commitment.predicted_verdict
         entries.append(AuditEntry(
             bridge_name=commitment.bridge_name,
@@ -323,7 +323,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         description=(
             'Re-resolve each bridge in <corpus>/pre_registration.json, '
             're-compute its source hash, run it against the corpus\'s '
-            'cells, and report drift. Exit codes: '
+            'rows, and report drift. Exit codes: '
             '0 match / 1 drift / 2 manifest-missing / '
             '3 git-hash-not-found / 4 bridge-unresolved. '
             'Detects post-launch rewrites and verdict drift; does NOT '
@@ -340,7 +340,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     _ = p_prereg.add_argument(
         '--strict', action='store_true',
         help='also exit 1 if a committed bridge produced '
-             'EMPTY_EXTENT (scope admitted no cells). Off by '
+             'EMPTY_EXTENT (scope admitted no rows). Off by '
              'default because EMPTY_EXTENT is a legitimate '
              'verdict for "Finding doesn\'t apply to this corpus".',
     )

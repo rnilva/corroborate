@@ -71,7 +71,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         '--ingest-all', type=Path, default=None, metavar='ROOT',
-        help='walk every corpus under ROOT and append new cells '
+        help='walk every corpus under ROOT and append new rows '
              'to the cache. The "I don\'t know what\'s new" path. '
              'Today\'s --data <root> behavior, renamed for honesty.',
     )
@@ -152,7 +152,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         '--evict', type=str, default=None, metavar='CORPUS[,CORPUS...]',
-        help='filter the cache parquet to drop all cells from the '
+        help='filter the cache parquet to drop all rows from the '
              'named corpora. Per-corpus stores under '
              'experiments/data/<corpus>/ are NOT touched. Useful '
              'to temporarily exclude a corpus from analysis '
@@ -234,8 +234,8 @@ def dispatch(args: argparse.Namespace) -> int:
         for name in names:
             n = counts.get(name, 0)
             mark = '✓' if n > 0 else '·'
-            print(f'  {mark} {name}: dropped {n} cells')
-        print(f'evict: {total} cells removed from cache.')
+            print(f'  {mark} {name}: dropped {n} rows')
+        print(f'evict: {total} rows removed from cache.')
         if total == 0:
             return 0
         return 0
@@ -646,7 +646,7 @@ def _check_and_report(module: str) -> int:
       current registry's closure hashes.
     - **Input-side** (cache-sources drift):
       `runner.check_cache_sources(cache_path)` compares the cache
-      parquet's per-corpus cell counts against the on-disk
+      parquet's per-corpus row counts against the on-disk
       `runs.parquet` of each source.
 
     Exits 0 when both clean, 2 when either reports drift —
@@ -698,8 +698,8 @@ def _check_and_report(module: str) -> int:
         for d in bad:
             line = (
                 f'  {d.corpus:50s}  status={d.status}  '
-                f'cache={d.cache_cell_count}  '
-                f'current={d.current_cell_count}'
+                f'cache={d.cache_row_count}  '
+                f'current={d.current_row_count}'
             )
             if d.remote_root is not None:
                 line += f'  remote={d.remote_root}'
@@ -759,7 +759,7 @@ def _print_verdicts(
             av_inline = f' [av: {"; ".join(ev.assumption_violations)}]'
         cluster_key = (ev.source_name, ev.target_name, ev.extent_hash)
         extent_clusters.setdefault(cluster_key, []).append(
-            (name, ev.n_cells_in_scope, v),
+            (name, ev.n_rows_in_scope, v),
         )
         print(f'{name:60s}  {v:24s}{cls}{av_inline}  {suffix}')
     print()
@@ -791,7 +791,7 @@ def _print_verdicts(
         name: PostEvalEntry(
             verdict=ev.verdict,
             extent_hash=ev.extent_hash,
-            n_cells_in_scope=ev.n_cells_in_scope,
+            n_rows_in_scope=ev.n_rows_in_scope,
         )
         for name, ev in results.items()
     }
@@ -820,7 +820,7 @@ def _print_verdicts(
             verdict_label = cluster_verdict(edge_members).value
             print(
                 f'  {verdict_label:14s}  ({len(members)} bridges, '
-                f'n_cells={n_label})  {src_short} → {tgt}',
+                f'n_rows={n_label})  {src_short} → {tgt}',
             )
             for member_name, _, _ in members:
                 print(f'      {member_name}')
@@ -828,7 +828,7 @@ def _print_verdicts(
             n_empty = len(empty_members)
             print(
                 f'  {n_empty} bridge(s) in empty-extent group(s) — '
-                f'scope admits zero cells on current cache.',
+                f'scope admits zero rows on current cache.',
             )
 
     # Findings rollup: every Hypothesis declares FINDINGS (possibly
@@ -864,7 +864,7 @@ def _print_verdicts(
             n_bridges = len(f.BRIDGES)
             # Distinct-extent count surfaces the structural shape
             # without naming it: `N bridges, 1 extent` = cluster
-            # pattern (parallel edges, shared admitted cells);
+            # pattern (parallel edges, shared admitted rows);
             # `N bridges, N extents` = envelope (per-scope sub-
             # claims). Framework reports counts, not labels —
             # cluster/envelope/chain interpretation lives where

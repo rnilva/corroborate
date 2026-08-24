@@ -198,14 +198,14 @@ def verdict_from_paired_stats(
 
 @dataclass(frozen=True, slots=True)
 class PooledStats:
-    """Random-effects pooled effect across cells/envs.
+    """Random-effects pooled effect across rows/envs.
 
-    `pooled_g` — DerSimonian-Laird-pooled Hedges' g across cells.
+    `pooled_g` — DerSimonian-Laird-pooled Hedges' g across rows.
     `se_pooled` — SE of the pooled estimate.
-    `tau2` — between-cell heterogeneity variance (DerSimonian-
+    `tau2` — between-row heterogeneity variance (DerSimonian-
       Laird estimator).
     `I2` — fraction of total variance attributable to between-
-      cell heterogeneity (Higgins).
+      row heterogeneity (Higgins).
     `Q` — Cochran's heterogeneity test statistic.
     `pi_lo`, `pi_hi` — 95% prediction interval (Higgins-Thompson-
       Spiegelhalter formula `pooled ± t_{n-2, 0.975} *
@@ -213,7 +213,7 @@ class PooledStats:
       max-g serve as honest backstops when the Gaussian-fit PI
       extrapolates past observed data.
     `empirical_min_g`, `empirical_max_g` — observed range.
-    `n_cells` — number of valid cells used in pooling.
+    `n_rows` — number of valid rows used in pooling.
     `assumption_violations` — distributional / sample-size flags
     derived from the empirical probe at `tests/analytic/robustness/
     test_dl_small_g_robustness.py`. Empty when DL is in its
@@ -227,7 +227,7 @@ class PooledStats:
     pi_hi: float
     empirical_min_g: float
     empirical_max_g: float
-    n_cells: int
+    n_rows: int
     assumption_violations: tuple[str, ...] = ()
 
 
@@ -235,16 +235,16 @@ def random_effects_summary(
     g_se_pairs: Sequence[tuple[float, float]],
 ) -> PooledStats:
     """DerSimonian-Laird random-effects pool of (Hedges' g, SE)
-    pairs across cells. Returns NaN-filled `PooledStats` when
-    fewer than 2 valid cells are present (PI undefined).
+    pairs across rows. Returns NaN-filled `PooledStats` when
+    fewer than 2 valid rows are present (PI undefined).
 
     v9-port of
     `poc_v9/poc_v8/framework/reporting/aggregation.py:159-207` —
     same DL formula, same Higgins I², same HTS prediction
     interval.
 
-    `g_se_pairs` — one (g, SE) per cell. NaN-bearing or
-    zero-SE cells are filtered out (DL needs `var > 0`).
+    `g_se_pairs` — one (g, SE) per row. NaN-bearing or
+    zero-SE rows are filtered out (DL needs `var > 0`).
 
     **Robustness.** DerSimonian-Laird's well-known small-G
     limitations (Veroniki et al. 2016, Langan et al. 2019):
@@ -275,7 +275,7 @@ def random_effects_summary(
             tau2=float('nan'), I2=float('nan'), Q=float('nan'),
             pi_lo=float('nan'), pi_hi=float('nan'),
             empirical_min_g=float('nan'), empirical_max_g=float('nan'),
-            n_cells=n,
+            n_rows=n,
         )
     gs = [g for g, _ in valid]
     vs = [se * se for _, se in valid]   # var = se²
@@ -319,39 +319,39 @@ def random_effects_summary(
         pi_hi=pi_hi,
         empirical_min_g=min(gs),
         empirical_max_g=max(gs),
-        n_cells=n,
-        assumption_violations=_dl_assumption_violations(n_cells=n, tau2=tau2),
+        n_rows=n,
+        assumption_violations=_dl_assumption_violations(n_rows=n, tau2=tau2),
     )
 
 
 def _dl_assumption_violations(
     *,
-    n_cells: int,
+    n_rows: int,
     tau2: float,
 ) -> tuple[str, ...]:
     """Heuristic checks on the DL pool, calibrated from the
     empirical probe at `tests/analytic/robustness/test_dl_small_g_robustness.py`.
 
-    - n_cells < 5: MC sampling SD on τ² is comparable to τ²
+    - n_rows < 5: MC sampling SD on τ² is comparable to τ²
       itself (CV ≈ 100%). Point estimate is unusable for
       inference. Prefer REML.
-    - 0 < tau2 < 0.02 AND n_cells < 10: DL's max(0, ·) clip
+    - 0 < tau2 < 0.02 AND n_rows < 10: DL's max(0, ·) clip
       produces a small positive bias at true τ²=0; below this
       threshold and at small G, the reading is consistent with
       "no real heterogeneity" rather than "modest heterogeneity."
     """
     violations: list[str] = []
-    if n_cells < 5:
+    if n_rows < 5:
         violations.append(
-            f'dl_small_g_unreliable_inference (n_cells={n_cells}, '
-            f'τ² CV ≈ {round(105 / max(1, n_cells / 3))}% — point '
+            f'dl_small_g_unreliable_inference (n_rows={n_rows}, '
+            f'τ² CV ≈ {round(105 / max(1, n_rows / 3))}% — point '
             f'estimate not interpretable; prefer REML when '
             f'available)'
         )
-    if 0.0 < tau2 < 0.02 and n_cells < 10:
+    if 0.0 < tau2 < 0.02 and n_rows < 10:
         violations.append(
             f'dl_clip_artifact_possible (τ²={tau2:.4f}, '
-            f'n_cells={n_cells}; consistent with true τ²=0 '
+            f'n_rows={n_rows}; consistent with true τ²=0 '
             f'inflated by max(0, ·) clip)'
         )
     return tuple(violations)
@@ -384,8 +384,8 @@ def random_effects_verdict(
 ) -> tuple[Verdict, RefutationClass | None]:
     """Apply Popperian aggregation to a random-effects pool.
 
-    - n_cells < 3 → POWER_INSUFFICIENT (DL τ² estimation
-      unreliable below 3 cells; PI fragile).
+    - n_rows < 3 → POWER_INSUFFICIENT (DL τ² estimation
+      unreliable below 3 rows; PI fragile).
     - PI brackets zero → NO_EFFECT/NULL_EFFECT (population
       effect could be zero; not robustly directional).
     - PI excludes zero in predicted direction:
@@ -395,7 +395,7 @@ def random_effects_verdict(
         meta-regression input).
     - PI strictly negative when predicted positive (or vice
       versa) → NO_EFFECT/SIGN_FLIP."""
-    if math.isnan(pooled.pooled_g) or pooled.n_cells < 3:
+    if math.isnan(pooled.pooled_g) or pooled.n_rows < 3:
         return (Verdict.POWER_INSUFFICIENT, RefutationClass.UNDERPOWERED)
 
     pi_excludes_zero = pooled.pi_lo > 0.0 or pooled.pi_hi < 0.0

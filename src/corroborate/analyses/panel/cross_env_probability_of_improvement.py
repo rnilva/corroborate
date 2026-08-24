@@ -57,7 +57,7 @@ from scipy.stats import mannwhitneyu  # type: ignore[attr-defined]
 import polars as pl
 
 from corroborate._internals.polars import to_dicts
-from corroborate.analyses._cell_value import resolve_value
+from corroborate.analyses._row_value import resolve_value
 from corroborate.bridge.analysis import analysis
 
 
@@ -97,7 +97,7 @@ class CrossEnvProbabilityOfImprovementResult:
     treat as descriptive at `n_strata < 20`.
 
     `n_strata` counts strata that survived `min_seeds_per_arm`;
-    cells in skipped strata are NOT in `per_stratum`."""
+    rows in skipped strata are NOT in `per_stratum`."""
     n_strata: int
     p_xy_mean: float
     p_permutation: float
@@ -157,7 +157,7 @@ def _bootstrap_p_xy(
 
 @analysis
 def cross_env_probability_of_improvement(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -173,11 +173,11 @@ def cross_env_probability_of_improvement(
     """Compute per-stratum `P(treatment > baseline)` via
     Mann-Whitney, then aggregate.
 
-    `stratify_by`: tuple of cell-record keys defining strata.
+    `stratify_by`: tuple of row-record keys defining strata.
     Default `('env_name',)`; common implementation choice is
     `('env_name', 'gamma')` for γ-conditional panels.
 
-    `min_seeds_per_arm`: strata with fewer than this many cells
+    `min_seeds_per_arm`: strata with fewer than this many rows
     in EITHER arm are skipped (no per-stratum P emitted).
     Default 5 matches typical RL-paper minimum.
 
@@ -194,19 +194,19 @@ def cross_env_probability_of_improvement(
     Returns a frozen dataclass carrying point estimate +
     permutation p (exact at any n) + bootstrap CI (asymptotic,
     descriptive at small n)."""
-    rows = to_dicts(cells)
-    cells_list = list(rows)
+    rows = to_dicts(df)
+    rows_list = list(rows)
 
     strata: dict[tuple[object, ...], dict[str, list[float]]] = {}
-    for cell in cells_list:
-        sid = tuple(cell.get(k) for k in stratify_by)
-        arm = cell.get(arm_field)
+    for row in rows_list:
+        sid = tuple(row.get(k) for k in stratify_by)
+        arm = row.get(arm_field)
         if not isinstance(arm, str):
             continue
         if arm != treatment_arm and arm != baseline_arm:
             continue
         try:
-            val = resolve_value(cell, source)
+            val = resolve_value(row, source)
         except KeyError:
             continue
         if not math.isfinite(val):

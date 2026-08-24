@@ -80,7 +80,7 @@ from corroborate_rl.tabular import (
     double_greedify_tabular,
     max_greedify_tabular,
 )
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -194,7 +194,7 @@ def test_factorial_recovers_closed_form_int_g() -> None:
     """
     cells = _generate_factorial_cells()
     result = factorial_2x2_interaction.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(cells),
         arm_a='arm_a', arm_b='arm_b',
         arm_c='arm_c', arm_d='arm_d',
         source='jensen_gap',
@@ -237,7 +237,7 @@ def test_factorial_corner_b_minus_a_closed_form() -> None:
     """
     cells = _generate_factorial_cells()
     result = factorial_2x2_interaction.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(cells),
         arm_a='arm_a', arm_b='arm_b',
         arm_c='arm_c', arm_d='arm_d',
         source='jensen_gap',
@@ -259,7 +259,7 @@ def test_factorial_corner_d_minus_c_near_zero() -> None:
     """
     cells = _generate_factorial_cells()
     result = factorial_2x2_interaction.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(cells),
         arm_a='arm_a', arm_b='arm_b',
         arm_c='arm_c', arm_d='arm_d',
         source='jensen_gap',
@@ -282,7 +282,7 @@ def test_factorial_corner_c_minus_a_closed_form() -> None:
     """
     cells = _generate_factorial_cells()
     result = factorial_2x2_interaction.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(cells),
         arm_a='arm_a', arm_b='arm_b',
         arm_c='arm_c', arm_d='arm_d',
         source='jensen_gap',
@@ -309,7 +309,7 @@ def test_factorial_corner_d_minus_b_matches_c_minus_a() -> None:
     """
     cells = _generate_factorial_cells()
     result = factorial_2x2_interaction.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(cells),
         arm_a='arm_a', arm_b='arm_b',
         arm_c='arm_c', arm_d='arm_d',
         source='jensen_gap',

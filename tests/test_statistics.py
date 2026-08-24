@@ -264,7 +264,7 @@ def test_verdict_held_for_no_predicted_direction() -> None:
 
 # ============ random_effects_summary ============
 
-def test_random_effects_summary_too_few_cells_returns_nan() -> None:
+def test_random_effects_summary_too_few_rows_returns_nan() -> None:
     """n<2 → all NaN. Pin every NaN-filled field on the early
     return — `float('nan')` mutations to `None` would store None
     in the PooledStats field, and `math.isnan(None)` raises
@@ -281,37 +281,37 @@ def test_random_effects_summary_too_few_cells_returns_nan() -> None:
     assert math.isnan(p.pi_hi)
     assert math.isnan(p.empirical_min_g)
     assert math.isnan(p.empirical_max_g)
-    assert p.n_cells == 1
+    assert p.n_rows == 1
 
 
 def test_random_effects_summary_at_n_equals_2_returns_pooled() -> None:
-    """n=2 valid cells: passes the n<2 guard, returns a real
+    """n=2 valid rows: passes the n<2 guard, returns a real
     pooled estimate (not NaN-filled). Pin `n < 2` against
     `n <= 2` and `n < 3` (both would NaN at n=2)."""
     from corroborate.stats import random_effects_summary
     p = random_effects_summary([(0.5, 0.1), (0.7, 0.1)])
-    assert p.n_cells == 2
+    assert p.n_rows == 2
     assert math.isfinite(p.pooled_g)
     assert math.isfinite(p.se_pooled)
 
 
-def test_random_effects_summary_drops_zero_se_cell() -> None:
-    """A cell with se=0 must be dropped (DL needs `var > 0`).
+def test_random_effects_summary_drops_zero_se_row() -> None:
+    """A row with se=0 must be dropped (DL needs `var > 0`).
     Pin `se > 0` against `se >= 0` mutant — keeping a zero-SE
-    cell would inject `1/0` into the inverse-variance weight.
+    row would inject `1/0` into the inverse-variance weight.
 
-    Construct: 2 valid cells + 1 zero-SE cell. After filtering,
+    Construct: 2 valid rows + 1 zero-SE row. After filtering,
     n=2 → real pooled estimate. With the mutant, the zero-SE
-    cell stays in → `1/var = inf` → pooled_g blows up or NaN."""
+    row stays in → `1/var = inf` → pooled_g blows up or NaN."""
     from corroborate.stats import random_effects_summary
     p = random_effects_summary([
         (0.5, 0.1), (0.7, 0.1), (1.0, 0.0),
     ])
-    assert p.n_cells == 2
+    assert p.n_rows == 2
     assert math.isfinite(p.pooled_g)
-    # The zero-SE cell would have dominated if kept (∞ weight).
+    # The zero-SE row would have dominated if kept (∞ weight).
     # Pooled g should sit around the average of the two valid
-    # cells (~0.6), not be 1.0.
+    # rows (~0.6), not be 1.0.
     assert 0.4 < p.pooled_g < 0.8
 
 
@@ -349,7 +349,7 @@ def test_random_effects_summary_pi_hi_uses_addition_not_division() -> None:
 
 
 def test_random_effects_summary_i2_bounded_at_zero() -> None:
-    """When Q < df (homogeneous cells), I² = max(0, (Q-df)/Q) = 0.
+    """When Q < df (homogeneous rows), I² = max(0, (Q-df)/Q) = 0.
     Pin `max(0.0, ...)` against `max(1.0, ...)` mutant which
     would lift the I² floor to 1."""
     from corroborate.stats import random_effects_summary
@@ -360,7 +360,7 @@ def test_random_effects_summary_i2_bounded_at_zero() -> None:
 
 def test_random_effects_summary_i2_uses_division_not_multiplication() -> None:
     """`I2 = (Q - df) / Q`. Pin against `(Q - df) * Q` and
-    `(Q + df) / Q` mutants. Constructed with heterogeneous cells
+    `(Q + df) / Q` mutants. Constructed with heterogeneous rows
     so Q is large enough to compute a non-trivial I²."""
     from corroborate.stats import random_effects_summary
     g_se = [(-1.0, 0.2), (1.5, 0.2), (-0.5, 0.2), (2.0, 0.2)]
@@ -368,7 +368,7 @@ def test_random_effects_summary_i2_uses_division_not_multiplication() -> None:
     assert p.I2 > 0.0
     assert p.I2 <= 1.0    # I² is a fraction
     # Reconstruct expected I² from Q.
-    df = p.n_cells - 1
+    df = p.n_rows - 1
     expected_i2 = max(0.0, (p.Q - df) / p.Q)
     assert p.I2 == pytest.approx(expected_i2, abs=1e-9)
 
@@ -376,11 +376,11 @@ def test_random_effects_summary_i2_uses_division_not_multiplication() -> None:
 def test_random_effects_summary_or_in_filter_keeps_only_full_pairs() -> None:
     """The filter requires BOTH g AND se to be finite (and se>0).
     Pin `not isnan(g) and not isnan(se)` against the `or` mutant
-    that would keep cells with one NaN field.
+    that would keep rows with one NaN field.
 
-    Construct: 1 NaN-g cell + 1 NaN-se cell + 2 valid cells.
+    Construct: 1 NaN-g row + 1 NaN-se row + 2 valid rows.
     Original drops both NaN-bearing → n=2 valid → real pooled.
-    Mutant `g_ok or se_ok` keeps the NaN-bearing cells (one
+    Mutant `g_ok or se_ok` keeps the NaN-bearing rows (one
     side is True for each), then computes vs from NaN-se →
     NaN var → NaN pooled."""
     from corroborate.stats import random_effects_summary
@@ -390,15 +390,15 @@ def test_random_effects_summary_or_in_filter_keeps_only_full_pairs() -> None:
         (0.5, 0.1),
         (0.7, 0.1),
     ])
-    assert p.n_cells == 2
+    assert p.n_rows == 2
     assert math.isfinite(p.pooled_g)
 
 
-def test_random_effects_summary_homogeneous_cells_zero_tau2() -> None:
-    """All cells with same g + same SE → tau² = 0 (no
-    between-cell heterogeneity), pooled_g = common value.
+def test_random_effects_summary_homogeneous_rows_zero_tau2() -> None:
+    """All rows with same g + same SE → tau² = 0 (no
+    between-row heterogeneity), pooled_g = common value.
 
-    Closed-form se_pooled = sqrt(1 / sum(1/v_i)). With 5 cells
+    Closed-form se_pooled = sqrt(1 / sum(1/v_i)). With 5 rows
     at se=0.2: vs=0.04, sum_w=5/0.04=125, var_pooled=1/125=0.008,
     se_pooled=sqrt(0.008)≈0.0894.
 
@@ -406,7 +406,7 @@ def test_random_effects_summary_homogeneous_cells_zero_tau2() -> None:
     mutant which would double var_pooled → se_pooled ≈ 0.126."""
     from corroborate.stats import random_effects_summary
     p = random_effects_summary([(0.5, 0.2)] * 5)
-    assert p.n_cells == 5
+    assert p.n_rows == 5
     assert p.pooled_g == pytest.approx(0.5, abs=1e-6)
     assert p.tau2 == pytest.approx(0.0, abs=1e-6)
     # PI brackets the common value at low heterogeneity.
@@ -415,13 +415,13 @@ def test_random_effects_summary_homogeneous_cells_zero_tau2() -> None:
     assert p.se_pooled == pytest.approx(math.sqrt(0.008), rel=1e-6)
 
 
-def test_random_effects_summary_heterogeneous_cells_positive_tau2() -> None:
-    """Wildly different g across cells → tau² > 0; pooled estimate
-    near the mean of the cells."""
+def test_random_effects_summary_heterogeneous_rows_positive_tau2() -> None:
+    """Wildly different g across rows → tau² > 0; pooled estimate
+    near the mean of the rows."""
     from corroborate.stats import random_effects_summary
     g_se = [(-0.5, 0.2), (1.5, 0.2), (0.0, 0.2), (2.0, 0.2)]
     p = random_effects_summary(g_se)
-    assert p.n_cells == 4
+    assert p.n_rows == 4
     assert p.tau2 > 0.0
     assert p.I2 > 0.0
     # Pooled near simple average of g's (since SEs are equal).
@@ -430,7 +430,7 @@ def test_random_effects_summary_heterogeneous_cells_positive_tau2() -> None:
 
 # ============ random_effects_verdict ============
 
-def test_random_effects_verdict_underpowered_below_three_cells() -> None:
+def test_random_effects_verdict_underpowered_below_three_rows() -> None:
     from corroborate.stats import (
         random_effects_summary,
         random_effects_verdict,
@@ -485,7 +485,7 @@ def test_held_or_scope_flag_at_exactly_i2_threshold_is_scope_flag() -> None:
         tau2=0.1, I2=I2_THRESHOLD, Q=10.0,    # exactly at threshold
         pi_lo=2.0, pi_hi=6.0,
         empirical_min_g=3.0, empirical_max_g=5.0,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, _ = random_effects_verdict(
         p, predicted_direction='a_gt_b',
@@ -511,7 +511,7 @@ def test_random_effects_verdict_held_with_scope_flag_high_heterogeneity() -> Non
         tau2=0.5, I2=0.6, Q=10.0,
         pi_lo=2.0, pi_hi=6.0,
         empirical_min_g=3.0, empirical_max_g=5.0,
-        n_cells=5,
+        n_rows=5,
     )
     assert p.I2 >= I2_THRESHOLD
     verdict, _ = random_effects_verdict(
@@ -552,7 +552,7 @@ def test_random_effects_verdict_held_with_scope_flag_predicted_negative() -> Non
         tau2=0.5, I2=0.7, Q=12.0,
         pi_lo=-6.0, pi_hi=-2.0,
         empirical_min_g=-5.0, empirical_max_g=-3.0,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, _ = random_effects_verdict(
         p, predicted_direction='a_lt_b',
@@ -610,7 +610,7 @@ def test_verdict_nan_g_returns_power_insufficient() -> None:
 
 
 def test_verdict_n_below_two_returns_power_insufficient() -> None:
-    """n=1: not enough cells to estimate variance → must hit the
+    """n=1: not enough rows to estimate variance → must hit the
     early-return branch regardless of g magnitude. Pins the `n < 2`
     boundary against `n <= 2` (which would lock out n=2) and `n < 3`
     (which would also classify n=2 as underpowered)."""
@@ -716,8 +716,8 @@ def test_verdict_held_for_small_negative_g_when_negative_predicted() -> None:
 # ============ random_effects_verdict — gap-fill ============
 
 def test_random_effects_verdict_n_equals_3_passes_power_guard() -> None:
-    """n_cells=3 (boundary): passes the n_cells<3 power guard.
-    Pin `n_cells < 3` against `n_cells <= 3` and `n_cells < 4`
+    """n_rows=3 (boundary): passes the n_rows<3 power guard.
+    Pin `n_rows < 3` against `n_rows <= 3` and `n_rows < 4`
     (both would force POWER_INSUFFICIENT at n=3)."""
     from corroborate.stats import (
         PooledStats, random_effects_verdict,
@@ -727,7 +727,7 @@ def test_random_effects_verdict_n_equals_3_passes_power_guard() -> None:
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=0.5, pi_hi=1.5,
         empirical_min_g=0.8, empirical_max_g=1.2,
-        n_cells=3,
+        n_rows=3,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='a_gt_b',
@@ -754,7 +754,7 @@ def test_random_effects_verdict_pi_strictly_positive_at_a_gt_b_is_held() -> None
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=1.5, pi_hi=2.5,    # strictly positive
         empirical_min_g=1.8, empirical_max_g=2.2,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='a_gt_b',
@@ -775,7 +775,7 @@ def test_random_effects_verdict_pi_strictly_negative_at_a_lt_b_is_held() -> None
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=-2.5, pi_hi=-1.5,    # strictly negative
         empirical_min_g=-2.2, empirical_max_g=-1.8,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='a_lt_b',
@@ -801,7 +801,7 @@ def test_random_effects_verdict_pi_lo_zero_is_null_under_two_sided() -> None:
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=0.0, pi_hi=2.0,
         empirical_min_g=0.5, empirical_max_g=1.5,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='two_sided',
@@ -823,7 +823,7 @@ def test_random_effects_verdict_pi_hi_zero_is_null_under_two_sided() -> None:
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=-2.0, pi_hi=0.0,
         empirical_min_g=-1.5, empirical_max_g=-0.5,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='two_sided',
@@ -849,7 +849,7 @@ def test_random_effects_verdict_pi_in_zero_to_one_routes_correctly() -> None:
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=0.5, pi_hi=0.8,
         empirical_min_g=0.55, empirical_max_g=0.75,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='a_gt_b',
@@ -874,7 +874,7 @@ def test_random_effects_verdict_pi_in_zero_to_one_under_a_lt_b_is_null() -> None
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=0.5, pi_hi=0.8,
         empirical_min_g=0.55, empirical_max_g=0.75,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='a_lt_b',
@@ -896,7 +896,7 @@ def test_random_effects_verdict_pi_at_exactly_zero_lo_is_null_effect() -> None:
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=0.0, pi_hi=2.0,    # touches zero
         empirical_min_g=0.5, empirical_max_g=1.5,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='a_gt_b',
@@ -917,7 +917,7 @@ def test_random_effects_verdict_sign_flip_on_a_gt_b_with_pi_negative() -> None:
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=-2.0, pi_hi=-1.0,    # strictly negative
         empirical_min_g=-1.8, empirical_max_g=-1.2,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='a_gt_b',
@@ -941,7 +941,7 @@ def test_random_effects_verdict_sign_flip_on_a_lt_b_with_pi_positive() -> None:
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=1.0, pi_hi=2.0,    # strictly positive
         empirical_min_g=1.2, empirical_max_g=1.8,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='a_lt_b',
@@ -965,7 +965,7 @@ def test_random_effects_verdict_two_sided_held_with_pi_positive() -> None:
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=1.0, pi_hi=2.0,
         empirical_min_g=1.2, empirical_max_g=1.8,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, refutation = random_effects_verdict(
         p, predicted_direction='two_sided',
@@ -990,7 +990,7 @@ def test_random_effects_verdict_a_gt_b_string_literal_routes_correctly() -> None
         tau2=0.0, I2=0.0, Q=1.0,
         pi_lo=1.0, pi_hi=2.0,
         empirical_min_g=1.2, empirical_max_g=1.8,
-        n_cells=5,
+        n_rows=5,
     )
     verdict, _ = random_effects_verdict(
         p, predicted_direction='a_gt_b',

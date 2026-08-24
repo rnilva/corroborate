@@ -18,7 +18,7 @@ per env:
 The per-stratum measurements computed by the panel should
 recover these closed forms within sampling SD.
 
-Within-stratum Spearman r over the UNION of both arms' cells
+Within-stratum Spearman r over the UNION of both arms' rows
 takes a substantively different shape — the union has a
 bimodal Y (treatment cluster + baseline cluster). Pearson r
 over the union is suppressed (closed form below), but Spearman ρ
@@ -42,7 +42,7 @@ import math
 from collections.abc import Mapping
 
 from corroborate.analyses.panel.stratum_panel import stratum_panel
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm._closed_form import y_mean_arm_sd
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
@@ -81,7 +81,7 @@ def _scm(beta_xz: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells() -> list[Mapping[str, object]]:
+def _build_rows() -> list[Mapping[str, object]]:
     envs = {
         name: (_scm(t), _scm(b))
         for name, (t, b) in _ENV_BETAS.items()
@@ -114,7 +114,7 @@ def _expected_y_arm_sd(beta_xz: float) -> float:
 
 def test_stratum_panel_strata_indexing_and_counts() -> None:
     panel = stratum_panel.fn(
-        cells_to_dataframe(_build_cells()),
+        to_dataframe(_build_rows()),
         measurables=('x_mean', 'z_mean', 'y_mean'),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -126,7 +126,7 @@ def test_stratum_panel_strata_indexing_and_counts() -> None:
     # panel surfaces each env_name as a distinct stratum.
     env_names = sorted(str(s[0]) for s in panel.strata)
     assert env_names == sorted(_ENV_BETAS.keys())
-    # Per-arm cell counts at each stratum = _N_SEEDS_PER_ARM
+    # Per-arm row counts at each stratum = _N_SEEDS_PER_ARM
     for n_t, n_b in zip(panel.n_treatment, panel.n_baseline, strict=True):
         assert n_t == _N_SEEDS_PER_ARM
         assert n_b == _N_SEEDS_PER_ARM
@@ -134,7 +134,7 @@ def test_stratum_panel_strata_indexing_and_counts() -> None:
 
 def test_stratum_panel_per_arm_means_recover_closed_form() -> None:
     panel = stratum_panel.fn(
-        cells_to_dataframe(_build_cells()),
+        to_dataframe(_build_rows()),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -163,7 +163,7 @@ def test_stratum_panel_per_arm_means_recover_closed_form() -> None:
 
 def test_stratum_panel_deltas_recover_structural_contrast() -> None:
     panel = stratum_panel.fn(
-        cells_to_dataframe(_build_cells()),
+        to_dataframe(_build_rows()),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -194,7 +194,7 @@ def test_stratum_panel_deltas_recover_structural_contrast() -> None:
 
 def test_stratum_panel_within_stratum_spearman_recovers_closed_form() -> None:
     panel = stratum_panel.fn(
-        cells_to_dataframe(_build_cells()),
+        to_dataframe(_build_rows()),
         measurables=('x_mean', 'y_mean'),
         treatment_arm='treatment',
         baseline_arm='baseline',
@@ -203,7 +203,7 @@ def test_stratum_panel_within_stratum_spearman_recovers_closed_form() -> None:
     key = pair_key('x_mean', 'y_mean')
     rho_per_stratum = panel.spearman_within[key]
     assert len(rho_per_stratum) == 3
-    # The within-stratum Spearman pools BOTH arms' cells. Y is
+    # The within-stratum Spearman pools BOTH arms' rows. Y is
     # bimodal across arms (β_xz_t vs β_xz_b cluster); Spearman ρ
     # is rank-robust to that bimodality and lands at ≈ 0.40-0.46
     # at the higher-SNR implementation (σ_z = σ_y = 0.1, β_zy = 1.5).
@@ -228,15 +228,15 @@ def test_stratum_panel_default_stratify_by_is_env_name() -> None:
     """The analysis's canonical default `stratify_by=('env_name',)`
     is the right grouping for cross-arm contrast — arm_key is
     the contrast axis, not a stratify key. Substrate-authors
-    override when they want a different grouping; `panel.cells`
+    override when they want a different grouping; `panel.df`
     being a DataFrame doesn't carry stratify_by metadata into
     the analysis (Panel's stratify_by is the diagnostic grouping
-    and lives on the Panel object, not on the cells)."""
+    and lives on the Panel object, not on the rows)."""
     import polars as pl
 
-    cells = _build_cells()
+    rows = _build_rows()
     result = stratum_panel.fn(
-        cells_to_dataframe(pl.DataFrame(cells)),
+        to_dataframe(pl.DataFrame(rows)),
         measurables=('y_mean',),
         treatment_arm='treatment',
         baseline_arm='baseline',

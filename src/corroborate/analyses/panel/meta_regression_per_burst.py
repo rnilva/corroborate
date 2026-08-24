@@ -49,7 +49,7 @@ from corroborate.corpus.schema import StratumG
 
 @analysis
 def meta_regression_per_burst(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     treatment_arm: str,
     baseline_arm: str,
@@ -74,7 +74,7 @@ def meta_regression_per_burst(
     Two paths for supplying covariates:
 
     - `covariates: tuple[str, ...]` (preferred) — column names on
-      the cells. The analysis groups by `env_name` and takes the
+      the df. The analysis groups by `env_name` and takes the
       per-env mean of each named column to form the env-keyed
       covariate vector. Covariate values come from the corpus
       itself; bridges declare which columns matter, not the
@@ -89,7 +89,7 @@ def meta_regression_per_burst(
     Strata with NaN g/SE or zero variance are dropped from the
     panel."""
     per_burst = paired_g_per_burst.fn(
-        cells,
+        df,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
         arm_field=arm_field,
@@ -105,7 +105,7 @@ def meta_regression_per_burst(
             covariates_per_env
         )
     elif covariates:
-        env_covariates = _env_means_from_df(cells, covariates)
+        env_covariates = _env_means_from_df(df, covariates)
     else:
         env_covariates = {}
 
@@ -133,7 +133,7 @@ def meta_regression_per_burst(
 
 
 def _env_means_from_df(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     columns: tuple[str, ...],
 ) -> dict[str, dict[str, float]]:
     """Build `{env_name: {col: mean(col over env's rows)}}`
@@ -143,23 +143,23 @@ def _env_means_from_df(
     non-numeric columns are excluded, matching the per-row
     numeric check of the rows-era helper; Boolean lifts to 0/1.
 
-    Used to lift cell-level columns (typically materialised by
+    Used to lift row-level columns (typically materialised by
     the @measurable cache) to env-level covariates for the
     meta-regression's stratum panel."""
-    if 'env_name' not in cells.columns:
+    if 'env_name' not in df.columns:
         return {}
     present = [
         c for c in columns
-        if c in cells.columns
+        if c in df.columns
         and (
-            cells.schema[c].is_numeric()
-            or cells.schema[c] == pl.Boolean
+            df.schema[c].is_numeric()
+            or df.schema[c] == pl.Boolean
         )
     ]
     if not present:
         return {}
     agg = (
-        cells.select('env_name', *present)
+        df.select('env_name', *present)
         .with_columns([
             pl.col(c).cast(pl.Float64).fill_nan(None) for c in present
         ])

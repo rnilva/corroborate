@@ -48,7 +48,7 @@ def _validate_test_configuration(
     sesoi_dz: float,
     minimum_pairs: int,
 ) -> DirectionalAlternative:
-    """Fail closed on analysis choices before reading any cells."""
+    """Fail closed on analysis choices before reading any df."""
     if predicted_direction == 'a_gt_b':
         direction: DirectionalAlternative = 'a_gt_b'
     elif predicted_direction == 'a_lt_b':
@@ -171,7 +171,7 @@ def _ncp_confidence_interval(
 
 @analysis
 def paired_directional(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     source: str,
     treatment_arm: str,
@@ -215,7 +215,7 @@ def paired_directional(
         predicted_direction, alpha, sesoi_dz, minimum_pairs,
     )
     paired: PairedGResult = paired_g.fn(
-        cells,
+        df,
         source=source,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
@@ -224,7 +224,7 @@ def paired_directional(
         dedupe_strategy='raise',
     )
     n = paired.n_pairs
-    df = n - 1
+    dof = n - 1
     valid = (
         n >= 2
         and math.isfinite(paired.mean_diff)
@@ -234,10 +234,10 @@ def paired_directional(
     if valid:
         statistic = paired.mean_diff / paired.mean_diff_se
         if direction == 'a_gt_b':
-            support_p = float(t.sf(statistic, df=df))
+            support_p = float(t.sf(statistic, df=dof))
         else:
-            support_p = float(t.cdf(statistic, df=df))
-        critical = float(t.ppf(1.0 - alpha, df=df))
+            support_p = float(t.cdf(statistic, df=dof))
+        critical = float(t.ppf(1.0 - alpha, df=dof))
         raw_ci = (
             paired.mean_diff - critical * paired.mean_diff_se,
             paired.mean_diff + critical * paired.mean_diff_se,
@@ -247,14 +247,14 @@ def paired_directional(
         dz = statistic / root_n
         ncp_ci = _ncp_confidence_interval(
             statistic,
-            df,
+            dof,
             confidence=1.0 - 2.0 * alpha,
         )
         dz_ci = (ncp_ci[0] / root_n, ncp_ci[1] / root_n)
         lower_ncp = -sesoi_dz * root_n
         upper_ncp = sesoi_dz * root_n
-        equivalence_p_lower = float(nct.sf(statistic, df, lower_ncp))
-        equivalence_p_upper = float(nct.cdf(statistic, df, upper_ncp))
+        equivalence_p_lower = float(nct.sf(statistic, dof, lower_ncp))
+        equivalence_p_upper = float(nct.cdf(statistic, dof, upper_ncp))
     else:
         statistic = support_p = dz = float('nan')
         equivalence_p_lower = equivalence_p_upper = float('nan')

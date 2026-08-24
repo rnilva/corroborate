@@ -7,7 +7,7 @@ invariant catalogue (the full design rationale lives in
 - CI1 — a corpus is a leaf: a dir with `runs.parquet` must not
   contain a subdir that also has one (`.in_progress` sentinel is
   the mid-sweep escape hatch).
-- CI2 — cell `id`s are unique within a corpus's stores.
+- CI2 — row `id`s are unique within a corpus's stores.
 - CI3 — a cloud root is owned by exactly one local corpus.
 - CI4 — content-equality dedup ignores runtime-volatile fields
   (object reprs with memory addresses).
@@ -389,12 +389,12 @@ class TraceContaminationError(RuntimeError):
     overwrite each other; the survivor's traces.parquet contains
     a different sweep's UUIDs while the local runs.parquet still
     records the original sweep. The runner's left-join would
-    produce all-null trace columns for every cell, and
-    trace-dependent measurables fail per-cell with AxisError.
+    produce all-null trace columns for every row, and
+    trace-dependent measurables fail per-row with AxisError.
 
     Refusing the contaminated traces upfront — with the runner
     falling back to "no cloud traces" — produces honest null
-    measurables for cells without traces, rather than silently
+    measurables for rows without traces, rather than silently
     null-everywhere from a join collision."""
 
     def __init__(self, stats: TraceContaminationStats) -> None:
@@ -404,7 +404,7 @@ class TraceContaminationError(RuntimeError):
             f'{stats.corpus_dir.name}/traces.parquet contains '
             f'{stats.spurious_count} id(s) absent from '
             f'runs.parquet (traces={stats.traces_count} ids, '
-            f'runs={stats.runs_count} cells, overlap='
+            f'runs={stats.runs_count} rows, overlap='
             f'{stats.overlap_count}). The cloud archive is from a '
             f'different sweep (cloud-collision residue). Either '
             f'remove `traces.parquet` from the manifest, or '

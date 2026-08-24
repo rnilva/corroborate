@@ -4,10 +4,10 @@
 write/read CONTRACT (single + multi-row, empty measurements,
 arm_key, heterogeneous keys, dtype tightening, sidecar) with
 hand-built RunRows. Those are proper unit tests, but they don't
-prove that the FRAMEWORK PRIMITIVES correctly handle cells that
+prove that the FRAMEWORK PRIMITIVES correctly handle rows that
 have round-tripped through parquet.
 
-This file does. The implementation produces LG-SCM cells, writes them
+This file does. The implementation produces LG-SCM rows, writes them
 to a tmp parquet via `write_runrows` / `write_tracerows`, reads
 them back via `read_runrows` / `read_tracerows`, then runs
 `paired_g.fn` and `paired_g_per_burst.fn`. The closed-form
@@ -41,14 +41,14 @@ from corroborate.corpus.persistence import (
 )
 from corroborate.corpus.schema import RunRow, TraceRow
 from corroborate.measurables.reductions import from_key, reduce_axis
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import (
     PER_BURST_Y_KEY,
-    merge_cell,
+    merge_row,
     run_paired_arms,
-    run_phased_cell,
+    run_phased_row,
 )
 
 
@@ -125,9 +125,9 @@ def test_paired_g_recovers_closed_form_after_runrow_round_trip(
         f'in={arm_in[:3]}..., out={arm_out[:3]}...'
     )
 
-    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows_out]
+    rows: list[Mapping[str, object]] = [r.as_dict() for r in rows_out]
     result = paired_g.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -142,7 +142,7 @@ def test_paired_g_recovers_closed_form_after_runrow_round_trip(
         f'After parquet round-trip, paired_g.mean_diff = '
         f'{result.mean_diff:.6f} not within 4*SE = {bound:.6f} of '
         f'closed-form Δ = {expected:.6f}. The round-trip path '
-        f'corrupted cell values; the in-memory test passes the '
+        f'corrupted row values; the in-memory test passes the '
         f'same bound, so the regression is in write_runrows / '
         f'read_runrows / RunRow.from_row_dict.'
     )
@@ -160,9 +160,9 @@ def test_per_burst_recovers_closed_form_after_tracerow_round_trip(
     transposed the inner axis would silently shift per-burst paired
     g away from the closed form.
 
-    The test runs `run_phased_cell` per (arm, seed), persists the
+    The test runs `run_phased_row` per (arm, seed), persists the
     RunRows + TraceRows to separate parquets, reads them back,
-    merges via `merge_cell` (the production polars-join analog),
+    merges via `merge_row` (the production polars-join analog),
     and asserts the per-burst panel matches the in-memory bound
     (rel_err < 0.20 against `μ_x · √n_steps / σ_x · c_4`)."""
     n_bursts = 3
@@ -176,7 +176,7 @@ def test_per_burst_recovers_closed_form_after_tracerow_round_trip(
         ('baseline', baselines),
     ):
         for seed in range(_N_PAIRS):
-            run, trace = run_phased_cell(
+            run, trace = run_phased_row(
                 scms_per_burst, seed=seed, arm_key=arm_label,
             )
             runs.append(run)
@@ -194,17 +194,17 @@ def test_per_burst_recovers_closed_form_after_tracerow_round_trip(
 
     # Merge via the same helper the in-memory phased path uses.
     by_id_trace: dict[str, TraceRow] = {t.id: t for t in traces_back}
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for run in runs_back:
         trace = by_id_trace[run.id]
-        cells.append(merge_cell(run, trace))
+        rows.append(merge_row(run, trace))
 
     # Per-burst Y mean source — same wiring as test_paired_g_per_burst.
     per_burst_y_mean = reduce_axis(
         from_key(PER_BURST_Y_KEY), axis=-1, op='mean',
     )
     result = paired_g_per_burst.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         source=per_burst_y_mean,
@@ -243,13 +243,13 @@ def test_round_trip_preserves_arm_key_distinct_from_baseline_default(
     """`arm_key` is a typed framework-surface column with default
     `'baseline'`. When two arms carry distinct strings (e.g.,
     'treatment' / 'baseline'), the round-trip must preserve them
-    exactly — paired_g pairs cells by arm_key string match, so a
+    exactly — paired_g pairs rows by arm_key string match, so a
     silent default-fill on read would collapse both arms to
     `'baseline'` and zero out n_pairs.
 
     This is the regression that broke `test_claim_bridge_real_corpus`
-    pre-fix: arm_key column lost on read → all cells matched as
-    baseline → no treatment cells → n_pairs=0 → POWER_INSUFFICIENT
+    pre-fix: arm_key column lost on read → all rows matched as
+    baseline → no treatment rows → n_pairs=0 → POWER_INSUFFICIENT
     instead of HELD."""
     rows_in = run_paired_arms(
         treatment=_scm(0.8),
@@ -270,9 +270,9 @@ def test_round_trip_preserves_arm_key_distinct_from_baseline_default(
     assert n_baseline == _N_PAIRS
 
     # And paired_g still pairs them correctly.
-    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows_out]
+    rows: list[Mapping[str, object]] = [r.as_dict() for r in rows_out]
     result = paired_g.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),
@@ -324,7 +324,7 @@ def test_paired_g_survives_heterogeneous_measurement_keys(
         augmented, tmp_path / 'runs.parquet',
     )
 
-    # `extra_treatment_only` survives only on treatment cells.
+    # `extra_treatment_only` survives only on treatment rows.
     treatment_with_extra = sum(
         1 for r in rows_out
         if r.arm_key == 'treatment'
@@ -337,14 +337,14 @@ def test_paired_g_survives_heterogeneous_measurement_keys(
     )
     assert treatment_with_extra == _N_PAIRS
     assert baseline_with_extra == 0, (
-        f'baseline cells picked up `extra_treatment_only` from null-'
+        f'baseline rows picked up `extra_treatment_only` from null-'
         f'pad → re-fill leakage; got {baseline_with_extra} non-zero'
     )
 
     # And the closed-form analysis still recovers Δ.
-    cells: list[Mapping[str, object]] = [r.as_dict() for r in rows_out]
+    rows: list[Mapping[str, object]] = [r.as_dict() for r in rows_out]
     result = paired_g.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         pair_by=('seed',),

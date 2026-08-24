@@ -44,7 +44,7 @@ import math
 import zlib
 
 from corroborate.analyses.diagnostic.tautology_audit import tautology_audit
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -143,7 +143,7 @@ _OUTCOME_READS = ('mc_return',)
 
 def _audit_result():
     return tautology_audit.fn(
-        cells_to_dataframe(_generate_audit_cells()),
+        to_dataframe(_generate_audit_cells()),
         measurables=_MEDIATORS,
         outcome_path='outcome.v_terminal',
         outcome_reads=_OUTCOME_READS,

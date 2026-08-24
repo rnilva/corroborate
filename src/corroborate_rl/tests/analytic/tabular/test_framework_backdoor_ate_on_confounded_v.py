@@ -48,7 +48,7 @@ import zlib
 import numpy as np
 
 from corroborate.analyses.dowhy import backdoor_ate
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def _det_seed(*parts: object) -> int:
@@ -136,7 +136,7 @@ def test_backdoor_ate_recovers_structural_effect_under_confounding() -> None:
         ('treatment', 'outcome_v'),
     ]
     result = backdoor_ate.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(cells),
         treatment='treatment',
         outcome='outcome_v',
         dag=dag,
@@ -192,7 +192,7 @@ def test_naive_estimate_is_biased_above_structural_ate() -> None:
         ('treatment', 'outcome_v'),
     ]
     result = backdoor_ate.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(cells),
         treatment='treatment',
         outcome='outcome_v',
         dag=dag,
@@ -221,7 +221,7 @@ def test_backdoor_n_rows_matches_input() -> None:
         ('treatment', 'outcome_v'),
     ]
     result = backdoor_ate.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(cells),
         treatment='treatment',
         outcome='outcome_v',
         dag=dag,

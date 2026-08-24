@@ -156,7 +156,7 @@ def mean_window[R: Mapping[str, object]](
 
     def fn(record: R) -> float:
         arr = of(record)
-        # 0-d / scalar inputs (e.g. a null trace cell that
+        # 0-d / scalar inputs (e.g. a null trace row that
         # `from_key`'s `np.asarray` decoded as a 0-d ndarray) have
         # no window to take a mean over; NaN-propagate. Subsumes
         # the implementation's prior `_mean_window` helper, which
@@ -293,12 +293,12 @@ def masked_window_mean(
 # ============ Peak-aware windows ============
 #
 # `mean_window(of, lo, hi)` uses STATIC fractional bounds — same
-# window for every cell. Useful when "the late half of training"
-# is a meaningful slice. But when each cell has a per-cell peak
+# window for every row. Useful when "the late half of training"
+# is a meaningful slice. But when each row has a per-row peak
 # point (e.g. `eval_best_burst_step`), a static window
-# averages over different parts of the trajectory across cells.
+# averages over different parts of the trajectory across rows.
 # The peak-aware primitives below take `peak_idx_key`: a record
-# key whose value is the per-cell peak in array-index units. The
+# key whose value is the per-row peak in array-index units. The
 # caller is responsible for ensuring the index is array-aligned
 # (typically by precomputing `peak_step * n // total_steps` and
 # inserting the result into the record before invocation).
@@ -312,12 +312,12 @@ def mean_peak_window[R: Mapping[str, object]](
 ) -> Measurable[R, float]:
     """Mean of `of` over the window `[peak_idx * (1 - pre_frac),
     peak_idx]` — a *pre-peak* slice whose width scales with the
-    cell's own peak position.
+    row's own peak position.
 
     `peak_idx_key` is a record key whose value is an integer-typed
-    per-cell peak point in array-index units. `pre_frac` controls
+    per-row peak point in array-index units. `pre_frac` controls
     window width as a fraction of `peak_idx`. Default 0.5 means
-    the window spans the late half of the cell's pre-peak
+    the window spans the late half of the row's pre-peak
     trajectory — analogous to `mean_window(_, 0.5, 1.0)` but
     truncated at the peak.
 
@@ -358,7 +358,7 @@ def peak_centered_window[R: Mapping[str, object]](
     *,
     half_width_frac: float = 0.125,
 ) -> Measurable[R, float]:
-    """Mean of `of` over a window centered at the cell's peak —
+    """Mean of `of` over a window centered at the row's peak —
     `[peak_idx - h, peak_idx + h]` where `h = half_width_frac * n`
     (so window width ≈ 2 * half_width_frac of the trajectory).
     Default `half_width_frac=0.125` → window of width ≈ 25%
@@ -436,7 +436,7 @@ def reduce_axis[R: Mapping[str, object]](
     Empty operand passes through unchanged so downstream factories
     can NaN-propagate. The factory itself doesn't catch missing
     leaf reads — the cache builder catches `KeyError` from
-    `from_key` upstream and stores None on cells where the leaf
+    `from_key` upstream and stores None on rows where the leaf
     isn't present."""
     name = f'{of.name}__{op}_axis_{axis}'
 
@@ -589,7 +589,7 @@ def log_safe[R: Mapping[str, object]](
     Same NaN-honest discipline as the hand-written `log_mc_variance_
     per_burst`: zero or negative entries (e.g. deterministic-
     converged bursts with mc_return variance = 0) become NaN, so
-    averaging across cells doesn't leak `-∞` outliers via a 1e-9
+    averaging across rows doesn't leak `-∞` outliers via a 1e-9
     epsilon shortcut."""
     name = f'{of.name}__log'
 

@@ -4,19 +4,19 @@ from __future__ import annotations
 import math
 
 from corroborate.analyses.paired.arm_mean_diff import arm_mean_diff
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 def test_empty_pair_by_disables_pairing_diagnostic() -> None:
     """An explicitly unpaired comparison must not invent key ``()``."""
-    cells = [
+    rows = [
         {'arm_key': 'treatment', 'seed': 1, 'score': 2.0},
         {'arm_key': 'treatment', 'seed': 2, 'score': 3.0},
         {'arm_key': 'baseline', 'seed': 1, 'score': 1.0},
         {'arm_key': 'baseline', 'seed': 2, 'score': 1.5},
     ]
     result = arm_mean_diff.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='score',
         treatment_arm='treatment',
         baseline_arm='baseline',

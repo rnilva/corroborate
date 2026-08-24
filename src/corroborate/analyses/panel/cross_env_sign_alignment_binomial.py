@@ -93,7 +93,7 @@ class CrossEnvSignAlignmentBinomialResult:
 
 @analysis
 def cross_env_sign_alignment_binomial(
-    cells: pl.DataFrame,
+    df: pl.DataFrame,
     *,
     source_x: str,
     source_y: str,
@@ -125,7 +125,7 @@ def cross_env_sign_alignment_binomial(
     called twice (once per measurable). Both panels MUST use the
     same `stratify_by` for stratum_ids to align."""
     pooled_x = stratified_arm_diff_pooled.fn(
-        cells,
+        df,
         source=source_x,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,
@@ -136,7 +136,7 @@ def cross_env_sign_alignment_binomial(
         min_seeds_per_arm=min_seeds_per_arm,
     )
     pooled_y = stratified_arm_diff_pooled.fn(
-        cells,
+        df,
         source=source_y,
         treatment_arm=treatment_arm,
         baseline_arm=baseline_arm,

@@ -27,7 +27,7 @@ def _evaluation_for(bridge: Bridge) -> BridgeEvaluation:
         bridge_name=bridge.name,
         verdict=Verdict.HELD,
         analysis_results=MappingProxyType({}),
-        n_cells_in_scope=8,
+        n_rows_in_scope=8,
         source_name=bridge.source_name,
         target_name=bridge.target_name,
         extent_hash=99,

@@ -91,7 +91,7 @@ _INTERVENTION = DoEffect(arms=(_BASELINE_ARMS, _TREATMENT_ARMS))
 _BASELINE_KEY, _TREATMENT_KEY = _INTERVENTION.arm_keys()
 
 
-def _synthetic_cells(
+def _synthetic_rows(
     *, n_seeds: int = 30,
 ) -> list[dict[str, object]]:
     """Strong-signal corpus paired by seed."""
@@ -292,7 +292,7 @@ def test_exogenous_source_blocks_leaf_only_measurable(
     # With reads=(), closure is empty → any() over empty is False
     # → is_endogenous returns False → BLOCK fires. This is the
     # correct behaviour: a measurable that closes over nothing
-    # carries no cell-derived signal.
+    # carries no row-derived signal.
     result = exogenous_source(bridge, _NO_CELLS, GateContext(claim=_test_claim))
     assert result is not None
     assert result.level is GateLevel.BLOCK
@@ -478,58 +478,58 @@ def _units_bridge() -> Bridge:
 
 
 def test_distinct_units_blocks_replicated_source() -> None:
-    """A bed-level source replicated across per-instance cells has
+    """A bed-level source replicated across per-instance rows has
     effective n = distinct values, not rows. Below 4 it BLOCKs."""
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {'arm_key': 'a', 'env_name': 'e', 'seed': 0, 'instance': i,
          'bed_prop': p, 'outcome': 20.0 + i}
         for p in (0.38, 0.62, 0.74) for i in range(4)
     ]
-    res = distinct_units(_units_bridge(), cells, _CTX)
+    res = distinct_units(_units_bridge(), rows, _CTX)
     assert res is not None and not res.passed
     assert res.level is GateLevel.BLOCK
-    assert '3 distinct values across 12 cells' in res.message
+    assert '3 distinct values across 12 rows' in res.message
 
 
-def test_distinct_units_silent_when_source_is_per_cell() -> None:
-    """Every cell carrying its own source value is the ordinary
+def test_distinct_units_silent_when_source_is_per_row() -> None:
+    """Every row carrying its own source value is the ordinary
     case and must not fire."""
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {'arm_key': 'a', 'env_name': 'e', 'seed': s, 'instance': i,
          'bed_prop': 0.40 + 0.01 * (s * 4 + i), 'outcome': 20.0 + s}
         for s in range(3) for i in range(4)
     ]
-    assert distinct_units(_units_bridge(), cells, _CTX) is None
+    assert distinct_units(_units_bridge(), rows, _CTX) is None
 
 
 def test_distinct_units_warns_above_block_threshold() -> None:
-    """8 distinct values over 24 cells: replication, but enough
+    """8 distinct values over 24 rows: replication, but enough
     units to estimate — WARN, so the bridge still runs."""
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {'arm_key': 'a', 'env_name': 'e', 'seed': s, 'instance': i,
          'bed_prop': 0.10 * s, 'outcome': 20.0 + i}
         for s in range(8) for i in range(3)
     ]
-    res = distinct_units(_units_bridge(), cells, _CTX)
+    res = distinct_units(_units_bridge(), rows, _CTX)
     assert res is not None and res.level is GateLevel.WARN
-    assert '8 distinct values across 24 cells' in res.message
+    assert '8 distinct values across 24 rows' in res.message
 
 
 def test_distinct_units_silent_on_mild_ties() -> None:
-    """Rank data ties a few cells without implying a coarser unit:
-    with n_eff > n_cells/2 (here 7 of 12) the gate must not
+    """Rank data ties a few rows without implying a coarser unit:
+    with n_eff > n_rows/2 (here 7 of 12) the gate must not
     conflate ties with replication."""
     values = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.1, 0.2, 0.3, 0.4, 0.5)
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {'arm_key': 'a', 'env_name': 'e', 'seed': i,
          'bed_prop': v, 'outcome': 20.0 + i}
         for i, v in enumerate(values)
     ]
-    assert distinct_units(_units_bridge(), cells, _CTX) is None
+    assert distinct_units(_units_bridge(), rows, _CTX) is None
 
 
 def test_distinct_units_silent_on_do_effect_source() -> None:
-    """An arm indicator is meant to repeat across cells; the
+    """An arm indicator is meant to repeat across rows; the
     contrast design carries its own n accounting. Gate doesn't
     apply to DoEffect sources."""
     bridge = Bridge(
@@ -539,11 +539,11 @@ def test_distinct_units_silent_on_do_effect_source() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    assert distinct_units(bridge, _synthetic_cells(), _CTX) is None
+    assert distinct_units(bridge, _synthetic_rows(), _CTX) is None
 
 
 def test_distinct_units_silent_on_bool_source() -> None:
-    """A per-cell binary indicator has 2 distinct values by
+    """A per-row binary indicator has 2 distinct values by
     construction — value cardinality says nothing about the grain
     it was measured at, so the gate must not fire."""
     bridge = Bridge(
@@ -553,12 +553,12 @@ def test_distinct_units_silent_on_bool_source() -> None:
         tier=Tier.ASSOCIATIONAL,
         holds_when=lambda partial_spearman: Verdict.HELD,
     )
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {'arm_key': 'a', 'env_name': 'e', 'seed': i,
          'diverged': i % 2 == 0, 'outcome': 20.0 + i}
         for i in range(12)
     ]
-    assert distinct_units(bridge, cells, _CTX) is None
+    assert distinct_units(bridge, rows, _CTX) is None
 
 
 # ---------- evaluate() integration: BLOCK short-circuits ----------
@@ -583,7 +583,7 @@ def test_evaluate_returns_inadmissible_on_block() -> None:
         del paired_g
         return Verdict.HELD
 
-    out = evaluate(blocked_bridge, _synthetic_cells())
+    out = evaluate(blocked_bridge, _synthetic_rows())
     assert out.verdict is Verdict.INADMISSIBLE
     assert out.blocked_by is not None
     assert out.blocked_by.gate_name == 'distinct_arms'
@@ -613,11 +613,11 @@ def test_evaluate_propagates_warnings() -> None:
             return Verdict.POWER_INSUFFICIENT
         return Verdict.HELD
 
-    cells = _synthetic_cells()
-    for c in cells:
+    rows = _synthetic_rows()
+    for c in rows:
         c['lr'] = 1e-4
-    out = evaluate(warn_bridge, cells, claim=_test_claim)
-    # body executed (lr filter let cells through, signal strong)
+    out = evaluate(warn_bridge, rows, claim=_test_claim)
+    # body executed (lr filter let rows through, signal strong)
     assert out.verdict is Verdict.HELD
     # both gates fired
     gate_names = {w.gate_name for w in out.warnings}
@@ -638,10 +638,10 @@ def test_per_bridge_gate_appended_and_blocks() -> None:
 
     def always_block(
         bridge: Bridge,
-        cells: Sequence[Mapping[str, object]],
+        rows: Sequence[Mapping[str, object]],
         ctx: GateContext,
     ) -> GateResult | None:
-        del bridge, cells, ctx
+        del bridge, rows, ctx
         return GateResult(
             gate_name='custom',
             level=GateLevel.BLOCK,
@@ -665,7 +665,7 @@ def test_per_bridge_gate_appended_and_blocks() -> None:
         del paired_g
         return Verdict.HELD
 
-    out = evaluate(with_custom_gate, _synthetic_cells())
+    out = evaluate(with_custom_gate, _synthetic_rows())
     assert out.verdict is Verdict.INADMISSIBLE
     assert out.blocked_by is not None
     assert out.blocked_by.gate_name == 'custom'
@@ -683,7 +683,7 @@ def test_is_endogenous_leaf_of_claim_is_exogenous() -> None:
 
 def test_is_endogenous_unregistered_name_is_endogenous() -> None:
     """Names that are neither a leaf of the claim nor a registered
-    measurable classify as cell-controlled-by-elimination →
+    measurable classify as row-controlled-by-elimination →
     endogenous (trajectory output)."""
     assert is_endogenous('mc_return', _test_claim) is True
     assert is_endogenous('jensen_gap_raw', _test_claim) is True
@@ -720,7 +720,7 @@ def test_is_endogenous_measurable_closing_only_over_leaves() -> None:
 
 
 def test_resolved_source_blocks_on_missing_column() -> None:
-    """A bridge sourced on a column not in cells → BLOCK with
+    """A bridge sourced on a column not in rows → BLOCK with
     a typo-friendly diagnostic listing available columns."""
     bridge = Bridge(
         name='typo',
@@ -729,10 +729,10 @@ def test_resolved_source_blocks_on_missing_column() -> None:
         tier=Tier.ASSOCIATIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {'mc_return': 1.0, 'eval_best_burst_mean': 0.0},
     ]
-    result = resolved_source(bridge, cells, _CTX)
+    result = resolved_source(bridge, rows, _CTX)
     assert result is not None
     assert result.level is GateLevel.BLOCK
     assert "'mc_returns'" in result.message
@@ -746,10 +746,10 @@ def test_resolved_source_silent_on_present_column() -> None:
         tier=Tier.ASSOCIATIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    cells: list[Mapping[str, object]] = [
+    rows: list[Mapping[str, object]] = [
         {'jensen_gap': 0.5, 'eval_best_burst_mean': 1.0},
     ]
-    assert resolved_source(bridge, cells, _CTX) is None
+    assert resolved_source(bridge, rows, _CTX) is None
 
 
 def test_resolved_source_silent_on_do_effect() -> None:
@@ -762,11 +762,11 @@ def test_resolved_source_silent_on_do_effect() -> None:
         tier=Tier.INTERVENTIONAL,
         holds_when=lambda paired_g: Verdict.HELD,
     )
-    cells: list[Mapping[str, object]] = [{'eval_best_burst_mean': 1.0}]
-    assert resolved_source(bridge, cells, _CTX) is None
+    rows: list[Mapping[str, object]] = [{'eval_best_burst_mean': 1.0}]
+    assert resolved_source(bridge, rows, _CTX) is None
 
 
-def test_resolved_source_silent_on_empty_cells() -> None:
+def test_resolved_source_silent_on_empty_rows() -> None:
     """Empty corpus — gate yields to downstream; no info to
     validate column-existence against."""
     bridge = Bridge(

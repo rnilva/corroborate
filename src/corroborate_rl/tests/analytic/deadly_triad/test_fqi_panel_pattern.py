@@ -43,7 +43,7 @@ from tests.analytic.deadly_triad.composition import (
     expected_q_divergence_score,
     make_paired_cells,
 )
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _GAMMA = 0.99
@@ -106,7 +106,7 @@ def test_long_sync_arm_has_lower_q_divergence_than_short_sync() -> None:
     )
 
     result = paired_g.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(cells),
         treatment_arm='sync_long',  # 'helps' — predicted lower
         baseline_arm='sync_short',
         pair_by=('seed',),

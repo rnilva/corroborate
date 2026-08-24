@@ -5,7 +5,7 @@ the bridges that test the claim (`BRIDGES` tuple) plus, via its own
 top-level imports, registers the implementation measurables required.
 The runner imports the module, walks its bridges' measurable
 dependencies, populates / extends the per-module cache by
-computing missing measurables for each cell, and dispatches each
+computing missing measurables for each row, and dispatches each
 bridge through `claim_bridge.evaluate()`.
 
 Cache lifecycle (pytest-like — incidental, not first-class):
@@ -14,11 +14,11 @@ Cache lifecycle (pytest-like — incidental, not first-class):
   `experiments/data/cache/<module>.parquet`. Decoupled from the
   module source so a copy of the bridges file can be tested
   without disturbing the canonical cache.
-- Append-on-use: when a new corpus's cells flow through, missing
-  measurables are computed and the cells get appended to the
-  cache. Cell-level dedup by `id` (UUID) — same cell never gets
+- Append-on-use: when a new corpus's rows flow through, missing
+  measurables are computed and the rows get appended to the
+  cache. Row-level dedup by `id` (UUID) — same row never gets
   re-ingested. Measurable-level dedup by column presence — a
-  cell already enriched with the required measurables doesn't
+  row already enriched with the required measurables doesn't
   recompute them.
 - `use_cache=False`: pure data → measurables → verdicts; no
   cache read or write.
@@ -367,8 +367,8 @@ class SourceDrift:
     corpus: str
     data_root: str | None
     remote_root: str | None
-    cache_cell_count: int
-    current_cell_count: int | None
+    cache_row_count: int
+    current_row_count: int | None
     status: Literal[
         'MATCHED',
         'DRIFTED',
@@ -527,8 +527,8 @@ def run(
     Cache lifecycle:
 
     - `use_cache=True` (default): read+write the per-hypothesis
-      cache. Cells already in cache with all required measurables
-      skip recomputation. New cells from `data` get measurables
+      cache. Rows already in cache with all required measurables
+      skip recomputation. New rows from `data` get measurables
       computed and appended.
     - `use_cache=False`: pure compute path; no cache read or write.
     - `write_cache=False` + `use_cache=True`: read cache, run, but
@@ -612,7 +612,7 @@ def run(
         try:
             from datetime import UTC, datetime
             schema = pl.scan_parquet(resolved_cache).collect_schema()
-            n_cells = cast(int, pl.scan_parquet(resolved_cache).select(
+            n_rows = cast(int, pl.scan_parquet(resolved_cache).select(
                 pl.len(),
             ).collect().item())
             n_cols = len(schema.names())
@@ -620,7 +620,7 @@ def run(
                 resolved_cache.stat().st_mtime, UTC,
             ).isoformat(timespec='seconds')
             print(
-                f'cache: {n_cells} cells × {n_cols} cols, '
+                f'cache: {n_rows} rows × {n_cols} cols, '
                 f'last updated {mtime}',
                 file=sys.stderr, flush=True,
             )
@@ -629,7 +629,7 @@ def run(
             # warning shortly; don't double-warn here.
             pass
 
-    cells = _ingest_and_compute(
+    rows = _ingest_and_compute(
         bridges=bridges,
         data=data,
         cache_path=resolved_cache,
@@ -640,9 +640,9 @@ def run(
         force_recompute=force_recompute,
     )
 
-    if cells.height == 0:
+    if rows.height == 0:
         raise SystemExit(
-            f'{h.__name__}: no cells available — pass '
+            f'{h.__name__}: no rows available — pass '
             f'--ingest <corpus> or --ingest-all <root> to ingest '
             f'data, or check the cache at {resolved_cache}',
         )
@@ -672,7 +672,7 @@ def run(
     # the data subpackage off the runner's import critical path.
     from corroborate.data.panel import cache_leaves
     leaves = (
-        cache_leaves(cells, resolved_cache)
+        cache_leaves(rows, resolved_cache)
         if resolved_cache is not None else None
     )
 
@@ -681,7 +681,7 @@ def run(
     for b in bridges:
         try:
             out[b.name] = evaluate(
-                b, cells, claim=claim, module_scope=module_scope,
+                b, rows, claim=claim, module_scope=module_scope,
                 leaves=leaves,
             )
         except Exception as e:  # noqa: BLE001
@@ -713,13 +713,13 @@ def run(
         )
         resolved_report.parent.mkdir(parents=True, exist_ok=True)
         required_for_sigs = sorted(measurable_names_for_bridges(bridges))
-        sigs = _signatures_for(required_for_sigs, cells)
+        sigs = _signatures_for(required_for_sigs, rows)
         report = _build_report(
             hypothesis_module_name=h.__name__,
             bridges=bridges,
             results=out,
             errors=errors,
-            n_cells_total=cells.height,
+            n_rows_total=rows.height,
             cache_path=resolved_cache,
             measurable_signatures=sigs,
             # `repo_root=None` lets `build_report` walk up from the
@@ -772,14 +772,14 @@ def check_cache_sources(
 ) -> tuple[SourceDrift, ...]:
     """Input-side drift report. Joins the cache parquet's `corpus`
     column with the `<cache>.sources.json` sidecar; for each
-    corpus in EITHER side, reports cache cell count, current
+    corpus in EITHER side, reports cache row count, current
     on-disk count, and a status discriminator:
 
     - `MATCHED`: cache_count == current_count.
     - `DRIFTED`: both known, different.
     - `MISSING_LOCAL`: corpus's `runs.parquet` absent or
       unreadable (no `id` column / read failure).
-    - `NO_SIDECAR_RECORD`: cache parquet has cells for this corpus
+    - `NO_SIDECAR_RECORD`: cache parquet has rows for this corpus
       but the sidecar lacks the entry (pre-sidecar cache OR a
       sidecar write that failed after a parquet write).
     - `STALE_SIDECAR_ENTRY`: sidecar lists this corpus but the
@@ -800,7 +800,7 @@ def check_cache_sources(
         if sidecar is not None else {}
     )
 
-    # Cache parquet's per-corpus cell counts. Defensive against
+    # Cache parquet's per-corpus row counts. Defensive against
     # pre-corpus-stamping legacy caches (mirrors `evict()`'s guard
     # at runner.py:872) — return empty `cache_counts` so the
     # sidecar's entries surface as STALE_SIDECAR_ENTRY rather than
@@ -827,29 +827,29 @@ def check_cache_sources(
     union = sorted(set(cache_counts) | set(sidecar_by_corpus))
     out: list[SourceDrift] = []
     for name in union:
-        cache_cells = cache_counts.get(name, 0)
+        cache_rows = cache_counts.get(name, 0)
         entry = sidecar_by_corpus.get(name)
         if entry is None:
             # In cache, absent from sidecar.
             out.append(SourceDrift(
                 corpus=name,
                 data_root=None, remote_root=None,
-                cache_cell_count=cache_cells,
-                current_cell_count=None,
+                cache_row_count=cache_rows,
+                current_row_count=None,
                 status='NO_SIDECAR_RECORD',
             ))
             continue
         # Resolve on-disk path from sidecar's data_root.
         current_count = _current_runs_count(entry)
         # Classify.
-        if cache_cells == 0:
+        if cache_rows == 0:
             status: Literal[
                 'MATCHED', 'DRIFTED', 'MISSING_LOCAL',
                 'NO_SIDECAR_RECORD', 'STALE_SIDECAR_ENTRY',
             ] = 'STALE_SIDECAR_ENTRY'
         elif current_count is None:
             status = 'MISSING_LOCAL'
-        elif current_count == cache_cells:
+        elif current_count == cache_rows:
             status = 'MATCHED'
         else:
             status = 'DRIFTED'
@@ -857,8 +857,8 @@ def check_cache_sources(
             corpus=name,
             data_root=entry.data_root,
             remote_root=entry.remote_root,
-            cache_cell_count=cache_cells,
-            current_cell_count=current_count,
+            cache_row_count=cache_rows,
+            current_row_count=current_count,
             status=status,
         ))
     return tuple(out)
@@ -909,7 +909,7 @@ def evict(
 
     Returns `(total_dropped, per_corpus_counts)` where
     `per_corpus_counts` maps each requested corpus name to the
-    number of cells dropped. A name not present in the cache
+    number of rows dropped. A name not present in the cache
     contributes 0; the call doesn't raise.
 
     The eviction survives cache reads but NOT a subsequent
@@ -1069,7 +1069,7 @@ def _ingest_and_compute(
     per-corpus `measurements.parquet` stores are the source of
     truth. The directory walk's output (each corpus's runs joined
     with its measurements) IS the projection — no cache-side
-    merge, drift check, or per-cell recompute. The merged cache
+    merge, drift check, or per-row recompute. The merged cache
     parquet is written as a backward-compat snapshot for callers
     that read it directly; `<cache>.hashes.json` is unlinked
     (per-corpus sidecars are authoritative).
@@ -1099,7 +1099,7 @@ def _ingest_and_compute(
         force_recompute=force_recompute,
     )
 
-    # Apply MODULE_SCOPE at ingest time. Cells outside the
+    # Apply MODULE_SCOPE at ingest time. Rows outside the
     # hypothesis-module's scope universe never enter the cache,
     # so downstream analyses can't accidentally pollute by reading
     # them. Per the Hypothesis Protocol, MODULE_SCOPE is a
@@ -1111,7 +1111,7 @@ def _ingest_and_compute(
         except pl.exceptions.ColumnNotFoundError as e:
             # Some MODULE_SCOPE expressions reference columns
             # added by recent implementation updates that older corpora
-            # don't carry. Silently keep cells in that case —
+            # don't carry. Silently keep rows in that case —
             # bridge-level scope filtering at evaluate time will
             # still catch them.
             sys.stderr.write(
@@ -1128,9 +1128,9 @@ def _ingest_and_compute(
         )
         # **CACHE_ADDITIVITY.md CA3** (additive named-ingest):
         # `--ingest <names>` is meant to refresh ONLY the named
-        # corpora's cells in the cache, not clobber it. Pre-fix,
+        # corpora's rows in the cache, not clobber it. Pre-fix,
         # the named-ingest path overwrote the cache with just
-        # `new_walk` — every other corpus's cells silently
+        # `new_walk` — every other corpus's rows silently
         # dropped. Now we read the existing cache (if any),
         # filter out rows whose `corpus` column matches the
         # newly-walked names, and concat. `--ingest-all <root>`
@@ -1246,7 +1246,7 @@ def _enrich_cache_in_place(
 ) -> pl.DataFrame:
     """When no new data is supplied, still pass the cache through
     `_compute_measurables` so that newly-added required measurables
-    get filled in for existing cells. Persist the manifest if
+    get filled in for existing rows. Persist the manifest if
     columns changed (added / drifted).
 
     **Trace-dependent gap diagnostic**: required measurables whose
@@ -1254,7 +1254,7 @@ def _enrich_cache_in_place(
     measurable reading per-step trace columns is added — traces
     are evicted post-ingest per CI7) can't be filled in cache-only
     mode. Pre-fix, `compute_missing_columns` would silently produce
-    NaN + emit a cryptic `KeyError on ALL N cells` warning. Now we
+    NaN + emit a cryptic `KeyError on ALL N rows` warning. Now we
     surface the actionable instruction: "rerun with --ingest-all to
     fill in" — distinguishes the no-data-needed case (HP-only
     measurables, fillable from cache) from the needs-trace-restore
@@ -1287,7 +1287,7 @@ def _warn_trace_dep_unfillable_in_cache(
     columns. Print a single actionable message naming all the
     measurables that need a `--ingest-all` walk to be filled —
     rather than the per-measurable cryptic `KeyError on ALL N
-    cells` warnings that compute_missing_columns emits later."""
+    rows` warnings that compute_missing_columns emits later."""
     from corroborate.measurables.measurable import (
         get_registered, transitive_reads,
     )
@@ -1313,7 +1313,7 @@ def _warn_trace_dep_unfillable_in_cache(
             f'(transitive reads not in cache, typically per-step '
             f'or per-burst trace columns). The cache will be '
             f'written with NaN for these columns and bridges '
-            f'scope-filtering on them will silently drop cells:\n'
+            f'scope-filtering on them will silently drop rows:\n'
             + '\n'.join(f'  - {n}' for n in needs_ingest)
             + '\n  → rerun with `--ingest-all experiments/data/` '
             f'to restore traces and fill these properly.\n',
@@ -1336,12 +1336,12 @@ def _signatures_for(
     return out
 
 
-# Provenance / lineage tags that don't define a cell's scientific
-# identity. Two cells differing ONLY by these are the same physical
+# Provenance / lineage tags that don't define a row's scientific
+# identity. Two rows differing ONLY by these are the same physical
 # experiment surfaced under different bookkeeping (e.g. one corpus
 # was assembled by merging another — same RunRow, different `corpus`
 # tag). UUID isn't a scientific-identity column either: a fresh
-# `uuid.uuid4()` gets minted at run time per cell, so independent
+# `uuid.uuid4()` gets minted at run time per row, so independent
 # re-runs of the same `(env, arm, seed, HPs)` get distinct ids
 # despite being scientifically equivalent — content equality is the
 # right check, not UUID equality.
@@ -1349,7 +1349,7 @@ def _signatures_for(
 # `env` is the env-object's `__repr__` string (e.g.
 # `<gymnax.environments.misc.rooms.FourRooms object at 0x77d49bbb2ea0>`)
 # — different memory addresses across separate ingests of the same
-# scientific cell, so it acts as accidental run-time noise rather
+# scientific row, so it acts as accidental run-time noise rather
 # than a scientific-identity column. `env_name` is the real
 # identifier; treat `env` as provenance so dedup-by-content works
 # across ingest runs.
@@ -1366,7 +1366,7 @@ def _volatile_object_repr_columns(df: pl.DataFrame) -> list[str]:
     `<...\\sobject\\sat\\s0x[0-9a-f]+>` (e.g. `<gymnax.envs.…
     object at 0x77d49bbb2ea0>`). The hex memory address is
     process-volatile — different across re-ingests of the same
-    scientific cell — so it acts as accidental run-time noise
+    scientific row — so it acts as accidental run-time noise
     rather than a content-identity column.
 
     `env` is the historical canonical case (already hardcoded
@@ -1398,7 +1398,7 @@ def _volatile_object_repr_columns(df: pl.DataFrame) -> list[str]:
 
 def _dedup_by_content(df: pl.DataFrame, *, source: str) -> pl.DataFrame:
     """Drop rows whose non-provenance columns are all equal — i.e.
-    cells that differ only in `id`/`corpus`/`timestamp` / lineage
+    rows that differ only in `id`/`corpus`/`timestamp` / lineage
     tags. The merge artifacts (same physical run surfaced under two
     `corpus` tags) collapse to one row; truly distinct runs are
     preserved (their measurement columns differ).
@@ -1411,7 +1411,7 @@ def _dedup_by_content(df: pl.DataFrame, *, source: str) -> pl.DataFrame:
     `_PROVENANCE_TAGS`, dynamically excludes string columns
     carrying Python object reprs (process-volatile memory
     addresses). Without this, two re-ingests of the same
-    scientific cell with different `<…\\sobject\\sat\\s0x…>`
+    scientific row with different `<…\\sobject\\sat\\s0x…>`
     addresses look like distinct rows and survive dedup —
     inflating sample counts."""
     if df.height == 0:
@@ -1436,8 +1436,8 @@ def _dedup_by_content(df: pl.DataFrame, *, source: str) -> pl.DataFrame:
     dropped = before - deduped.height
     if dropped:
         print(
-            f'runner: deduped {dropped} content-identical cell(s) '
-            f'from {source} (same scientific cell surfaced under '
+            f'runner: deduped {dropped} content-identical row(s) '
+            f'from {source} (same scientific row surfaced under '
             f'multiple {sorted(_PROVENANCE_TAGS & set(df.columns))} '
             f'tags)',
             file=sys.stderr,
@@ -1475,7 +1475,7 @@ def _load_cache(path: Path | None) -> pl.DataFrame:
 def _dedup_against_cache(
     cache: pl.DataFrame, new_data: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Drop cells from `new_data` whose `id` is already in `cache`."""
+    """Drop rows from `new_data` whose `id` is already in `cache`."""
     if cache.height == 0 or 'id' not in cache.columns:
         return new_data
     if 'id' not in new_data.columns:
@@ -1491,8 +1491,8 @@ def _compute_measurables(
     required: Sequence[str],
 ) -> pl.DataFrame:
     """For each required measurable not yet in df.columns, compute
-    per-cell and add as a column. Thin forwarder to
-    `corroborate.measurable.compute_missing_columns` — the per-cell
+    per-row and add as a column. Thin forwarder to
+    `corroborate.measurable.compute_missing_columns` — the per-row
     eval loop lives there as the single source of truth."""
     return compute_missing_columns(df, required)
 
@@ -1528,7 +1528,7 @@ def _load_data(
 
     Five shapes accepted (CACHE_ADDITIVITY.md CA1-CA3):
     - `None`: cache-only mode, caller skips ingest entirely.
-    - `pl.DataFrame`: in-memory cells (substrate-side build).
+    - `pl.DataFrame`: in-memory rows (substrate-side build).
     - `Path` to a single `.parquet` file: read directly.
     - `Path` to a directory: walk all corpus subdirs (full
       `--ingest-all` behavior).
@@ -1812,8 +1812,8 @@ def _analysis_reads_for_bridges(
     `bridges` consumes. The bridge's holds_when fixture-parameter
     names ARE the analysis names — so we walk those.
 
-    These reads are columns the analyses touch off the cell record
-    DIRECTLY (i.e. `cell['<key>']`-style), bypassing the
+    These reads are columns the analyses touch off the row record
+    DIRECTLY (i.e. `row['<key>']`-style), bypassing the
     @measurable resolver. The runner unions them with the
     measurables' transitive reads to decide what to load from
     `traces.parquet`, AND keeps them through the per-corpus drop
@@ -1898,7 +1898,7 @@ def _estimate_max_workers(
             continue
         for f in manifest.files:
             # Match any traces parquet — top-level or per-arm
-            # shard. tmp/cell{NNN}__{tag}__traces.parquet style
+            # shard. tmp/row{NNN}__{tag}__traces.parquet style
             # included.
             if f.relpath.endswith('.parquet') and 'traces' in f.relpath:
                 if f.size_bytes > largest_trace_bytes:
@@ -2011,7 +2011,7 @@ def _measurements_sidecar_current(
     trace join when there's demonstrably nothing to recompute.
 
     Hash-match is the contract: a value is current if its closure
-    matches what produced it. NaN cells in a hash-current store
+    matches what produced it. NaN rows in a hash-current store
     represent "framework already computed that and got NaN with
     the inputs available at compute time" — re-running with the
     same inputs would just produce NaN again. Users who want to
@@ -2194,13 +2194,13 @@ def _load_one_corpus(
                 )
                 if not runs_path.exists():
                     return None, log_lines
-    # Stitch per-cell trace shards (`tmp/*_traces.parquet`) into a
+    # Stitch per-row trace shards (`tmp/*_traces.parquet`) into a
     # single `traces.parquet` regardless of cloud-archive presence.
     # Pre-fix this only fired inside the `manifest.exists()` block,
     # so local-only sweeps whose merge step never completed (only
     # tmp/ shards present) silently fell back to a no-traces ingest
     # — the dependent measurables stamped NaN and the bridge
-    # silently dropped those cells. Now we always attempt the
+    # silently dropped those rows. Now we always attempt the
     # stitch when there's no consolidated traces.parquet.
     if _merge_shard_traces(sub):
         just_restored_traces = True
@@ -2248,7 +2248,7 @@ def _load_one_corpus(
     else:
         # Narrow trace_reads to drifted-only cols at the join step
         # too. Loading 20+ cols × multi-GB trace files into memory
-        # OOMs the worker even when the cells aren't ultimately
+        # OOMs the worker even when the rows aren't ultimately
         # recomputed (build_measurements skips them, but the join
         # has already pulled the columns). Drifted-only join avoids
         # this. Already-current measurables don't need their trace
@@ -2257,7 +2257,7 @@ def _load_one_corpus(
         drifted_reads = _required_record_keys(drifted)
         cols_for_join = frozenset(drifted_reads & trace_reads)
         # **Row-group-OOM root cause** (snake_g099_canonical_3M_ckpt:
-        # 60 cells in a SINGLE row group ~= 30 GB uncompressed):
+        # 60 rows in a SINGLE row group ~= 30 GB uncompressed):
         # `_join_required_traces` does a full `pl.read_parquet` of
         # the (per-step) trace columns the measurables read — that
         # materialises the whole trace file at once and OOMs the
@@ -2266,10 +2266,10 @@ def _load_one_corpus(
         # Split the join into two paths:
         #   - **Measurable** trace reads stream via
         #     `build_measurements_streaming` (below) with bounded
-        #     RAM (row-group batching + per-cell lazy-scan fallback
+        #     RAM (row-group batching + per-row lazy-scan fallback
         #     for single-RG files). They are NOT joined onto `df`.
         #   - **Analysis** trace reads (consumed directly off the
-        #     cell record by an analysis fn) still need to ride on
+        #     row record by an analysis fn) still need to ride on
         #     `df` to bridge-evaluate time, but those are per-burst
         #     scalars in practice, not the per-step heavies — join
         #     only that subset here.
@@ -2294,7 +2294,7 @@ def _load_one_corpus(
         # loads the trace columns named in `measurable_reads`. If a
         # measurable is in `satisfiable_required` while its read
         # isn't in `measurable_reads`, `compute_missing_columns`
-        # KeyErrors on every cell → an all-null column whose null +
+        # KeyErrors on every row → an all-null column whose null +
         # "current" closure-hash then self-perpetuate across re-
         # ingests (the sidecar says "computed", so the value is
         # never retried).
@@ -2310,7 +2310,7 @@ def _load_one_corpus(
         # The streaming path has no OOM reason to narrow: streamed
         # columns never land on `df`, and the primitive batches by
         # decompressed-byte budget (`DEFAULT_TRACE_BYTE_BUDGET`) with
-        # a per-cell lazy-scan fallback for single-RG files. So load
+        # a per-row lazy-scan fallback for single-RG files. So load
         # the FULL measurable trace-read set — generosity is bounded
         # by size-aware batching, and correctness (no null from a
         # missing read) outranks the recompute-skip optimisation.
@@ -2322,7 +2322,7 @@ def _load_one_corpus(
         # the analysis-direct reads) satisfies it for any subset the
         # satisfiability gate downstream admits.
         streamed_trace_reads = frozenset(trace_reads - analysis_reads)
-    # **Phase 2.1** (CACHE_BUILD.md): route per-cell measurable
+    # **Phase 2.1** (CACHE_BUILD.md): route per-row measurable
     # computation through `build_measurements` so the per-corpus
     # `measurements.parquet` store is populated as a side effect.
     # The store carries `id` + measurable cols only; trace cols
@@ -2413,8 +2413,8 @@ def _load_one_corpus(
             # Stream the measurable trace reads (bounded RAM)
             # instead of joining them onto `df` first. For
             # single-row-group trace files (the snake_3M OOM case)
-            # the streaming primitive drops to a per-cell lazy scan
-            # so peak RAM is one cell's trace footprint, not the
+            # the streaming primitive drops to a per-row lazy scan
+            # so peak RAM is one row's trace footprint, not the
             # whole file.
             build_measurements_streaming(
                 sub,
@@ -2484,7 +2484,7 @@ def _load_one_corpus(
             evicted = _try_unlink(traces_path, log_lines, prefix)
     elapsed = _time.monotonic() - t_corpus
     log_lines.append(
-        f'{prefix}: {df.height} cells × {len(df.columns)} cols'
+        f'{prefix}: {df.height} rows × {len(df.columns)} cols'
         + (' (traces evicted)' if evicted else '')
         + f' in {elapsed:.1f}s',
     )
@@ -2506,7 +2506,7 @@ def _load_directory(
 
     - measurables' transitive `reads` (the @measurable resolver
       consumes these at compute time), AND
-    - analyses' declared `reads` (consumed directly off the cell
+    - analyses' declared `reads` (consumed directly off the row
       record by the analysis fn at bridge-evaluate time)
 
     Then compute the measurables (so the heavy-trace-input ones
@@ -2516,7 +2516,7 @@ def _load_directory(
     survive the drop — the analyses need them at evaluate time.
 
     The drop step is load-bearing: per-step trace columns
-    (`done`, `online_std_q_per_step`, …) can be GBs per cell, so
+    (`done`, `online_std_q_per_step`, …) can be GBs per row, so
     keeping them across the diagonal_relaxed concat would OOM.
 
     `corpus_dirs` (CACHE_ADDITIVITY.md CA3): when provided, walk
@@ -2740,7 +2740,7 @@ def _load_directory(
     merged = _dedup_by_content(merged, source='loaded directory')
     print(
         f'runner: ingested {n_loaded}/{n_total} corpora '
-        f'({n_skipped} skipped) → {merged.height} cells × '
+        f'({n_skipped} skipped) → {merged.height} rows × '
         f'{len(merged.columns)} cols in {walk_elapsed/60:.1f} min',
         file=sys.stderr,
         flush=True,

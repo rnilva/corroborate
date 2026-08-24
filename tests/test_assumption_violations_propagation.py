@@ -6,7 +6,7 @@ The chain:
     1. `paired_g.fn` populates `PairedGResult.assumption_violations`
        from heuristics calibrated against the empirical bias map
        at `tests/analytic/robustness/test_paired_g_skew_robustness.py`.
-    2. `evaluate(bridge, cells)` reads `.assumption_violations` off
+    2. `evaluate(bridge, rows)` reads `.assumption_violations` off
        each fixture's result and prefixes each string with the
        fixture name → `BridgeEvaluation.assumption_violations`.
     3. The runner's `_build_bridge_entry` copies through to
@@ -34,27 +34,27 @@ from corroborate.bridge.bridge import (
 from corroborate.bridge.verdict import Verdict
 
 
-def _skewed_paired_cells(
+def _skewed_paired_rows(
     n_seeds: int, mu_log: float = 0.0, sigma_log: float = 0.7,
 ) -> list[Mapping[str, object]]:
-    """Construct paired (treatment, baseline) cells where Δ is
+    """Construct paired (treatment, baseline) rows where Δ is
     log-normally distributed (skew ≈ 1.86 at σ_log=0.7). The
     framework's paired_g heuristic should flag this.
     """
     import numpy as np
     rng = np.random.default_rng(0)
     deltas = rng.lognormal(mu_log, sigma_log, n_seeds)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for s, d in enumerate(deltas):
-        cells.append({
+        rows.append({
             'arm_key': 'T', 'seed': s, 'env_name': 'X',
             'value': float(d),
         })
-        cells.append({
+        rows.append({
             'arm_key': 'B', 'seed': s, 'env_name': 'X',
             'value': 0.0,
         })
-    return cells
+    return rows
 
 
 @claim_bridge(
@@ -85,8 +85,8 @@ def test_skewed_delta_assumption_violation_propagates_to_bridge_evaluation() -> 
     The framework's contract: analysis-level flags propagate to
     the bridge audit trail; implementation author don't have to
     inspect each fixture result individually."""
-    cells = _skewed_paired_cells(n_seeds=30)
-    out = evaluate(skew_bridge, cells)
+    rows = _skewed_paired_rows(n_seeds=30)
+    out = evaluate(skew_bridge, rows)
     assert any(
         'skew_bias_likely' in flag
         for flag in out.assumption_violations
@@ -119,18 +119,18 @@ def test_normal_delta_no_assumption_violations() -> None:
     import numpy as np
     rng = np.random.default_rng(1)
     deltas = rng.normal(1.0, 2.0, 200)
-    cells: list[Mapping[str, object]] = []
+    rows: list[Mapping[str, object]] = []
     for s, d in enumerate(deltas):
-        cells.append({
+        rows.append({
             'arm_key': 'T', 'seed': s, 'env_name': 'X',
             'value': float(d),
         })
-        cells.append({
+        rows.append({
             'arm_key': 'B', 'seed': s, 'env_name': 'X',
             'value': 0.0,
         })
 
-    out = evaluate(skew_bridge, cells)
+    out = evaluate(skew_bridge, rows)
     assert out.assumption_violations == (), (
         f'normal Δ at n=30 should produce no violations; '
         f'got {out.assumption_violations}'
@@ -148,10 +148,10 @@ def test_assumption_violations_propagate_through_bridge_report_entry() -> None:
     # require a hypothesis module + cache writes + report writes).
     from corroborate.runner.report import _build_bridge_entry
 
-    cells = _skewed_paired_cells(n_seeds=30)
-    evaluation = evaluate(skew_bridge, cells)
-    n_cells_total = pl.DataFrame(list(cells)).height
-    entry = _build_bridge_entry(skew_bridge, evaluation, n_cells_total)
+    rows = _skewed_paired_rows(n_seeds=30)
+    evaluation = evaluate(skew_bridge, rows)
+    n_rows_total = pl.DataFrame(list(rows)).height
+    entry = _build_bridge_entry(skew_bridge, evaluation, n_rows_total)
     assert entry.assumption_violations == evaluation.assumption_violations, (
         f'BridgeReportEntry.assumption_violations = '
         f'{entry.assumption_violations}; expected to match '

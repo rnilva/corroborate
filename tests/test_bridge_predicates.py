@@ -71,7 +71,7 @@ def test_finite_between_inclusive_both_ends() -> None:
 
 def test_partition_aggregate_skips_nan() -> None:
     """Without `fill_nan(None)`, polars's `.mean().over(key)`
-    propagates NaN: a single NaN cell makes the whole partition's
+    propagates NaN: a single NaN row makes the whole partition's
     aggregate NaN. The helper uses `fill_nan(None)` so polars
     skips NaN like null."""
     df = pl.DataFrame({

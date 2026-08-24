@@ -22,21 +22,21 @@ from corroborate.analyses.panel.stratified_arm_diff_pooled import (
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.core.hypothesis import PredictedDirection
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _TREATMENT = 'treatment_arm'
 _BASELINE = 'baseline_arm'
 
 
-def _make_cells(
+def _make_rows(
     env_effects: list[tuple[str, float, float]],
     *,
     n_seeds: int = 30,
     noise: float = 0.1,
     seed: int = 0,
 ) -> list[dict[str, object]]:
-    """Build independent-samples cells per env with controlled means.
+    """Build independent-samples rows per env with controlled means.
 
     Treatment + baseline are NOT paired — `seed` is just a row
     identifier within each (env, arm); the stratified analysis
@@ -60,16 +60,16 @@ def _make_cells(
 
 
 def _run(
-    cells: list[dict[str, object]],
+    rows: list[dict[str, object]],
     *,
     predicted_direction: PredictedDirection | None = 'a_gt_b',
 ) -> StratifiedArmDiffPooledResult:
     """Direct call to the analysis (bypasses bridge fixture
     layer; tests the primitive in isolation). `jensen_gap=1.0`
-    in every cell so the stratum-level scope filter never
+    in every row so the stratum-level scope filter never
     excludes any strata."""
     result = stratified_arm_diff_pooled.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         source='outcome',
         treatment_arm=_TREATMENT,
         baseline_arm=_BASELINE,
@@ -87,8 +87,8 @@ def test_pool_held_uniform() -> None:
     """Five envs with the same large effect (uniform population) →
     PI excludes zero, I² near 0 → HELD."""
     envs = [(f'env_{i}', 1.0, 0.0) for i in range(5)]
-    cells = _make_cells(envs, n_seeds=30, noise=0.1)
-    result = _run(cells)
+    rows = _make_rows(envs, n_seeds=30, noise=0.1)
+    result = _run(rows)
     assert result.n_strata == 5
     assert result.verdict == Verdict.HELD
     assert result.refutation is None
@@ -113,8 +113,8 @@ def test_pool_held_with_scope_flag_high_heterogeneity() -> None:
         ('env_g', 1.1, 0.0),
         ('env_h', 1.2, 0.0),
     ]
-    cells = _make_cells(envs, n_seeds=100, noise=0.5)
-    result = _run(cells)
+    rows = _make_rows(envs, n_seeds=100, noise=0.5)
+    result = _run(rows)
     assert result.n_strata == 8
     assert result.pooled.I2 >= 0.5
     assert result.verdict == Verdict.HELD_WITH_SCOPE_FLAG
@@ -131,8 +131,8 @@ def test_pool_no_effect_pi_brackets_zero() -> None:
         ('env_d', 1.0, 0.0),
         ('env_e', 2.0, 0.0),
     ]
-    cells = _make_cells(envs, n_seeds=30, noise=0.1)
-    result = _run(cells)
+    rows = _make_rows(envs, n_seeds=30, noise=0.1)
+    result = _run(rows)
     assert result.verdict == Verdict.NO_EFFECT
     assert result.refutation == RefutationClass.NULL_EFFECT
 
@@ -140,10 +140,10 @@ def test_pool_no_effect_pi_brackets_zero() -> None:
 def test_pool_power_insufficient_n_under_three() -> None:
     """Fewer than 3 strata with finite Cohen's d/SE →
     POWER_INSUFFICIENT/UNDERPOWERED per `random_effects_verdict`'s
-    n_cells < 3 gate."""
+    n_rows < 3 gate."""
     envs = [('only_env', 1.0, 0.0), ('one_more', 1.0, 0.0)]
-    cells = _make_cells(envs, n_seeds=30, noise=0.1)
-    result = _run(cells)
+    rows = _make_rows(envs, n_seeds=30, noise=0.1)
+    result = _run(rows)
     assert result.n_strata == 2
     assert result.verdict == Verdict.POWER_INSUFFICIENT
     assert result.refutation == RefutationClass.UNDERPOWERED
@@ -154,7 +154,7 @@ def test_pool_refutation_class_sign_flip() -> None:
     with SIGN_FLIP refinement. Tests the verdict-enum's refutation-
     classification path through the analysis."""
     envs = [(f'env_{i}', -1.0, 0.0) for i in range(5)]
-    cells = _make_cells(envs, n_seeds=30, noise=0.1)
-    result = _run(cells, predicted_direction='a_gt_b')
+    rows = _make_rows(envs, n_seeds=30, noise=0.1)
+    result = _run(rows, predicted_direction='a_gt_b')
     assert result.verdict == Verdict.NO_EFFECT
     assert result.refutation == RefutationClass.SIGN_FLIP

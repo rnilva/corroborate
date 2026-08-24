@@ -16,18 +16,18 @@ the typed primitives describing each individual slot swap. A
 Pearl-coherence: each arm in `DoEffect.arms` is a joint
 intervention `do(slot_1 = v_1, slot_2 = v_2, ...)`. Multi-level
 sweeps (dose-response), factorial designs, and N-way contrasts
-are first-class — the framework dispatches one cell per arm; the
+are first-class — the framework dispatches one row per arm; the
 analysis-side primitives (per-pair `paired_g`, dose-response,
 `factorial_2x2`) pick the reference structure separately.
 
 Intervention vs HP variation. HPs (γ, lr, batch_size, total_steps)
-MUST NOT appear as Interventions — they are cell covariates that
+MUST NOT appear as Interventions — they are row covariates that
 meta-regression cleaves on (cf. v9's aggregation reframing). Slot
 swaps (`bootstrap`, `replay.sample`, `action_select`) ARE
 Interventions — they describe the structural mechanism delta.
 
 Two hypotheses with the same arm contents but different HP grid
-points share an arm key and pair as same-arm cells; the HP
+points share an arm key and pair as same-arm rows; the HP
 difference becomes a covariate, not an arm distinguisher.
 
 Identity is via static fingerprint (`canonical_str`). The runtime
@@ -323,7 +323,7 @@ class DoEffect:
     Pearl-rung-2 edges in the causal graph have an *intervention*
     as the source node, NOT a measurable. `DoEffect` carries N
     arms — each a `do(joint_intervention)` operation in Pearl's
-    calculus. The framework dispatches one cell per (grid_point,
+    calculus. The framework dispatches one row per (grid_point,
     arm) and tags each `RunRow.arm_key` with the canonical
     fingerprint of its arm.
 
@@ -615,8 +615,8 @@ class DoEffect:
     def arm_keys(self) -> tuple[str, ...]:
         """Canonical fingerprint per arm. Empty tuple → `'baseline'`;
         non-empty → `'+'`-joined slot=replacement keys. The string
-        flows to `RunRow.arm_key` per cell, and analyses filter
-        cells by string match on these keys."""
+        flows to `RunRow.arm_key` per row, and analyses filter
+        rows by string match on these keys."""
         if self.is_value_based:
             return (ArmRole.BASELINE.value, ArmRole.TREATMENT.value)
         return tuple(combined_arm_key(a) for a in self.arms)

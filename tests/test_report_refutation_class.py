@@ -22,12 +22,12 @@ def test_report_serialises_refutation_class() -> None:
         verdict=Verdict.NO_EFFECT,
         refutation_class=RefutationClass.SIGN_FLIP,
         analysis_results=MappingProxyType({}),
-        n_cells_in_scope=12,
+        n_rows_in_scope=12,
     )
     entry = _build_bridge_entry(
         _refuted_bridge,
         evaluation,
-        n_cells_total=12,
+        n_rows_total=12,
     )
     serialised = _coerce_value(entry)
     assert isinstance(serialised, dict)

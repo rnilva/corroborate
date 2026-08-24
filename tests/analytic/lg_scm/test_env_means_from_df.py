@@ -1,7 +1,7 @@
 """Direct tests on `_env_means_from_df` — the frame-native helper
-that lifts cell-level columns to env-level mean covariates.
+that lifts row-level columns to env-level mean covariates.
 
-The rows-era helper made its skip decisions per cell; the frame
+The rows-era helper made its skip decisions per row; the frame
 shape moves them to the honest granularity: NaN skips per VALUE
 (fill_nan → null-skipping mean), non-numeric and absent columns
 are excluded as COLUMNS (a frame column has one dtype), and a

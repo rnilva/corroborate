@@ -31,7 +31,7 @@ from corroborate.analyses.link.cross_stratum_arm_diff_slope import (
 
 from tests.analytic.lg_scm.composition import LinearGaussianSCM
 from tests.analytic.lg_scm.runner import run_multi_env_paired_arms
-from corroborate.data import cells_to_dataframe
+from corroborate.data import to_dataframe
 
 
 _MU_X = 1.0
@@ -70,7 +70,7 @@ def _scm(beta_xz: float) -> LinearGaussianSCM:
     )
 
 
-def _build_cells() -> list[Mapping[str, object]]:
+def _build_rows() -> list[Mapping[str, object]]:
     envs = {
         name: (_scm(t), _scm(b))
         for name, (t, b) in _ENV_BETAS.items()
@@ -95,9 +95,9 @@ def test_cross_stratum_arm_diff_slope_recovers_monotone_rho() -> None:
     """Δ_y / Δ_z = β_zy across all strata → Spearman ρ = +1
     exactly (no ties up to env_e/env_f, which share Δβ=0.3 →
     one rank tie; remaining 5 strata are strictly monotone)."""
-    cells = _build_cells()
+    rows = _build_rows()
     result = cross_stratum_arm_diff_slope.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target='y_mean',
@@ -141,10 +141,10 @@ def test_cross_stratum_arm_diff_slope_recovers_monotone_rho() -> None:
 def test_cross_stratum_arm_diff_slope_min_strata_floor_returns_nan() -> None:
     """When fewer strata survive the min_seeds_per_arm filter than
     `min_strata`, ρ is NaN."""
-    cells = _build_cells()
+    rows = _build_rows()
     # Set min_strata higher than n_envs to force NaN
     result = cross_stratum_arm_diff_slope.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target='y_mean',
@@ -167,9 +167,9 @@ def test_cross_stratum_arm_diff_slope_constant_target_returns_nan() -> None:
     would silently pass a "ρ ≈ 0 means no effect" claim where the
     truth is "ρ undefined".
     """
-    cells = _build_cells()
+    rows = _build_rows()
     result = cross_stratum_arm_diff_slope.fn(
-        cells_to_dataframe(cells),
+        to_dataframe(rows),
         treatment_arm='treatment',
         baseline_arm='baseline',
         target='x_mean',

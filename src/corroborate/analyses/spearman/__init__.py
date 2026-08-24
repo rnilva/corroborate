@@ -5,7 +5,7 @@ the 5 legacy `stratified_*` / `per_burst_*_jci_*` variants —
 see CLAUDE.md canonical-analyses table). `stratum_panel_jci_spearman`
 is kept separate: it's a stratum-panel falsification primitive
 (per-stratum marginal-vs-stratified ρ comparison) with a different
-shape than the per-cell-or-per-burst observation-iterating
+shape than the per-row-or-per-burst observation-iterating
 `partial_spearman`.
 """
 from corroborate.analyses.spearman.partial_spearman import (  # noqa: F401

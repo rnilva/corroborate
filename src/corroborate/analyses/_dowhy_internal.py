@@ -110,12 +110,12 @@ def _record_keys_for(graph: DAGLike) -> list[str]:
     return list(nx_graph.nodes)
 
 
-def cells_to_pandas(
-    cells: Iterable[Mapping[str, object]],
+def rows_to_pandas(
+    rows: Iterable[Mapping[str, object]],
     keys: list[str],
 ) -> 'pd.DataFrame':
-    """Project the cell collection to a pandas DataFrame: one
-    row per cell, columns = `keys`. Cells missing any required
+    """Project the row collection to a pandas DataFrame: one
+    row per row, columns = `keys`. Rows missing any required
     key are skipped (so partial corpora don't crash). Non-scalar
     values are skipped.
 
@@ -124,26 +124,26 @@ def cells_to_pandas(
     public/private boundary on a sibling-module helper."""
     import pandas as pd
 
-    rows: list[dict[str, float]] = []
-    for cell in cells:
-        row: dict[str, float] = {}
+    projected_rows: list[dict[str, float]] = []
+    for source_row in rows:
+        projected: dict[str, float] = {}
         complete = True
         for k in keys:
-            v = cell.get(k)
+            v = source_row.get(k)
             if isinstance(v, bool):
-                row[k] = float(v)
+                projected[k] = float(v)
             elif isinstance(v, (int, float)):
-                row[k] = float(v)
+                projected[k] = float(v)
             else:
                 complete = False
                 break
         if complete:
-            rows.append(row)
-    return pd.DataFrame(rows)
+            projected_rows.append(projected)
+    return pd.DataFrame(projected_rows)
 
 
 def backdoor_estimate(
-    cells: Iterable[Mapping[str, object]],
+    rows: Iterable[Mapping[str, object]],
     treatment: str,
     outcome: str,
     dag: DAGLike,
@@ -156,7 +156,7 @@ def backdoor_estimate(
     """Build DataFrame + CausalModel + run identification +
     (when identified) estimation. Helper shared by all DoWhy-
     consuming analyses so model construction is consistent."""
-    df = cells_to_pandas(cells, _record_keys_for(dag))
+    df = rows_to_pandas(rows, _record_keys_for(dag))
     model = build_causal_model(df, treatment, outcome, dag)
     identified = model.identify_effect(
         proceed_when_unidentifiable=False,
@@ -173,7 +173,7 @@ def backdoor_estimate(
 
 
 def backdoor_with_refutations(
-    cells: Iterable[Mapping[str, object]],
+    rows: Iterable[Mapping[str, object]],
     *,
     treatment: str,
     outcome: str,
@@ -195,13 +195,13 @@ def backdoor_with_refutations(
     state. Passes through to `placebo_refutation` and
     `random_common_cause_refutation`."""
     # Rows-level throughout: encoding a polars frame here would
-    # defeat `cells_to_pandas`'s per-row skip (one ill-typed value
+    # defeat `rows_to_pandas`'s per-row skip (one ill-typed value
     # stringifies a whole column before the skip can see it) and
     # buy one encode + three decodes for nothing.
     from corroborate.analyses.dowhy.dowhy import (
         backdoor_ate_rows, run_refuter,
     )
-    rows = list(cells)
+    rows = list(rows)
     backdoor = backdoor_ate_rows(
         rows, treatment=treatment, outcome=outcome,
         dag=dag, method_name=method_name,
@@ -229,7 +229,7 @@ __all__ = [
     'DAGLike',
     'backdoor_estimate',
     'build_causal_model',
-    'cells_to_pandas',
+    'rows_to_pandas',
     '_record_keys_for',
     'refuter_effect',
     '_to_networkx',
