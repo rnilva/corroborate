@@ -155,9 +155,11 @@ by the producer's own `config/*` records, never hand-listed — so
 evaluation is the claim and the record:
 
 ```python
-panel = panel.with_measurables(('eval_reward_at_25k',))
 evaluation = evaluate(higher_gamma_improves_return, panel)
 ```
+
+(No materialisation step: the analysis resolves the registered
+measurable per cell through the registry.)
 
 Exact matches to 0.80 and 0.99 receive the stable symbolic arm
 identities `baseline` and `treatment`; neither membership nor

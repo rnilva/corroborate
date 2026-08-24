@@ -121,7 +121,9 @@ def test_load_walks_every_progress_file(tmp_path: Path) -> None:
     panel = load_sb3_logger_runs(tmp_path)
     assert isinstance(panel, Panel)
     df = panel.cells.sort('id')
-    assert df['id'].to_list() == ['a-s0', 'a-s1']
+    assert df['id'].to_list() == [
+        'a-s0/progress.json', 'a-s1/progress.json',
+    ]
     # Diagonal concat: heterogeneous keys null-pad across rows.
     assert df['config/lr'].to_list() == [None, 1e-3]
     assert df['config/gamma'].to_list() == [0.99, 0.8]
@@ -130,14 +132,33 @@ def test_load_walks_every_progress_file(tmp_path: Path) -> None:
     assert panel.sources[0].corpus == tmp_path.name
 
 
-def test_load_prefers_json_over_csv_in_one_directory(
-    tmp_path: Path,
-) -> None:
+def test_glob_declares_the_rows(tmp_path: Path) -> None:
+    """Every glob-matched file is a row; the reader never decides
+    that two files are one log. The default glob is SB3's json
+    rendering; a `progress.*` glob over a folder holding both
+    renderings declares each a row — double-counting a unit is
+    the claim layer's duplicate checks to surface."""
     run = tmp_path / 'run'
     _write_json(run / 'progress.json', [{'train/loss': 0.5}])
     _ = (run / 'progress.csv').write_text('train/loss\n0.9\n')
-    panel = load_sb3_logger_runs(tmp_path)
-    assert panel.cells['train/loss'].to_list() == [[0.5]]
+    assert load_sb3_logger_runs(tmp_path).cells.height == 1
+    both = load_sb3_logger_runs(tmp_path, glob='**/progress.*')
+    assert both.cells.height == 2
+    assert sorted(both.cells['id'].to_list()) == [
+        'run/progress.csv', 'run/progress.json',
+    ]
+
+
+def test_nested_logs_get_distinct_path_ids(tmp_path: Path) -> None:
+    """File-relative-path ids cannot collide — a subdirectory
+    sharing the walk root's name is just another path."""
+    root = tmp_path / 'runs'
+    _write_json(root / 'progress.json', [{'train/loss': 0.5}])
+    _write_json(root / 'runs' / 'progress.json', [{'train/loss': 0.7}])
+    panel = load_sb3_logger_runs(root)
+    assert sorted(panel.cells['id'].to_list()) == [
+        'progress.json', 'runs/progress.json',
+    ]
 
 
 def test_load_rejects_reserved_key(tmp_path: Path) -> None:
@@ -175,17 +196,6 @@ def test_ragged_csv_row_raises_with_location(tmp_path: Path) -> None:
         _ = read_progress(file)
 
 
-def test_duplicate_row_id_raises(tmp_path: Path) -> None:
-    """A first-level subdirectory sharing the walk root's name
-    would silently produce two cells with one id — downstream
-    id-joins fan out — so the collision is loud."""
-    root = tmp_path / 'runs'
-    _write_json(root / 'progress.json', [{'train/loss': 0.5}])
-    _write_json(root / 'runs' / 'progress.json', [{'train/loss': 0.7}])
-    with pytest.raises(ValueError, match='duplicate row id'):
-        _ = load_sb3_logger_runs(root)
-
-
 def test_mixed_kind_across_files_raises(tmp_path: Path) -> None:
     """polars' diagonal concat unifies conflicting list dtypes to
     List(String) silently; a bool logged by one run and a 'True'
@@ -195,4 +205,4 @@ def test_mixed_kind_across_files_raises(tmp_path: Path) -> None:
     _ = (tmp_path / 'b').mkdir()
     _ = (tmp_path / 'b' / 'progress.csv').write_text('flag\nTrue\n')
     with pytest.raises(ValueError, match="column 'flag'"):
-        _ = load_sb3_logger_runs(tmp_path)
+        _ = load_sb3_logger_runs(tmp_path, glob='**/progress.*')

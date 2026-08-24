@@ -62,9 +62,9 @@ curve = (
 print('\nmean eval reward per evaluation point (seeds pooled per condition):')
 print(curve)
 
-# The claim's horizon column, computed claim-side: importing
-# `sb3_claim` registered `eval_reward_at_25k`, and the Panel fills
-# it from the record arrays.
+# The claim's horizon column, materialised here only for the
+# exploration pivot below — `evaluate` resolves registered
+# measurables per cell on its own ("everything is measurables").
 panel = panel.with_measurables(('eval_reward_at_25k',))
 paired = (
     panel.cells

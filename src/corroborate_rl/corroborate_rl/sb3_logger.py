@@ -28,7 +28,7 @@ records, all columns — so this reader is mechanical:
 What makes two rows the same experimental unit — pairing, arms,
 scope — is declared by each claim (`pair_by`, `DoEffect`,
 `scope`), never inferred here; `load_sb3_logger_runs` is a
-zero-semantics walk (every progress file found is a row), and
+zero-semantics walk (every file the glob matches is a row), and
 callers with a different disk layout assemble their own frame
 from `read_progress` + `progress_columns` and
 `Panel.from_dataframe`.
@@ -48,8 +48,7 @@ from corroborate.corpus.schema import MeasurementLeaf
 from corroborate.data.derive import is_scalar_leaf
 from corroborate.data.panel import CorpusSource, Panel
 
-PROGRESS_JSON = 'progress.json'
-PROGRESS_CSV = 'progress.csv'
+PROGRESS_GLOB = '**/progress.json'
 CONFIG_PREFIX = 'config/'
 
 type CellValue = (
@@ -250,25 +249,22 @@ def _column_kind(value: 'CellValue') -> str | None:
     return type(value).__name__
 
 
-def _progress_files(root: Path) -> list[tuple[str, Path]]:
-    """Every progress file under `root`, keyed by the directory
-    holding it (relative path = the row id; `root` itself maps to
-    its own name). Where a directory carries both formats, json
-    wins — it preserves types and absence; the csv is the same
-    log rendered lossily."""
-    by_dir: dict[Path, Path] = {}
-    for file in sorted(root.rglob(PROGRESS_CSV)):
-        by_dir[file.parent] = file
-    for file in sorted(root.rglob(PROGRESS_JSON)):
-        by_dir[file.parent] = file
-    pairs: list[tuple[str, Path]] = []
-    for directory in sorted(by_dir):
-        relative = directory.relative_to(root)
-        row_id = root.name if relative == Path('.') else str(relative)
-        pairs.append((row_id, by_dir[directory]))
+def _progress_files(root: Path, glob: str) -> list[tuple[str, Path]]:
+    """Every file matching `glob` under `root`, as (row id, file).
+    The id is the file's path relative to `root` — the one
+    identity the filesystem already guarantees unique, free of
+    invented meaning; a directory is never a unit here, so no
+    id can collide and no format is ever preferred over another.
+    Semantic identity, when wanted, belongs to `config/*`
+    columns the producer recorded."""
+    pairs = [
+        (str(file.relative_to(root)), file)
+        for file in sorted(root.glob(glob))
+        if file.is_file()
+    ]
     if not pairs:
         raise ValueError(
-            f'sb3_logger: no {PROGRESS_JSON} / {PROGRESS_CSV} '
+            f'sb3_logger: no progress files matching {glob!r} '
             f'under {root}',
         )
     return pairs
@@ -279,9 +275,14 @@ def load_sb3_logger_runs(
     *,
     corpus: str | None = None,
     config_prefix: str = CONFIG_PREFIX,
+    glob: str = PROGRESS_GLOB,
 ) -> Panel:
-    """Zero-semantics walk: every progress file under `root` is
-    one row (`id` = its directory, relative to `root`). Rows
+    """Zero-semantics walk: every file matching `glob` under
+    `root` is one row, `id` = the file's path relative to `root`
+    (the identity the filesystem already guarantees unique;
+    semantic identity belongs to `config/*` columns). SB3's json
+    rendering is the default; csv logs pass
+    `glob='**/progress.csv'`. Rows
     concatenate diagonally — heterogeneous keys null-pad — and
     the registry is the union of every log's `config/*` keys.
     The returned Panel carries cells + registry + provenance, so
@@ -290,21 +291,16 @@ def load_sb3_logger_runs(
     No unit semantics: whether two rows are the same seed, the
     same condition, or duplicates is the claim's declaration
     (`pair_by`, `DoEffect`, `scope`) checked by its admission
-    gates over the cells it admits."""
+    gates over the cells it admits. A folder carrying both Logger
+    renderings under a `progress.*` glob is two matched files —
+    two declared rows; the claim layer's duplicate-unit checks
+    make the double-count loud."""
     root_path = Path(root)
     corpus_name = corpus if corpus is not None else root_path.name
     rows: list[dict[str, CellValue]] = []
     registry: set[str] = set()
-    seen_ids: set[str] = set()
     kind_by_column: dict[str, tuple[str, str]] = {}
-    for row_id, file in _progress_files(root_path):
-        if row_id in seen_ids:
-            raise ValueError(
-                f'sb3_logger: duplicate row id {row_id!r} '
-                f'({file}) — a subdirectory shares the walk '
-                f"root's name; rename one so cell ids stay unique",
-            )
-        seen_ids.add(row_id)
+    for row_id, file in _progress_files(root_path, glob):
         columns, leaves = progress_columns(
             read_progress(file),
             config_prefix=config_prefix,
@@ -346,6 +342,7 @@ def load_sb3_logger_runs(
 
 __all__ = [
     'CONFIG_PREFIX',
+    'PROGRESS_GLOB',
     'load_sb3_logger_runs',
     'progress_columns',
     'read_progress',
