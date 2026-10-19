@@ -214,6 +214,21 @@ def paired_directional(
     direction = _validate_test_configuration(
         predicted_direction, alpha, sesoi_dz, minimum_pairs,
     )
+    if df.height:
+        # paired_g intentionally coalesces replay aliases, even under its
+        # 'raise' strategy. This analysis promises one observation per
+        # condition and experimental unit, regardless of outcome equality.
+        unit_columns = tuple(dict.fromkeys((arm_field, *pair_by)))
+        units = df.filter(
+            pl.col(arm_field).is_in([baseline_arm, treatment_arm]),
+        ).select(unit_columns)
+        if units.is_duplicated().any():
+            raise ValueError(
+                'paired_directional: duplicate rows within '
+                f'(condition={arm_field!r}, pair_by={pair_by!r}). '
+                'Resolve repeated observations before analysis, or '
+                'use pairing keys that identify the experimental unit.',
+            )
     paired: PairedGResult = paired_g.fn(
         df,
         source=source,

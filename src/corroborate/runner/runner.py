@@ -555,7 +555,7 @@ def run(
     serializes a JSON report at `report_path` (or
     `experiments/findings/<short>.run.json` if None) capturing
     per-bridge verdict + every typed analysis result + admission
-    gates + execution metadata (timestamp, git commit, measurable
+    gates + composed finding verdicts + execution metadata (timestamp, git commit, measurable
     signatures). The report is a small, diffable decision record that
     may be committed alongside the bridges that produced it. It carries
     no external-evidence identity, provenance attestation, or chronology
@@ -716,7 +716,10 @@ def run(
         sigs = _signatures_for(required_for_sigs, rows)
         report = _build_report(
             hypothesis_module_name=h.__name__,
-            bridges=bridges,
+            # Retain authored topology for Finding composition when a name
+            # filter leaves some bridges unevaluated in this invocation.
+            bridges=h.BRIDGES,
+            findings=h.FINDINGS,
             results=out,
             errors=errors,
             n_rows_total=rows.height,
