@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 import numpy as np
 import pytest
@@ -16,10 +16,19 @@ from corroborate.analyses.paired.paired_directional import (
 )
 from corroborate.analyses.paired.paired_g import (
     _paired_g_assumption_violations,
+    paired_g,
 )
 from corroborate.bridge.verdict import RefutationClass, Verdict
 from corroborate.core.hypothesis import PredictedDirection
 from corroborate.data import to_dataframe
+from corroborate.measurables import measurable
+
+
+@measurable(name='directional_duplicate_outcome', reads=('directional_duplicate_outcome',))
+def directional_duplicate_outcome(record: Mapping[str, object]) -> float:
+    value = record['directional_duplicate_outcome']
+    assert isinstance(value, (int, float))
+    return float(value)
 
 
 def _rows(deltas: np.ndarray) -> list[dict[str, object]]:
@@ -155,6 +164,65 @@ def test_paired_skew_diagnostic_matches_adjusted_fisher_pearson() -> None:
     violations = _paired_g_assumption_violations(deltas)
     skew_flag = next(flag for flag in violations if 'skew_bias_likely' in flag)
     assert f'skew={expected:+.2f}' in skew_flag
+
+
+@pytest.mark.parametrize('duplicate_value', [1.0, 101.0])
+def test_directional_refuses_duplicate_registered_outcomes(
+    duplicate_value: float,
+) -> None:
+    """Replay aliases must not silently change a directional estimand.
+
+    The general paired-g helper intentionally averages aliases whose
+    differences are confined to registered outcomes and provenance.
+    Directional inference promises stricter experimental-unit uniqueness,
+    including an identical replay and a conflicting cached outcome.
+    """
+    rows = _rows(np.asarray([1.0, 2.0, 3.0]))
+    for row in rows:
+        row['directional_duplicate_outcome'] = row.pop('metric')
+    rows.append({
+        'id': 't-0-replayed',
+        'seed': 0,
+        'arm_key': 'treatment',
+        'directional_duplicate_outcome': duplicate_value,
+    })
+    df = to_dataframe(rows)
+    general = paired_g.fn(
+        df,
+        source='directional_duplicate_outcome',
+        treatment_arm='treatment',
+        baseline_arm='baseline',
+        dedupe_strategy='raise',
+    )
+    assert general.n_pairs == 3
+    assert general.mean_diff == pytest.approx(
+        ((1.0 + duplicate_value) / 2.0 + 2.0 + 3.0) / 3.0,
+    )
+    with pytest.raises(ValueError, match='paired_directional: duplicate'):
+        paired_directional.fn(
+            df,
+            source='directional_duplicate_outcome',
+            treatment_arm='treatment',
+            baseline_arm='baseline',
+            predicted_direction='a_gt_b',
+        )
+
+
+def test_directional_ignores_duplicates_outside_declared_contrast() -> None:
+    rows = _rows(np.asarray([1.0, 2.0, 3.0]))
+    rows.extend([
+        {'id': 'o-0', 'seed': 0, 'arm_key': 'other', 'metric': 100.0},
+        {'id': 'o-1', 'seed': 0, 'arm_key': 'other', 'metric': 200.0},
+    ])
+    result = paired_directional.fn(
+        to_dataframe(rows),
+        source='metric',
+        treatment_arm='treatment',
+        baseline_arm='baseline',
+        predicted_direction='a_gt_b',
+    )
+    assert result.n_pairs == 3
+    assert result.mean_diff == pytest.approx(2.0)
 
 
 def _invalid_run(

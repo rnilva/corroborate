@@ -3,7 +3,8 @@
 Every invocation of `runner.run()` (with `write_report=True`)
 serializes a structured report to disk capturing: per-bridge verdict
 + every typed analysis-result dataclass (fields AND `@property`
-accessors) + admission-gate outcomes + row sample sizes + execution
+accessors) + admission-gate outcomes + row sample sizes + composed
+finding verdicts (expected, actual, drift, and unevaluated members) + execution
 metadata (git commit, timestamp, and the existing measurable-signature
 manifest).
 
@@ -50,7 +51,14 @@ import numpy as np
 import polars as pl
 
 from corroborate.bridge.bridge import Bridge, BridgeEvaluation
+from corroborate.core.finding import Finding
 from corroborate.core.intervention import DoEffect
+from corroborate.graph.causal import (
+    ClusterVerdict,
+    PostEvalEntry,
+    composed_verdict,
+    evaluated_graph,
+)
 from corroborate.measurables.measurable import Measurable
 
 
@@ -98,6 +106,25 @@ class BridgeReportEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class FindingReportEntry:
+    """A declared subgraph's run-local verdict and expected empirical state.
+
+    Missing evaluations are explicit so a filtered run's drift cannot be
+    mistaken for a finding reevaluated against complete new evidence.
+    """
+    finding_name: str
+    expected: ClusterVerdict
+    actual: ClusterVerdict
+    blocked_on: str | None
+    bridge_names: tuple[str, ...]
+    unevaluated_bridge_names: tuple[str, ...]
+
+    @property
+    def drift(self) -> bool:
+        return self.actual is not self.expected
+
+
+@dataclass(frozen=True, slots=True)
 class RunReport:
     """Top-level run audit. All fields JSON-serializable via
     `_coerce_value`."""
@@ -109,6 +136,7 @@ class RunReport:
     measurable_signatures: Mapping[str, str]
     bridges: tuple[BridgeReportEntry, ...]
     errored_bridges: tuple[ErroredBridgeEntry, ...]
+    findings: tuple[FindingReportEntry, ...] = ()
 
 
 # ============ Serializer ============
@@ -458,6 +486,7 @@ def build_report(
     cache_path: Path | None,
     measurable_signatures: Mapping[str, str],
     repo_root: Path | None = None,
+    findings: Sequence[Finding] = (),
 ) -> RunReport:
     """Assemble the structured RunReport from runner state.
 
@@ -465,8 +494,10 @@ def build_report(
     `results` maps bridge_name → BridgeEvaluation for bridges that
     completed successfully; `errors` maps bridge_name → exception
     for bridges that raised. Bridges in `bridges` but absent from
-    both dicts are silently skipped (shouldn't happen in practice —
-    `runner.run()` populates one or the other for every bridge).
+    both dicts have no bridge report entry, as with a filtered run.
+    Findings compose over the full authored graph: filtered, missing,
+    and errored evaluations remain unevaluated, never synthetic failures
+    or successful zero-row observations.
 
     `n_rows_total` is supplied separately rather than passed as a
     DataFrame because the report doesn't need the data — only the
@@ -485,6 +516,30 @@ def build_report(
             bridge_entries.append(_build_bridge_entry(b, results[b.name], n_rows_total))
         elif b.name in errors:
             errored_entries.append(_build_errored_entry(b.name, errors[b.name]))
+    finding_entries: tuple[FindingReportEntry, ...] = ()
+    if findings:
+        graph = evaluated_graph(bridges, {
+            name: PostEvalEntry(
+                verdict=evaluation.verdict,
+                extent_hash=evaluation.extent_hash,
+                n_rows_in_scope=evaluation.n_rows_in_scope,
+            )
+            for name, evaluation in results.items()
+        })
+        finding_entries = tuple(
+            FindingReportEntry(
+                finding_name=finding.__name__,
+                expected=finding.EXPECTED,
+                actual=composed_verdict(graph, bridges=finding.BRIDGES),
+                blocked_on=finding.BLOCKED_ON,
+                bridge_names=tuple(bridge.name for bridge in finding.BRIDGES),
+                unevaluated_bridge_names=tuple(
+                    bridge.name for bridge in finding.BRIDGES
+                    if bridge.name not in results
+                ),
+            )
+            for finding in findings
+        )
     cache_path_str: str | None
     if cache_path is None:
         cache_path_str = None
@@ -502,6 +557,7 @@ def build_report(
         measurable_signatures=MappingProxyType(dict(measurable_signatures)),
         bridges=tuple(bridge_entries),
         errored_bridges=tuple(errored_entries),
+        findings=finding_entries,
     )
 
 
@@ -557,6 +613,7 @@ def write_report(report: RunReport, path: Path) -> None:
 __all__ = [
     'BridgeReportEntry',
     'ErroredBridgeEntry',
+    'FindingReportEntry',
     'RunReport',
     'build_report',
     'write_report',
