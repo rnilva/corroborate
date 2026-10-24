@@ -2,11 +2,9 @@
 
 Substrate-coupled: the YAML schema (`name`, `base`, `arms`) is a
 implementation-author convention, not a framework typed contract.
-The framework's hypothesis surface is the `Hypothesis` Protocol
-(`INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`);
-`InterventionConfig` is the intermediate the implementation's
-`dispatch_sweep` decomposes into a Protocol-conformer + a `base`
-callable.
+`InterventionConfig` supplies an explicit `DoEffect` and a `base`
+callable to the implementation's sweep dispatcher. It is separate
+from the verdict-time `Hypothesis` protocol.
 
 Two recursive value forms are recognised; everything else is a
 leaf (passes through unchanged for scalars, recurses element-wise
@@ -48,8 +46,8 @@ from corroborate.runner.registry import Registry
 @dataclass(frozen=True, slots=True)
 class InterventionConfig:
     """YAML-loaded intervention configuration. A substrate-coupled
-    intermediate — the implementation's `dispatch_sweep` decomposes it
-    into a Hypothesis Protocol-conformer + a `base` Callable.
+    intermediate — the implementation's `dispatch_sweep` supplies its
+    `do_effect` and bound `base` callable to `run_intervention`.
 
     Carries:
     - `name`: substrate-chosen short label (for arm_tag output naming).

@@ -1,50 +1,20 @@
-"""Hypothesis — the framework's typed verdict-time contract.
+"""Hypothesis — the verdict-time contract for an authored evidence graph.
 
-A Hypothesis is anything structurally exposing two attributes:
+A module or class exposes ``BRIDGES``, ``FINDINGS`` and ``__name__``.
+Each bridge declares its own source: an observational quantity or a
+``DoEffect`` contrast. A hypothesis can therefore combine observations
+and several interventions without choosing one global intervention.
 
-- `INTERVENTION: DoEffect` — the typed contrast (treatment +
-  baseline arms as Intervention tuples on the claim graph).
-- `BRIDGES: tuple[Bridge, ...]` — the authored verdict
-  declarations the framework evaluates against a corpus.
+Executing experiments is a separate contract. ``run_intervention``
+takes an explicit ``DoEffect`` and a row runner; evaluating the resulting
+records does not execute that experiment. Existing modules may retain
+an ``INTERVENTION`` constant for their own sweep code, but verdict-time
+consumers neither require nor consult it.
 
-Both shapes satisfy the Protocol structurally:
-
-- **Module as hypothesis:** a Python module declaring module-level
-  `INTERVENTION` and `BRIDGES`. Modules are Python objects;
-  `getattr(module, 'INTERVENTION')` lands on the module-level
-  constant.
-- **Class as hypothesis:** a frozen dataclass (or any class) with
-  `ClassVar` fields:
-  ```python
-  @dataclass(frozen=True)
-  class DDQNvsVanilla:
-      INTERVENTION: ClassVar[DoEffect] = DoEffect(...)
-      BRIDGES: ClassVar[tuple[Bridge, ...]] = (...)
-  ```
-  Multiple hypotheses can live in one file as separate classes.
-
-For runtime-constructed Hypotheses (e.g. YAML-driven), use
-`types.SimpleNamespace` with the required attributes — it
-satisfies the Protocol via duck-typing.
-
-`MEASURABLES` is NOT on the Protocol. Pre-registered measurables
-are a sweep-time concern: `runner.sweep.run_intervention` takes
-them as an explicit parameter, and implementations that compute
-mediators post-sweep from raw traces leave the parameter empty.
-Bridges that consume measurables import them by name (typed
-`Measurable` instance) at module load — the registry resolves
-chained dependencies; the Protocol doesn't need to repeat what
-bridges already carry.
-
-`__name__: str` is on the Protocol so the runner's typed access
-(cache-path defaults / display) doesn't have to fall back to
-`getattr` — both Python modules and classes carry `__name__: str`
-for free, so requiring it costs no Hypothesis author anything.
-Arm *identity*, distinct from `__name__`, flows exclusively
-through `canonical_str` of the underlying Intervention tuples
-(via `DoEffect.arm_keys()`);
-substrate-chosen short labels are no longer part of the
-framework's identity surface."""
+Measurable dependencies belong to bridges and the measurable registry.
+The hypothesis need not repeat them; optional ``REQUIRED_MEASURABLES``
+adds quantities requested for exploration or future claims.
+"""
 from __future__ import annotations
 
 from typing import (
@@ -55,7 +25,6 @@ from typing import (
 )
 
 from corroborate._internals.canonical import canonical_str
-from corroborate.core.intervention import DoEffect
 
 if TYPE_CHECKING:
     from corroborate.bridge.bridge import Bridge
@@ -98,10 +67,8 @@ INVERSE) inferred post-hoc from a stat's value."""
 class Hypothesis(Protocol):
     """The framework's typed verdict-time hypothesis contract.
 
-    Conforming objects expose four read-only attributes:
+    Conforming objects expose three attributes:
 
-    - `INTERVENTION: DoEffect` — the typed contrast (treatment +
-      baseline arms as Intervention tuples).
     - `BRIDGES: tuple[Bridge, ...]` — the authored verdict
       declarations.
     - `FINDINGS: tuple[Finding, ...]` — cluster-shaped claims
@@ -114,8 +81,8 @@ class Hypothesis(Protocol):
 
     Modules and classes both satisfy the Protocol structurally
     via attribute access. The framework's verdict-time runner
-    reads `BRIDGES`; the implementation's sweep glue reads
-    `INTERVENTION` to drive paired sweep iteration.
+    reads `BRIDGES`. An experiment runner receives its actual
+    intervention separately; bridges need not share one contrast.
 
     Optional `CLAIM` attribute (`Claim[..., object] | None`):
     the implementation's outermost @claim function — the structural
@@ -170,7 +137,6 @@ class Hypothesis(Protocol):
     should fail loud on typos."""
 
     __name__: str
-    INTERVENTION: DoEffect
     BRIDGES: 'tuple[Bridge, ...]'
     FINDINGS: 'tuple[Finding, ...]'
     """Cluster-shaped claims authored against the hypothesis's

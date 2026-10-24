@@ -69,7 +69,7 @@ def test_validate_accepts_class_with_classvars() -> None:
     assert out is H
 
 
-def test_validate_rejects_class_missing_intervention() -> None:
+def test_validate_rejects_class_missing_findings() -> None:
     @dataclass(frozen=True)
     class Broken:
         BRIDGES: ClassVar[tuple[Bridge, ...]] = ()

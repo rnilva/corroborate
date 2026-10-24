@@ -19,6 +19,14 @@ the canonical artifact. Every other framework surface — findings
 prose, run reports, audit tables — is interpretation of the
 post-evaluation graph.
 
+The public `Hypothesis` contract requires `BRIDGES`, `FINDINGS`
+(possibly empty), and `__name__`. Interventions belong to individual
+bridge sources; there is no required graph-wide `INTERVENTION`. A graph
+may contain observational edges and several distinct contrasts. Evaluate
+it over existing observations with `run(hypothesis, data=panel,
+use_cache=False)`. Experiment execution remains separate:
+`run_intervention` takes the actual `DoEffect` and a row runner.
+
 ## How existing primitives realize it
 
 | Concern | Primitive | Lives in |

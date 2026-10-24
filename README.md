@@ -196,6 +196,48 @@ studies. It runs on CPU in a few minutes, and logs from a real
 run are committed so the analysis half can be run without
 training.
 
+## Separate execution, utilities, and analysis
+
+Experiment runners execute configurations and record observations.
+Readers and auxiliary scripts locate, restore, validate, or display those
+records. Research modules define reusable measurements, analyses and
+claims; they do not launch training or select evidence through hardcoded
+result paths. A notebook or a short script connects a reader to those
+research modules.
+
+A whole hypothesis accepts the same `Panel` as an individual bridge:
+
+```python
+from corroborate.data import concat_panels
+from corroborate.runner import run
+from examples.sb3_demo import hypothesis
+
+first = load_sb3_logger_runs('runs/batch_1')
+results = run(hypothesis, data=first, use_cache=False)
+
+second = load_sb3_logger_runs('runs/batch_2')
+results = run(hypothesis, data=concat_panels((first, second)), use_cache=False)
+```
+
+The hypothesis exposes `BRIDGES`, `FINDINGS`, and its Python name. Each
+bridge declares its own observational source or intervention, so there
+is no required global `INTERVENTION`. Native experiment execution still
+requires an explicit `DoEffect` through `run_intervention`.
+
+The reader carries configuration and provenance into both evaluations.
+Adding compatible records changes the evidence, not the claim's horizon,
+pairing or decision rule. `run` returns typed evaluations for inspection;
+writing a report or rendering a graph is optional presentation, not what
+makes an analysis reusable. Direct `@analysis` calls on `panel.df` remain
+useful for exploration before a claim has been authored.
+
+Run the [growing-analysis example](examples/sb3_demo/growing_analysis.py)
+over committed SB3 records without collecting new data:
+
+```bash
+uv run python -m examples.sb3_demo.growing_analysis
+```
+
 ## Repository layout
 
 | path | contents |

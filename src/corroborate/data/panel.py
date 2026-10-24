@@ -321,12 +321,16 @@ def cache_leaves(
     df: pl.DataFrame, cache_path: Path,
 ) -> frozenset[str] | None:
     """The configuration registry for a cache frame — the
-    canonical column partition grounded on the cache's own
+    explicit `.panel.json` registry when present (including None),
+    otherwise the canonical column partition grounded on the cache's
     `.hashes.json` manifest plus the live `@measurable` registry.
     Shared by `Panel.from_cache` and the runner's evaluate loop so
     the CLI/runner entry point and `evaluate(bridge, panel)` gate
     a value-based DoEffect claim identically. None when the
     partition cannot be grounded (see `_derive_native_leaves`)."""
+    from corroborate.data.panel_cache import metadata_path, restore_metadata
+    if metadata_path(cache_path).exists():
+        return restore_metadata(Panel(df=df), cache_path).leaves
     return _derive_native_leaves(
         df,
         artifact_measurables=_read_manifest_measurables(cache_path),
@@ -696,18 +700,22 @@ class Panel:
         `CorpusSource` (per-row provenance still lives in the
         `corpus` column on df). The `to_cache` sibling closes
         the round-trip: an exploration Panel with a `sources`
-        tuple persists into a sidecar-matched on-disk pair."""
+        tuple persists into a sidecar-matched on-disk pair. Caches
+        promoted from an explicit Panel also restore its configuration
+        registry, scope history, and diagnostic grouping from `.panel.json`;
+        legacy caches continue using native registry inference."""
         cache_path = _resolve_cache_path(hypothesis_module)
         if cache_path is None or not cache_path.exists():
             return cls(df=pl.DataFrame(), stratify_by=stratify_by)
         df = pl.read_parquet(cache_path)
         sources = _read_sources_for_panel(cache_path)
-        return cls(
+        from corroborate.data.panel_cache import restore_metadata
+        return restore_metadata(cls(
             df=df,
             stratify_by=stratify_by,
             sources=sources,
             leaves=cache_leaves(df, cache_path),
-        )
+        ), cache_path)
 
     def to_cache(
         self,
@@ -729,6 +737,9 @@ class Panel:
         - `<cache>.sources.json` (when `write_sidecar=True`):
           one entry per `self.sources` element, with `ingested_at`
           extended by an ISO-8601 UTC timestamp for THIS write.
+        - `<cache>.panel.json`: explicit configuration registry (None stays
+          unknown), scope history, diagnostic grouping and required
+          measurables, bound to the parquet and source sidecar bytes.
         - `<cache>.hashes.json` (when `write_manifest=True`): one
           entry per row column whose name matches a currently-
           registered `@measurable`. Built from the live registry,
@@ -755,6 +766,20 @@ class Panel:
             hypothesis_module=hypothesis_module,
             cache_path=cache_path,
         )
+        if not write_sidecar and target.with_suffix('.sources.json').exists():
+            # Suppressing a provenance write cannot relabel new observations
+            # with another batch's old sources. Audit timestamps may differ;
+            # the identities and locations must still describe this Panel.
+            # With no sidecar, the existing opt-out honestly leaves persisted
+            # source provenance unknown rather than borrowing another batch.
+            existing_sources = _read_sources_for_panel(target)
+            if {
+                replace(source, ingested_at=()) for source in existing_sources
+            } != {replace(source, ingested_at=()) for source in self.sources}:
+                raise ValueError(
+                    'to_cache(write_sidecar=False): existing source provenance '
+                    'does not describe this Panel; write the source sidecar',
+                )
         target.parent.mkdir(parents=True, exist_ok=True)
         # Lazy import: `runner` already imports `data` indirectly
         # through Hypothesis Protocol — keep this off the
@@ -776,6 +801,8 @@ class Panel:
             # signatures; let the next runner pass build a fresh
             # one rather than serve a stale entry as authoritative.
             manifest_target.unlink(missing_ok=True)
+        from corroborate.data.panel_cache import write_metadata
+        write_metadata(self, target)
         return target
 
     def with_traces(
