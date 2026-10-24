@@ -3,7 +3,7 @@ fingerprinting + combined_arm_key.
 
 After Phase 6 the Hypothesis dataclass is gone — the framework's
 verdict-time contract is a runtime_checkable Protocol with three
-attributes (INTERVENTION + BRIDGES + __name__). Implementation
+attributes (BRIDGES + FINDINGS + __name__). Implementation
 authoring uses module-level constants OR class-with-ClassVars
 to satisfy it. These tests cover:
 - The Protocol's runtime_checkable shape.
@@ -154,7 +154,7 @@ def test_combined_arm_key_distinguishes_different_replacements() -> None:
 # ============ Hypothesis Protocol shape ============
 
 def test_module_lacking_attrs_is_not_hypothesis() -> None:
-    """A module without INTERVENTION / BRIDGES doesn't conform.
+    """A module without BRIDGES / FINDINGS does not conform.
     The framework's `core.hypothesis` module is a counter-example —
     it defines the Protocol but doesn't carry it."""
     import corroborate.core.hypothesis as mod
@@ -179,8 +179,16 @@ def test_class_with_classvars_satisfies_protocol() -> None:
     assert isinstance(MyHypothesis, Hypothesis)
 
 
-def test_class_missing_intervention_is_not_hypothesis() -> None:
-    """A class without INTERVENTION → fails Protocol check."""
+def test_hypothesis_does_not_require_one_global_intervention() -> None:
+    """Observational and mixed-contrast graphs have no global arm pair."""
+    @dataclass(frozen=True)
+    class ObservationalHypothesis:
+        BRIDGES: ClassVar[tuple[Bridge, ...]] = ()
+        FINDINGS: ClassVar[tuple[Finding, ...]] = ()
+    assert isinstance(ObservationalHypothesis, Hypothesis)
+
+
+def test_class_missing_findings_is_not_hypothesis() -> None:
     @dataclass(frozen=True)
     class Broken:
         BRIDGES: ClassVar[tuple[Bridge, ...]] = ()

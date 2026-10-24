@@ -684,8 +684,8 @@ def _resolve_measurables(
 
 def dispatch_sweep(sweep: DQNSweep) -> tuple[Path, Path]:
     """Run the sweep end-to-end. For each YAML-loaded
-    `InterventionConfig`, decompose into a Hypothesis Protocol-
-    conformer + `base` Callable (`partial(dqn, **HPs)`), build a
+    `InterventionConfig`, bind its `base` Callable
+    (`partial(dqn, **HPs)`), take its explicit `do_effect`, build a
     discrete grid_points list (env × seed_chunk × wrappers), and
     dispatch to the framework's `run_intervention` paired-sweep
     primitive. Each InterventionConfig produces its own per-arm

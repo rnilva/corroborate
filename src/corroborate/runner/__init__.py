@@ -2,8 +2,8 @@
 
 Three sub-modules:
 
-- `runner.runner` — `run` end-to-end driver. Authors invoke this
-  from sweep scripts; consumes the `Hypothesis` Protocol
+- `runner.runner` — `run` evaluates authored claims over records;
+  it consumes the `Hypothesis` Protocol
   (`corroborate.core.hypothesis.Hypothesis`).
 - `runner.sweep` — `Runner[R]` Protocol, `run_intervention`
   paired-sweep driver, `SweepResult`, `SweepCellResult`,
@@ -15,11 +15,9 @@ Three sub-modules:
 `corroborate.bridge.analysis` — they're the glue for
 `claim_bridge`, not a runner concern.
 
-YAML-loaded `InterventionConfig` (the substrate-coupled
-intermediate that decomposes into a Hypothesis Protocol-conformer
-+ a `base` callable) lives substrate-side; the framework's
-hypothesis surface is the `Hypothesis` Protocol in
-`corroborate.core.hypothesis`."""
+YAML-loaded `InterventionConfig` lives substrate-side and supplies
+an explicit `DoEffect` plus a `base` callable to the sweep runner.
+It does not define the hypothesis evaluated over the resulting records."""
 from corroborate.runner.registry import Registry
 from corroborate.runner.runner import (
     SourceDrift,

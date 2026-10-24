@@ -223,6 +223,53 @@ reader's call: `pair_by=('config/seed',)` declares it, and the
 paired analysis raises on duplicate `(condition, seed)` buckets
 rather than silently averaging a re-run into a fresh seed.
 
+## 6. Reuse a graph of claims as evidence grows
+
+```bash
+uv run python -m examples.sb3_demo.growing_analysis
+```
+
+`early_claim.py` adds a question at 15k steps, independently of the
+original 25k claim in `sb3_claim.py`. `hypothesis.py` composes their
+bridges. It has no data paths and no global intervention: the contrast
+belongs to each bridge. These are two budget-specific tests on the same
+seeds, not independent replications or a causal explanation of learning.
+
+The short `growing_analysis.py` example loads the committed records,
+evaluates the graph on the first two seeds, then includes the third:
+
+```python
+first = records.narrow(pl.col('config/seed') < 2)
+second = records.narrow(pl.col('config/seed') >= 2)
+
+initial = run(hypothesis, data=first, use_cache=False)
+updated = run(
+    hypothesis,
+    data=concat_panels((first, second)),
+    use_cache=False,
+)
+```
+
+This split demonstrates growth using data already available; it does not
+claim the two batches were collected at different times. In normal use,
+load separately arriving batches through the same reader. The claim
+definitions stay fixed, and the typed results expose the sample counts,
+estimates, admission checks and verdicts over the current observations.
+No cache, manifest or report file is required to evaluate the hypothesis.
+
+The responsibilities stay separate:
+
+| Part | Owns |
+|---|---|
+| `train.py` | Experiment execution and producer logging |
+| `load_sb3_logger_runs` | Mechanical reading, configuration and provenance |
+| `sb3_claim.py`, `early_claim.py`, `hypothesis.py` | Measurements, questions, decision rules and graph composition |
+| `analyze.py`, `growing_analysis.py` | Interactive exploration and presentation |
+
+Copying or restoring files belongs in auxiliary tooling. It must not
+redefine the measurements, select successful runs or supply prewritten
+verdicts to the analysis modules.
+
 ## Producer-side cost
 
 One loop. `train.py` is the tutorial-shaped SB3 script plus the

@@ -34,8 +34,9 @@ is needed but missing.
 
 Hypothesis surface — every bridges module / class satisfies the
 `Hypothesis` Protocol (`corroborate.core.hypothesis.Hypothesis`)
-by declaring `INTERVENTION: DoEffect`, `BRIDGES:
-tuple[Bridge, ...]`, `__name__: str`. The cache file is keyed
+by declaring `BRIDGES: tuple[Bridge, ...]`, `FINDINGS`, and
+`__name__: str`. Each bridge declares its own source or intervention.
+The cache file is keyed
 off `h.__name__.split('.')[-1]` — there is no override surface;
 if the cache lives in a non-default location, write a thin
 script that calls `run(..., cache_path=...)` directly (the
@@ -51,10 +52,10 @@ import json
 import re
 import sys
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Self, cast
+from typing import Literal, Protocol, Self, cast, runtime_checkable
 
 import polars as pl
 
@@ -70,6 +71,7 @@ from corroborate.bridge.bridge import (
     measurable_names_for_bridges,
 )
 from corroborate.core.hypothesis import Hypothesis
+from corroborate.data.panel import CorpusSource, Panel
 from corroborate.corpus.cloud import RemoteManifest
 from corroborate.graph.causal import ClusterVerdict
 
@@ -86,6 +88,7 @@ from corroborate.measurables import (
     registered_names,
     registry_source_modules,
     transitive_reads,
+    transitive_measurables,
 )
 
 
@@ -118,6 +121,16 @@ def collect_bridges(
     )
 
 
+@runtime_checkable
+class _HasRequiredMeasurables(Protocol):
+    @property
+    def REQUIRED_MEASURABLES(self) -> tuple[str, ...]: ...
+
+
+def _required_measurables(h: Hypothesis) -> tuple[str, ...]:
+    return h.REQUIRED_MEASURABLES if isinstance(h, _HasRequiredMeasurables) else ()
+
+
 def _validate_hypothesis(h: object) -> Hypothesis:
     """Narrow `h` to the framework's `Hypothesis` Protocol via
     `__instancecheck__` (`runtime_checkable`), then verify each
@@ -128,13 +141,13 @@ def _validate_hypothesis(h: object) -> Hypothesis:
     that's author contradiction). Raises `TypeError` on any shape
     or invariant violation. Both Python modules and class-based
     hypotheses satisfy the Protocol structurally as long as they
-    expose `INTERVENTION: DoEffect`, `BRIDGES: tuple[Bridge, ...]`,
+    expose `BRIDGES: tuple[Bridge, ...]`,
     `FINDINGS: tuple[Finding, ...]` (empty if no findings), and
     `__name__: str`."""
     if not isinstance(h, Hypothesis):
         raise TypeError(
             f'{type(h).__name__} does not satisfy the Hypothesis '
-            f'Protocol: missing one of `INTERVENTION: DoEffect`, '
+            f'Protocol: missing one of '
             f'`BRIDGES: tuple[Bridge, ...]`, '
             f'`FINDINGS: tuple[Finding, ...]`, `__name__: str` at the '
             f'module / class level.',
@@ -185,7 +198,7 @@ def _validate_hypothesis(h: object) -> Hypothesis:
     # is a registered @measurable. Typos must fail loud (vs the
     # bridge-name silent drop which is appropriate for ambiguous
     # column-path-vs-measurable inputs).
-    extras = getattr(h, 'REQUIRED_MEASURABLES', ())
+    extras = _required_measurables(h)
     if extras:
         from corroborate.measurables import get_registered
         unknown = [name for name in extras if get_registered(name) is None]
@@ -502,7 +515,7 @@ def _invalidate_drifted(
 def run(
     h: Hypothesis | str,
     *,
-    data: pl.DataFrame | Path | str | Sequence[Path] | None = None,
+    data: Panel | pl.DataFrame | Path | str | Sequence[Path] | None = None,
     use_cache: bool = True,
     write_cache: bool = True,
     rebuild: bool = False,
@@ -518,7 +531,7 @@ def run(
 
     `h` may be:
     - a Python module satisfying the `Hypothesis` Protocol
-      (`INTERVENTION: DoEffect` + `BRIDGES: tuple[Bridge, ...]`),
+      (`BRIDGES`, `FINDINGS`, and `__name__`),
     - a class-based hypothesis (frozen dataclass with `ClassVar`
       fields of the same shape),
     - a string dotted module path (the CLI's input form);
@@ -529,7 +542,9 @@ def run(
     - `use_cache=True` (default): read+write the per-hypothesis
       cache. Rows already in cache with all required measurables
       skip recomputation. New rows from `data` get measurables
-      computed and appended.
+      computed and appended for legacy DataFrame/path input. An explicit
+      Panel always fixes the complete evaluated extent; its cache only
+      supplies reusable measurements for matching input rows.
     - `use_cache=False`: pure compute path; no cache read or write.
     - `write_cache=False` + `use_cache=True`: read cache, run, but
       don't persist updates.
@@ -563,7 +578,13 @@ def run(
 
     `data` may be:
     - `None`: run on whatever's already in the cache.
-    - a `pl.DataFrame`: use as-is.
+    - a `Panel`: its complete supplied evidence extent. Configuration
+      registry (including an unknown registry), scope history, and sources
+      remain authoritative. A cache can reuse unchanged rows' derived
+      measurements, but cannot append historical rows. Grow the evidence
+      explicitly with `concat_panels`. This path evaluates the same rows
+      with or without caching.
+    - a `pl.DataFrame`: use the legacy additive-cache path.
     - a path to a `.parquet` file: read directly.
     - a path to a directory: walk its subdirs for per-corpus
       `runs.parquet` (with auto-restore), concat via
@@ -598,6 +619,9 @@ def run(
         if rebuild:
             resolved_cache.unlink(missing_ok=True)
             _manifest_path(resolved_cache).unlink(missing_ok=True)
+            from corroborate.data.panel_cache import metadata_path
+            metadata_path(resolved_cache).unlink(missing_ok=True)
+            _sources_path(resolved_cache).unlink(missing_ok=True)
 
     # CACHE_ADDITIVITY.md CA2: when running cache-only (data=None
     # AND a cache file already exists), print a one-line state
@@ -629,16 +653,62 @@ def run(
             # warning shortly; don't double-warn here.
             pass
 
-    rows = _ingest_and_compute(
-        bridges=bridges,
-        data=data,
-        cache_path=resolved_cache,
-        write_cache=write_cache and use_cache,
-        restore_from_cloud=restore_from_cloud,
-        extra_required=tuple(getattr(h, 'REQUIRED_MEASURABLES', ())),
-        module_scope=getattr(h, 'MODULE_SCOPE', None),
-        force_recompute=force_recompute,
-    )
+    extra_required = _required_measurables(h)
+    if isinstance(data, Panel):
+        panel = _prepare_panel(
+            data, bridges=bridges, extra_required=extra_required,
+            cache_path=resolved_cache, write_cache=write_cache and use_cache,
+            force_recompute=force_recompute,
+        )
+    else:
+        # A cache produced from a Panel keeps its metadata in cache-only
+        # mode. Legacy ingestion remains additive and uses its native
+        # registry derivation; it cannot inherit an old Panel declaration.
+        from corroborate.data.panel_cache import metadata_path, restore_metadata
+        cached_panel = None
+        if data is None and resolved_cache is not None and resolved_cache.exists():
+            if metadata_path(resolved_cache).exists():
+                cache_sources = read_sources(_sources_path(resolved_cache))
+                cached_panel = restore_metadata(Panel(
+                    df=pl.read_parquet(resolved_cache),
+                    sources=tuple(CorpusSource(
+                        corpus=entry.corpus,
+                        data_root=Path(entry.data_root) if entry.data_root is not None else None,
+                        remote_root=entry.remote_root,
+                        ingested_at=entry.ingested_at,
+                    ) for entry in cache_sources.sources) if cache_sources is not None else (),
+                ), resolved_cache)
+                cached_panel = replace(cached_panel, df=_invalidate_drifted(
+                    cached_panel.df, _read_manifest(_manifest_path(resolved_cache)),
+                    sorted(measurable_names_for_bridges(bridges) | frozenset(extra_required)
+                           | cached_panel.required_measurables),
+                ))
+        if cached_panel is not None:
+            panel = _prepare_panel(
+                cached_panel, bridges=bridges, extra_required=extra_required,
+                cache_path=resolved_cache, write_cache=write_cache and use_cache,
+                force_recompute=force_recompute,
+            )
+        else:
+            if resolved_cache is not None and metadata_path(resolved_cache).exists():
+                raise ValueError(
+                    'This cache carries an explicit Panel extent. Pass a Panel '
+                    '(combine batches with concat_panels), or rebuild for legacy ingestion.'
+                )
+            rows = _ingest_and_compute(
+                bridges=bridges, data=data, cache_path=resolved_cache,
+                write_cache=write_cache and use_cache,
+                restore_from_cloud=restore_from_cloud,
+                extra_required=extra_required,
+                module_scope=getattr(h, 'MODULE_SCOPE', None),
+                force_recompute=force_recompute,
+            )
+            from corroborate.data.panel import cache_leaves
+            panel = Panel(
+                df=rows,
+                leaves=cache_leaves(rows, resolved_cache) if resolved_cache is not None else None,
+            )
+    rows = panel.df
 
     if rows.height == 0:
         raise SystemExit(
@@ -663,26 +733,12 @@ def run(
     # alone determines the filter.
     module_scope = getattr(h, 'MODULE_SCOPE', None)
 
-    # The cache's configuration registry — same derivation as
-    # `Panel.from_cache` — so a value-based DoEffect bridge gets
-    # identical knob-aware gating through this entry point as
-    # through `evaluate(bridge, Panel.from_cache(...))`. Native
-    # structural bridges are unaffected (their registry is the
-    # claim's leaf walk, threaded via `claim`). Lazy import: keep
-    # the data subpackage off the runner's import critical path.
-    from corroborate.data.panel import cache_leaves
-    leaves = (
-        cache_leaves(rows, resolved_cache)
-        if resolved_cache is not None else None
-    )
-
     out: dict[str, BridgeEvaluation] = {}
     errors: dict[str, BaseException] = {}
     for b in bridges:
         try:
             out[b.name] = evaluate(
-                b, rows, claim=claim, module_scope=module_scope,
-                leaves=leaves,
+                b, panel, claim=claim, module_scope=module_scope,
             )
         except Exception as e:  # noqa: BLE001
             # An authoring bug in a bridge's `holds_when` body
@@ -943,7 +999,13 @@ def evict(
     total = sum(counts.values())
     if total == 0:
         return 0, counts
-    keep = df.filter(~pl.col('corpus').is_in(list(corpora)))
+    from corroborate.data.panel_cache import metadata_path, restore_metadata, write_metadata
+    metadata = (
+        restore_metadata(Panel(df=df), cp)
+        if metadata_path(cp).exists() else None
+    )
+    exclusion = ~pl.col('corpus').is_in(list(corpora))
+    keep = df.filter(exclusion)
     if keep.height > 0:
         _atomic_write_parquet(keep, cp)
     else:
@@ -953,6 +1015,12 @@ def evict(
     # Mirror the filter on the sidecar so it doesn't carry stale
     # entries for evicted corpora. No-op when no sidecar exists.
     _evict_from_sources(_sources_path(cp), evicted=set(corpora))
+    if metadata is not None:
+        if keep.height > 0:
+            write_metadata(metadata.narrow(exclusion), cp)
+        else:
+            metadata_path(cp).unlink(missing_ok=True)
+            _manifest_path(cp).unlink(missing_ok=True)
     return total, counts
 
 
@@ -1053,6 +1121,80 @@ def _evict_from_sources(
 
 
 # ============ Cache + ingest ============
+
+
+def _prepare_panel(
+    panel: Panel,
+    *,
+    bridges: tuple[Bridge, ...],
+    extra_required: tuple[str, ...],
+    cache_path: Path | None,
+    write_cache: bool,
+    force_recompute: frozenset[str],
+) -> Panel:
+    """Enrich an explicit extent without borrowing the cache's population.
+
+    Cache reuse requires equal supplied row contents, equal configuration
+    registries, and current measurable signatures. Same ID alone is never
+    enough: a corrected observation must change the evaluated evidence.
+    """
+    required = sorted(
+        measurable_names_for_bridges(bridges)
+        | frozenset(extra_required) | panel.required_measurables
+    )
+    invalidated = force_recompute | frozenset(
+        name for name in (set(panel.df.columns) | set(required))
+        if get_registered(name) is not None
+        and transitive_measurables(name) & force_recompute
+    )
+    data = panel.df.drop(sorted(invalidated & set(panel.df.columns)))
+    if cache_path is not None and cache_path.exists():
+        from corroborate.data.panel_cache import metadata_path, restore_metadata
+        if metadata_path(cache_path).exists():
+            cached = restore_metadata(Panel(df=pl.read_parquet(cache_path)), cache_path)
+            if cached.leaves == panel.leaves:
+                manifest = _read_manifest(_manifest_path(cache_path))
+                reusable = [
+                    name for name in required
+                    if name not in data.columns and name in cached.df.columns
+                    and name not in invalidated
+                    and manifest.get(name) == _measurable_signature(name)
+                    and get_registered(name) is not None
+                    and transitive_reads(name).issubset(data.columns)
+                ]
+                data = _reuse_panel_columns(data, cached.df, reusable)
+    enriched = replace(
+        panel, df=_compute_measurables(data, required),
+        required_measurables=panel.required_measurables | frozenset(required),
+    )
+    if cache_path is not None and write_cache:
+        enriched.to_cache(cache_path=cache_path)
+    return enriched
+
+
+def _reuse_panel_columns(
+    data: pl.DataFrame, cached: pl.DataFrame, names: Sequence[str],
+) -> pl.DataFrame:
+    """Reuse only unchanged input rows; never coalesce away a supplied value.
+
+    A conservative batch comparison avoids treating a hash collision or a
+    reused ID as evidence identity. Changed batches simply recompute.
+    """
+    if not names or 'id' not in data.columns or 'id' not in cached.columns:
+        return data
+    if not set(data.columns).issubset(cached.columns):
+        return data
+    if any(frame['id'].null_count() or frame['id'].n_unique() != frame.height for frame in (data, cached)):
+        return data
+    common = data.filter(pl.col('id').is_in(cached['id'].implode()))
+    if common.height == 0:
+        return data
+    previous = common.select('id').join(cached, on='id', how='left', maintain_order='left')
+    if not common.equals(previous.select(data.columns)):
+        return data
+    return data.join(
+        previous.select('id', *names), on='id', how='left', maintain_order='left',
+    )
 
 
 def _ingest_and_compute(
